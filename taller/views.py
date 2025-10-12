@@ -56,21 +56,43 @@ def ingresar_vehiculo(request):
         modelo_vehiculo = request.POST['vehiculo_modelo']
         kilometraje_vehiculo = request.POST.get('vehiculo_kilometraje', 0)
         problema_reportado = request.POST['problema']
-        cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente, defaults={'nombre': nombre_cliente})
+
+        cliente, created = Cliente.objects.get_or_create(
+            telefono=telefono_cliente,
+            defaults={'nombre': nombre_cliente}
+        )
+
         vehiculo, created = Vehiculo.objects.get_or_create(
             matricula=matricula_vehiculo,
-            defaults={'marca': marca_vehiculo, 'modelo': modelo_vehiculo, 'kilometraje': kilometraje_vehiculo, 'cliente': cliente}
+            defaults={
+                'marca': marca_vehiculo,
+                'modelo': modelo_vehiculo,
+                'kilometraje': kilometraje_vehiculo,
+                'cliente': cliente
+            }
         )
         if not created and kilometraje_vehiculo and int(kilometraje_vehiculo) > vehiculo.kilometraje:
             vehiculo.kilometraje = kilometraje_vehiculo
             vehiculo.save()
-        nueva_orden = OrdenDeReparacion.objects.create(cliente=cliente, vehiculo=vehiculo, problema=problema_reportado)
+
+        nueva_orden = OrdenDeReparacion.objects.create(
+            cliente=cliente,
+            vehiculo=vehiculo,
+            problema=problema_reportado
+        )
+
         descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
         for i in range(1, 6):
             foto_campo = f'foto{i}'
             if foto_campo in request.FILES:
-                FotoVehiculo.objects.create(orden=nueva_orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1])
+                FotoVehiculo.objects.create(
+                    orden=nueva_orden,
+                    imagen=request.FILES[foto_campo],
+                    descripcion=descripciones[i-1]
+                )
+        
         return redirect('home')
+        
     return render(request, 'taller/ingresar_vehiculo.html')
 
 def anadir_gasto(request):
@@ -79,7 +101,7 @@ def anadir_gasto(request):
         if categoria == 'Compra de Consumibles':
             tipo_id = request.POST['tipo_consumible']
             fecha_compra = request.POST['fecha_compra']
-            cantidad = Decimal(request.POST['cantidad'])
+            cantidad = Decimal(request.POST['cantidad']) 
             coste_total = Decimal(request.POST['coste_total'])
             tipo_consumible = TipoConsumible.objects.get(id=tipo_id)
             CompraConsumible.objects.create(
@@ -109,7 +131,7 @@ def anadir_gasto(request):
             if gasto.vehiculo and categoria in ['Repuestos', 'Otros']:
                 try:
                     orden_a_actualizar = OrdenDeReparacion.objects.filter(
-                        vehiculo=gasto.vehiculo,
+                        vehiculo=gasto.vehiculo, 
                         estado__in=['Recibido', 'En Diagnostico']
                     ).latest('fecha_entrada')
                     orden_a_actualizar.estado = 'En Reparacion'
