@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrar Stock Inicial - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 700px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        input, select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #5a6268; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; width: 100%; }
+        h1 { color: #333; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+        .alert { background-color: #ffc107; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Registrar Stock Inicial</h1>
+            <a href="{% url 'home' %}" class="back-btn">← Volver</a>
+        </div>
+        <hr>
+        <div class="alert">
+            <strong>¡Atención!</strong> Usa este formulario solo para registrar consumibles que <strong>YA TIENES</strong> en el taller. Esto no se contará como un gasto nuevo. Para compras nuevas, usa el formulario de "Añadir Gasto".
+        </div>
+
+        <form action="" method="post">
+            {% csrf_token %}
+
+            <label for="tipo_consumible">Tipo de Consumible:</label>
+            <select id="tipo_consumible" name="tipo_consumible" required>
+                <option value="">--- Selecciona el tipo ---</option>
+                {% for tipo in tipos_consumible %}
+                    <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="cantidad">Cantidad Actual (Ej: 250 litros):</label>
+            <input type="number" step="0.01" id="cantidad" name="cantidad" required>
+
+            <label for="coste_total">Coste Total que tuvo la compra (€):</label>
+            <input type="number" step="0.01" id="coste_total" name="coste_total" required>
+
+            <button type="submit">Guardar Stock Inicial</button>
+        </form>
+    </div>
+</body>
+</html>

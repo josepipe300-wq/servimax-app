@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - ServiMax</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
+        h1, h2 { color: #333; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; text-align: center; margin-bottom: 30px; }
+        .card { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .card h2 { margin-top: 0; font-size: 1.1em; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card .amount { font-size: 2.5em; font-weight: bold; }
+        .ingresos { color: #28a745; }
+        .gastos { color: #dc3545; }
+        .beneficio { color: #007bff; }
+        .action-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
+        .btn { display: block; padding: 20px; border-radius: 8px; text-decoration: none; color: #fff; font-size: 1.2em; font-weight: bold; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15); transition: transform 0.2s; }
+        .btn:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .btn-ingresar { background-color: #17a2b8; }
+        .btn-gasto { background-color: #ffc107; color: #333; }
+        .btn-ingreso-dinero { background-color: #28a745; }
+        .history-table { width: 100%; margin-top: 20px; border-collapse: collapse; background-color: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        .history-table th, .history-table td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
+        .history-table th { background-color: #e9ecef; color: #333; }
+        .history-table .gasto-row { color: #dc3545; }
+        .history-table .ingreso-row { color: #28a745; }
+    </style>
+</head>
+<body>
+    <h1>Balance Mensual</h1>
+    <div class="dashboard">
+        <div class="card">
+            <h2>INGRESOS</h2>
+            <p class="amount ingresos">{{ total_ingresos|floatformat:2 }} €</p>
+        </div>
+        <div class="card">
+            <h2>GASTOS</h2>
+            <p class="amount gastos">{{ total_gastos|floatformat:2 }} €</p>
+        </div>
+        <div class="card">
+            <h2>BENEFICIO</h2>
+            <p class="amount beneficio">{{ beneficio|floatformat:2 }} €</p>
+        </div>
+    </div>
+    <hr>
+    <h2>Acciones Rápidas</h2>
+    <div class="action-buttons">
+        <a href="{% url 'ingresar_vehiculo' %}" class="btn btn-ingresar">➕ Ingresar Vehículo</a>
+        <a href="{% url 'anadir_gasto' %}" class="btn btn-gasto">➖ Añadir Gasto</a>
+        <a href="{% url 'registrar_ingreso' %}" class="btn btn-ingreso-dinero">💰 Registrar Ingreso</a>
+        <a href="{% url 'lista_ordenes' %}" class="btn" style="background-color: #6c757d;">📋 Órdenes Activas</a>
+        <a href="{% url 'historial_ordenes' %}" class="btn" style="background-color: #343a40;">🗂️ Historial Trabajos</a>
+        <a href="{% url 'contabilidad' %}" class="btn" style="background-color: #fd7e14;">📊 Contabilidad</a>
+        <a href="{% url 'cuentas_por_cobrar' %}" class="btn" style="background-color: #dc3545;">🚨 Cuentas por Cobrar</a>
+        <a href="{% url 'stock_inicial_consumible' %}" class="btn" style="background-color: #191970;">📦 Stock Inicial</a>
+    </div>
+    <div style="margin-top: 40px;">
+        <h2>Últimos Movimientos</h2>
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Descripción</th>
+                    <th>Importe</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movimiento in movimientos_recientes %}
+                    <tr class="{% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}gasto-row{% else %}ingreso-row{% endif %}">
+                        <td>{{ movimiento.fecha }}</td>
+                        <td>{{ movimiento.get_categoria_display }}</td>
+                        <td>{{ movimiento.descripcion }}</td>
+                        <td>
+                            {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}-{% endif %}
+                            {{ movimiento.importe|floatformat:2 }} €
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 20px;">No hay movimientos recientes.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div style="text-align: right; margin-top: 15px;">
+            <a href="{% url 'historial_movimientos' %}" style="font-weight: bold; color: #007bff; text-decoration: none;">Ver historial completo...</a>
+        </div>
+    </div>
+</body>
+</html>

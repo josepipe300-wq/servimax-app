@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingresar Vehículo - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 700px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        input, textarea, select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        textarea { resize: vertical; min-height: 80px; }
+        button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; width: 100%; }
+        h1, h2, h3 { color: #333; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+        .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Ingresar Nuevo Vehículo</h1>
+            <a href="{% url 'home' %}" class="back-btn">← Volver</a>
+        </div>
+        <hr>
+
+        <form action="" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <h2>Paso 1: Datos del Cliente</h2>
+            <label for="cliente_nombre">Nombre del Cliente:</label>
+            <input type="text" id="cliente_nombre" name="cliente_nombre" required>
+            <label for="cliente_telefono">Teléfono:</label>
+            <input type="text" id="cliente_telefono" name="cliente_telefono" required>
+
+            <h2>Paso 2: Datos del Vehículo</h2>
+            <label for="vehiculo_matricula">Matrícula:</label>
+            <input type="text" id="vehiculo_matricula" name="vehiculo_matricula" required>
+            <label for="vehiculo_marca">Marca:</label>
+            <input type="text" id="vehiculo_marca" name="vehiculo_marca">
+            <label for="vehiculo_modelo">Modelo:</label>
+            <input type="text" id="vehiculo_modelo" name="vehiculo_modelo">
+            <label for="vehiculo_kilometraje">Kilometraje:</label>
+            <input type="number" id="vehiculo_kilometraje" name="vehiculo_kilometraje">
+
+            <h2>Paso 3: Motivo y Fotos</h2>
+            <label for="problema">Problema / Tareas a realizar:</label>
+            <textarea id="problema" name="problema" required></textarea>
+            
+            <h3>Fotos del Vehículo (hasta 5)</h3>
+            <div class="photo-grid">
+                <div>
+                    <label for="foto1">Foto 1 (Frontal):</label>
+                    <input type="file" id="foto1" name="foto1" accept="image/*">
+                </div>
+                <div>
+                    <label for="foto2">Foto 2 (Trasera):</label>
+                    <input type="file" id="foto2" name="foto2" accept="image/*">
+                </div>
+                <div>
+                    <label for="foto3">Foto 3 (Lateral Izquierdo):</label>
+                    <input type="file" id="foto3" name="foto3" accept="image/*">
+                </div>
+                <div>
+                    <label for="foto4">Foto 4 (Lateral Derecho):</label>
+                    <input type="file" id="foto4" name="foto4" accept="image/*">
+                </div>
+                <div>
+                    <label for="foto5">Foto 5 (Cuadro/Km):</label>
+                    <input type="file" id="foto5" name="foto5" accept="image/*">
+                </div>
+            </div>
+            
+            <button type="submit" style="margin-top: 20px;">Crear Orden de Reparación</button>
+        </form>
+    </div>
+</body>
+</html>

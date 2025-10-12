@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Movimientos - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+        .history-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .history-table th, .history-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .history-table th { background-color: #e9ecef; }
+        .gasto-row { color: #dc3545; }
+        .ingreso-row { color: #28a745; }
+        .edit-btn { padding: 5px 10px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 0.9em; }
+        .filters { margin-bottom: 20px; }
+        .filters a { padding: 10px 15px; text-decoration: none; background-color: #e9ecef; color: #333; border-radius: 5px; margin-right: 10px; }
+        .filters a.active { background-color: #007bff; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Historial Completo de Movimientos</h1>
+            <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
+        </div>
+        
+        <div class="filters">
+            <a href="?periodo=semana" class="{% if periodo_seleccionado == 'semana' %}active{% endif %}">Esta Semana</a>
+            <a href="?periodo=mes" class="{% if periodo_seleccionado == 'mes' %}active{% endif %}">Este Mes</a>
+            <a href="?periodo=todo" class="{% if periodo_seleccionado == 'todo' %}active{% endif %}">Ver Todo</a>
+        </div>
+        <hr>
+
+        {% if periodo_seleccionado == 'todo' %}
+            {% for grupo in movimientos_agrupados %}
+                <h2>{{ grupo.mes|title }}</h2>
+                <table class="history-table">
+                    <thead>
+                        <tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Importe</th><th>Acciones</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for movimiento in grupo.movimientos %}
+                            <tr class="{% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}gasto-row{% else %}ingreso-row{% endif %}">
+                                <td>{{ movimiento.fecha }}</td>
+                                <td>{{ movimiento.get_categoria_display }}</td>
+                                <td>{{ movimiento.descripcion }}</td>
+                                <td>
+                                    {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}-{% endif %}
+                                    {{ movimiento.importe|floatformat:2 }} €
+                                </td>
+                                <td>
+                                    {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}
+                                        <a href="{% url 'editar_movimiento' 'gasto' movimiento.id %}" class="edit-btn">Editar</a>
+                                    {% else %}
+                                        <a href="{% url 'editar_movimiento' 'ingreso' movimiento.id %}" class="edit-btn">Editar</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endfor %}
+        {% else %}
+            <table class="history-table">
+                <thead>
+                    <tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Importe</th><th>Acciones</th></tr>
+                </thead>
+                <tbody>
+                    {% for movimiento in movimientos %}
+                        <tr class="{% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}gasto-row{% else %}ingreso-row{% endif %}">
+                            <td>{{ movimiento.fecha }}</td>
+                            <td>{{ movimiento.get_categoria_display }}</td>
+                            <td>{{ movimiento.descripcion }}</td>
+                            <td>
+                                {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}-{% endif %}
+                                {{ movimiento.importe|floatformat:2 }} €
+                            </td>
+                            <td>
+                                {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}
+                                    <a href="{% url 'editar_movimiento' 'gasto' movimiento.id %}" class="edit-btn">Editar</a>
+                                {% else %}
+                                    <a href="{% url 'editar_movimiento' 'ingreso' movimiento.id %}" class="edit-btn">Editar</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="5" style="text-align: center; padding: 20px;">No hay movimientos en este periodo.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+
+    </div>
+</body>
+</html>

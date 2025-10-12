@@ -1,0 +1,1 @@
+web: gunicorn servimax_app.wsgi

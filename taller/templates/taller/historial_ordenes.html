@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Órdenes - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        .report-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .report-table th, .report-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .report-table th { background-color: #e9ecef; }
+        .report-table tbody tr:hover { background-color: #f5f5f5; cursor: pointer; }
+        .filters { margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
+        .filters select, .filters button { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        .filters button { background-color: #007bff; color: white; cursor: pointer; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Historial de Trabajos Finalizados</h1>
+            <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
+        </div>
+
+        <form method="get" action="">
+            <div class="filters">
+                <div>
+                    <label for="ano">Año:</label>
+                    <select name="ano" id="ano">
+                        <option value="">Todos</option>
+                        {% for ano, meses in anos_y_meses.items %}
+                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="mes">Mes:</label>
+                    <select name="mes" id="mes">
+                        <option value="">Todos</option>
+                        {% for i in "123456789012"|make_list %}
+                            <option value="{{ forloop.counter }}" {% if mes_seleccionado == forloop.counter %}selected{% endif %}>{{ forloop.counter }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit">Filtrar</button>
+            </div>
+        </form>
+        <hr>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th># Orden</th>
+                    <th>Fecha Finalización</th>
+                    <th>Cliente</th>
+                    <th>Vehículo</th>
+                    <th>Problema</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for orden in ordenes %}
+                    <tr onclick="window.location='{% url 'detalle_orden' orden.id %}';">
+                        <td>{{ orden.id }}</td>
+                        <td>{{ orden.factura.fecha_emision|date:"d/m/Y" }}</td>
+                        <td>{{ orden.cliente.nombre }}</td>
+                        <td>{{ orden.vehiculo }}</td>
+                        <td>{{ orden.problema }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 20px;">No hay trabajos finalizados que coincidan con los filtros.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

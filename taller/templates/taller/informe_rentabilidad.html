@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informe de Rentabilidad - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        .report-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .report-table th, .report-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .report-table th { background-color: #e9ecef; }
+        .report-table tbody tr.clickable:hover { background-color: #f5f5f5; cursor: pointer; }
+        .filters { margin-bottom: 20px; }
+        .filters a { padding: 10px 15px; text-decoration: none; background-color: #e9ecef; color: #333; border-radius: 5px; margin-right: 10px; }
+        .filters a.active { background-color: #007bff; color: white; }
+        .total-summary { text-align: right; font-size: 1.2em; margin-top: 20px; }
+        .total-summary strong { font-size: 1.5em; color: #28a745; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Informe de Rentabilidad</h1>
+            <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
+        </div>
+        
+        <div class="filters">
+            <a href="?periodo=semana" class="{% if periodo_seleccionado == 'semana' %}active{% endif %}">Esta Semana</a>
+            <a href="?periodo=mes" class="{% if periodo_seleccionado == 'mes' %}active{% endif %}">Este Mes</a>
+            <a href="?periodo=todo" class="{% if periodo_seleccionado == 'todo' %}active{% endif %}">Ver Todo</a>
+        </div>
+        <hr>
+
+        <h2>Ganancia por Trabajos del Taller</h2>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th># Orden</th>
+                    <th>Vehículo</th>
+                    <th>Fecha Factura</th>
+                    <th style="text-align: right;">Ganancia TOTAL</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in reporte %}
+                    <tr class="clickable" onclick="window.location='{% url 'detalle_ganancia_orden' item.orden.id %}';">
+                        <td>{{ item.orden.id }}</td>
+                        <td>{{ item.orden.vehiculo }}</td>
+                        <td>{{ item.factura.fecha_emision|date:"d/m/Y" }}</td>
+                        <td style="text-align: right; font-weight: bold;">{{ item.ganancia_total|floatformat:2 }} €</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 20px;">No hay trabajos facturados en este periodo.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h2 style="margin-top: 30px;">Otras Ganancias (Servicios de Grúa, etc.)</h2>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Categoría</th>
+                    <th>Descripción</th>
+                    <th style="text-align: right;">Importe (Ganancia)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ingreso in ganancias_directas_desglose %}
+                <tr>
+                    <td>{{ ingreso.fecha|date:"d/m/Y" }}</td>
+                    <td>{{ ingreso.get_categoria_display }}</td>
+                    <td>{{ ingreso.descripcion }}</td>
+                    <td style="text-align: right;">{{ ingreso.importe|floatformat:2 }} €</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 20px;">No hay otras ganancias en este periodo.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="total-summary">
+            <p>Total Ganancia por Trabajos: {{ ganancia_trabajos|floatformat:2 }} €</p>
+            <p>Total Ganancia por Grúa: {{ ganancia_grua|floatformat:2 }} €</p>
+            <p>Total Otras Ganancias: {{ ganancia_otras|floatformat:2 }} €</p>
+            <hr>
+            <p>Ganancia Total del Periodo: <strong>{{ total_ganancia_general|floatformat:2 }} €</strong></p>
+        </div>
+    </div>
+</body>
+</html>
