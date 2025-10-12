@@ -1,18 +1,14 @@
 from pathlib import Path
 import os
-import dj_database_url # <--- AÑADIDO
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Lee la SECRET_KEY desde una variable de entorno, con un valor por defecto para tu PC
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-p_%woq5*pl+-#ad=^=2_#i1vsyf9&a*-p6$xob*eak%3$cyp44')
 
-# DEBUG se desactiva automáticamente en el servidor
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = []
-
-# Render añadirá automáticamente el dominio de tu app aquí
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
@@ -24,12 +20,12 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'whitenoise.runserver_nostatic', # <--- AÑADIDO
+    'whitenoise.runserver_nostatic',
     'django.contrib.staticfiles',
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # <--- AÑADIDO
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -54,7 +50,6 @@ TEMPLATES = [
 ]
 WSGI_APPLICATION = 'servimax_app.wsgi.application'
 
-# --- Configuración de la Base de Datos ---
 DATABASES = {
     'default': dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
@@ -62,19 +57,34 @@ DATABASES = {
     )
 }
 
-# ... (El resto de configuraciones como AUTH_PASSWORD_VALIDATORS, etc., no cambian)
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',},
+]
+
 LANGUAGE_CODE = 'es-es'
 TIME_ZONE = 'Europe/Madrid'
 USE_I18N = True
 USE_TZ = True
+
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'taller/static'),]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# --- CONFIGURACIÓN DE ALMACENAMIENTO CORREGIDA ---
 STORAGES = {
+    # Esta es la parte que faltaba para las fotos (media files)
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
