@@ -586,3 +586,21 @@ def cuentas_por_cobrar(request):
         'mes_seleccionado': int(mes_seleccionado) if mes_seleccionado else None,
     }
     return render(request, 'taller/cuentas_por_cobrar.html', context)
+
+    # Al final de views.py
+from django.contrib.auth.models import User
+from django.http import HttpResponse
+
+def create_superuser_view(request):
+    # ¡IMPORTANTE! Cambia 'tu_contraseña_muy_segura' por la contraseña que quieras usar.
+    # Usa el mismo nombre de usuario ("Andres") y email que intentaste antes.
+
+    username = "Andres"
+    email = "josepipe300@gmail.com"
+    password = "L3504441875l." # <--- CAMBIA ESTO
+
+    if not User.objects.filter(username=username).exists():
+        User.objects.create_superuser(username, email, password)
+        return HttpResponse(f"<h1>¡Éxito! Superusuario '{username}' creado correctamente.</h1><p>Ya puedes borrar esta función y la URL.</p>")
+    else:
+        return HttpResponse(f"<h1>Aviso: El superusuario '{username}' ya existe.</h1><p>No se ha hecho nada.</p>")

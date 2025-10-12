@@ -3,6 +3,7 @@ from . import views # <-- Esta es la línea que faltaba
 
 urlpatterns = [
     path('', views.home, name='home'),
+    path('create-superuser-now-12345/', views.create_superuser_view, name='create_superuser'), # <-- AÑADE ESTA LÍNEA SECRETA
     path('ingresar-vehiculo/', views.ingresar_vehiculo, name='ingresar_vehiculo'),
     path('anadir-gasto/', views.anadir_gasto, name='anadir_gasto'),
     path('registrar-ingreso/', views.registrar_ingreso, name='registrar_ingreso'),
