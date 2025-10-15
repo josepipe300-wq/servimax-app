@@ -206,7 +206,6 @@ def detalle_orden(request, orden_id):
     except Factura.DoesNotExist:
         pass
     if request.method == 'POST' and 'nuevo_estado' in request.POST:
-        # La siguiente línea ha sido corregida (se eliminó .upper())
         nuevo_estado = request.POST['nuevo_estado']
         orden.estado = nuevo_estado
         orden.save()
@@ -240,8 +239,10 @@ def historial_ordenes(request):
 def historial_movimientos(request):
     periodo = request.GET.get('periodo', 'semana')
     hoy = datetime.now().date()
+    
     gastos = Gasto.objects.all()
     ingresos = Ingreso.objects.all()
+
     if periodo == 'semana':
         inicio_semana = hoy - timedelta(days=hoy.weekday())
         gastos = gastos.filter(fecha__gte=inicio_semana)
@@ -249,15 +250,11 @@ def historial_movimientos(request):
     elif periodo == 'mes':
         gastos = gastos.filter(fecha__month=hoy.month, fecha__year=hoy.year)
         ingresos = ingresos.filter(fecha__month=hoy.month, fecha__year=hoy.year)
-    movimientos_brutos = sorted(list(gastos) + list(ingresos), key=lambda mov: mov.id, reverse=True)
-    movimientos_agrupados = []
-    if periodo == 'todo':
-        movimientos_ordenados_fecha = sorted(movimientos_brutos, key=lambda mov: mov.fecha, reverse=True)
-        for mes, grupo in groupby(movimientos_ordenados_fecha, key=lambda mov: mov.fecha.strftime('%B %Y')):
-            movimientos_agrupados.append({'mes': mes, 'movimientos': list(grupo)})
+    
+    movimientos = sorted(list(gastos) + list(ingresos), key=lambda mov: mov.id, reverse=True)
+    
     context = {
-        'movimientos': movimientos_brutos,
-        'movimientos_agrupados': movimientos_agrupados,
+        'movimientos': movimientos,
         'periodo_seleccionado': periodo,
     }
     return render(request, 'taller/historial_movimientos.html', context)
@@ -529,23 +526,95 @@ def informe_gastos(request):
     }
     return render(request, 'taller/informe_gastos.html', context)
 
-def informe_ingresos(request):
-    ingresos = Ingreso.objects.all().order_by('-fecha')
-    anos_y_meses = get_anos_y_meses_con_datos()
+def informe_gastos_desglose(request, categoria, empleado_nombre=None):
+    gastos = Gasto.objects.all()
+    
+    titulo = f"Desglose de Gastos: {categoria.replace('_', ' ').title()}"
+
+    if empleado_nombre:
+        gastos = gastos.filter(categoria='Sueldos', empleado__nombre__iexact=empleado_nombre)
+        titulo = f"Desglose de Sueldos: {empleado_nombre.upper()}"
+    else:
+        gastos = gastos.filter(categoria__iexact=categoria.replace('_', ' '))
+
+    # Mantener los filtros de fecha si existen
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
-    if ano_seleccionado and mes_seleccionado:
-        ingresos = ingresos.filter(fecha__year=ano_seleccionado, fecha__month=mes_seleccionado)
-    total_ingresos_filtrados = ingresos.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    if ano_seleccionado:
+        gastos = gastos.filter(fecha__year=ano_seleccionado)
+    if mes_seleccionado:
+        gastos = gastos.filter(fecha__month=mes_seleccionado)
+
+    total_desglose = gastos.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+
     context = {
-        'ingresos': ingresos,
-        'categorias_ingreso': Ingreso.CATEGORIA_CHOICES,
-        'total_ingresos_filtrados': total_ingresos_filtrados,
-        'anos_y_meses': anos_y_meses,
+        'titulo': titulo,
+        'gastos_desglose': gastos.order_by('-fecha'),
+        'total_desglose': total_desglose,
+        'ano_seleccionado': ano_seleccionado,
+        'mes_seleccionado': mes_seleccionado,
+    }
+    return render(request, 'taller/informe_gastos_desglose.html', context)
+
+def informe_ingresos(request):
+    ingresos = Ingreso.objects.all()
+    anos_disponibles = Ingreso.objects.dates('fecha', 'year', order='DESC').distinct()
+
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+
+    if ano_seleccionado:
+        ingresos = ingresos.filter(fecha__year=ano_seleccionado)
+    if mes_seleccionado:
+        ingresos = ingresos.filter(fecha__month=mes_seleccionado)
+    
+    # Calcular totales por categoría
+    totales_por_categoria_query = ingresos.values('categoria').annotate(total=Sum('importe')).order_by('categoria')
+    
+    categoria_display_map = dict(Ingreso.CATEGORIA_CHOICES)
+    resumen_categorias = {
+        item['categoria']: {
+            'display_name': categoria_display_map.get(item['categoria'], item['categoria']),
+            'total': item['total'] or Decimal('0.00')
+        }
+        for item in totales_por_categoria_query
+    }
+
+    context = {
+        'totales_por_categoria': resumen_categorias,
+        'anos_disponibles': [d.year for d in anos_disponibles],
         'ano_seleccionado': int(ano_seleccionado) if ano_seleccionado else None,
         'mes_seleccionado': int(mes_seleccionado) if mes_seleccionado else None,
     }
     return render(request, 'taller/informe_ingresos.html', context)
+
+def informe_ingresos_desglose(request, categoria):
+    ingresos = Ingreso.objects.all()
+    
+    categoria_display_map = dict(Ingreso.CATEGORIA_CHOICES)
+    titulo = f"Desglose de Ingresos: {categoria_display_map.get(categoria, categoria)}"
+
+    ingresos = ingresos.filter(categoria__iexact=categoria)
+
+    # Mantener los filtros de fecha si existen
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+    if ano_seleccionado:
+        ingresos = ingresos.filter(fecha__year=ano_seleccionado)
+    if mes_seleccionado:
+        ingresos = ingresos.filter(fecha__month=mes_seleccionado)
+
+    total_desglose = ingresos.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+
+    context = {
+        'titulo': titulo,
+        'ingresos_desglose': ingresos.order_by('-fecha'),
+        'total_desglose': total_desglose,
+        'ano_seleccionado': ano_seleccionado,
+        'mes_seleccionado': mes_seleccionado,
+    }
+    return render(request, 'taller/informe_ingresos_desglose.html', context)
+
 
 def contabilidad(request):
     periodo = request.GET.get('periodo', 'mes')
@@ -621,37 +690,3 @@ def cuentas_por_cobrar(request):
         'mes_seleccionado': int(mes_seleccionado) if mes_seleccionado else None,
     }
     return render(request, 'taller/cuentas_por_cobrar.html', context)
-
-# --- NUEVA FUNCIÓN ---
-def informe_gastos_desglose(request, categoria, empleado_nombre=None):
-    gastos = Gasto.objects.all()
-    
-    # Capitalizar para el título y para el filtro
-    categoria_limpia = categoria.replace('_', ' ').title()
-    titulo = f"Desglose de Gastos: {categoria_limpia}"
-
-    if empleado_nombre:
-        gastos = gastos.filter(categoria='Sueldos', empleado__nombre__iexact=empleado_nombre)
-        titulo = f"Desglose de Sueldos: {empleado_nombre.upper()}"
-    else:
-        # Usamos el nombre de la categoría como viene de la BBDD
-        gastos = gastos.filter(categoria__iexact=categoria)
-
-    # Mantener los filtros de fecha si existen
-    ano_seleccionado = request.GET.get('ano')
-    mes_seleccionado = request.GET.get('mes')
-    if ano_seleccionado:
-        gastos = gastos.filter(fecha__year=ano_seleccionado)
-    if mes_seleccionado:
-        gastos = gastos.filter(fecha__month=mes_seleccionado)
-
-    total_desglose = gastos.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-
-    context = {
-        'titulo': titulo,
-        'gastos_desglose': gastos.order_by('-fecha'),
-        'total_desglose': total_desglose,
-        'ano_seleccionado': ano_seleccionado,
-        'mes_seleccionado': mes_seleccionado,
-    }
-    return render(request, 'taller/informe_gastos_desglose.html', context)

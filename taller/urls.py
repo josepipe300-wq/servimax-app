@@ -26,7 +26,10 @@ urlpatterns = [
     path('informe-rentabilidad/orden/<int:orden_id>/', views.detalle_ganancia_orden, name='detalle_ganancia_orden'),
     path('cuentas-por-cobrar/', views.cuentas_por_cobrar, name='cuentas_por_cobrar'),
 
-    # --- RUTAS CORREGIDAS PARA DESGLOSE DE GASTOS ---
+    # --- Rutas para Desglose de Gastos ---
     path('informe-gastos/desglose/sueldos/<str:empleado_nombre>/', views.informe_gastos_desglose, {'categoria': 'Sueldos'}, name='desglose_sueldos_empleado'),
     path('informe-gastos/desglose/<str:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
+
+    # --- NUEVA RUTA PARA DESGLOSE DE INGRESOS ---
+    path('informe-ingresos/desglose/<str:categoria>/', views.informe_ingresos_desglose, name='informe_ingresos_desglose'),
 ]

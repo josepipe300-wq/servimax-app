@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ titulo }} - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+        .detail-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .detail-table th, .detail-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .detail-table th { background-color: #e9ecef; }
+        .total-summary { text-align: right; font-size: 1.5em; margin-top: 20px; color: #28a745; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ titulo }}</h1>
+            <a href="{% url 'informe_ingresos' %}?ano={{ ano_seleccionado|default:'' }}&mes={{ mes_seleccionado|default:'' }}" class="back-btn">← Volver al Informe</a>
+        </div>
+        <hr>
+        <table class="detail-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Descripción</th>
+                    <th>Asociado a</th>
+                    <th style="text-align: right;">Importe</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ingreso in ingresos_desglose %}
+                    <tr>
+                        <td>{{ ingreso.fecha|date:"d/m/Y" }}</td>
+                        <td>{{ ingreso.descripcion }}</td>
+                        <td>
+                            {% if ingreso.orden %}
+                                Orden #{{ ingreso.orden.id }} ({{ingreso.orden.vehiculo.matricula}})
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">{{ ingreso.importe|floatformat:2 }} €</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 20px;">No hay ingresos que mostrar.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="total-summary">
+            Total Ingresado: <strong>{{ total_desglose|floatformat:2 }} €</strong>
+        </div>
+    </div>
+</body>
+</html>
