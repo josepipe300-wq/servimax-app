@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views # <-- Esta es la línea que faltaba
+from . import views
 
 urlpatterns = [
     path('', views.home, name='home'),
@@ -25,4 +25,8 @@ urlpatterns = [
     path('informe-rentabilidad/', views.informe_rentabilidad, name='informe_rentabilidad'),
     path('informe-rentabilidad/orden/<int:orden_id>/', views.detalle_ganancia_orden, name='detalle_ganancia_orden'),
     path('cuentas-por-cobrar/', views.cuentas_por_cobrar, name='cuentas_por_cobrar'),
+
+    # --- RUTAS CORREGIDAS PARA DESGLOSE DE GASTOS ---
+    path('informe-gastos/desglose/sueldos/<str:empleado_nombre>/', views.informe_gastos_desglose, {'categoria': 'Sueldos'}, name='desglose_sueldos_empleado'),
+    path('informe-gastos/desglose/<str:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
 ]

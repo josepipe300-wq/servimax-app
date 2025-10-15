@@ -41,7 +41,8 @@ class OrdenDeReparacion(models.Model):
         return f"Orden #{self.id} - {self.vehiculo.matricula} ({self.cliente.nombre})"
     def save(self, *args, **kwargs):
         self.problema = self.problema.upper()
-        self.estado = self.estado.upper()
+        # La siguiente línea ha sido eliminada para corregir el error
+        # self.estado = self.estado.upper() 
         super(OrdenDeReparacion, self).save(*args, **kwargs)
 
 class Empleado(models.Model):
