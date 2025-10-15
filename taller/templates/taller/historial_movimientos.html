@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load taller_extras %}
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -13,8 +14,8 @@
         .history-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         .history-table th, .history-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
         .history-table th { background-color: #e9ecef; }
-        .gasto-row { color: #dc3545; }
-        .ingreso-row { color: #28a745; }
+        .gasto-row td { color: #dc3545; font-weight: 500; }
+        .ingreso-row td { color: #28a745; font-weight: 500; }
         .edit-btn { padding: 5px 10px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 0.9em; }
         .filters { margin-bottom: 20px; }
         .filters a { padding: 10px 15px; text-decoration: none; background-color: #e9ecef; color: #333; border-radius: 5px; margin-right: 10px; }
@@ -35,65 +36,41 @@
         </div>
         <hr>
 
-        {% if periodo_seleccionado == 'todo' %}
-            {% for grupo in movimientos_agrupados %}
-                <h2>{{ grupo.mes|title }}</h2>
-                <table class="history-table">
-                    <thead>
-                        <tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Importe</th><th>Acciones</th></tr>
-                    </thead>
-                    <tbody>
-                        {% for movimiento in grupo.movimientos %}
-                            <tr class="{% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}gasto-row{% else %}ingreso-row{% endif %}">
-                                <td>{{ movimiento.fecha }}</td>
-                                <td>{{ movimiento.get_categoria_display }}</td>
-                                <td>{{ movimiento.descripcion }}</td>
-                                <td>
-                                    {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}-{% endif %}
-                                    {{ movimiento.importe|floatformat:2 }} €
-                                </td>
-                                <td>
-                                    {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}
-                                        <a href="{% url 'editar_movimiento' 'gasto' movimiento.id %}" class="edit-btn">Editar</a>
-                                    {% else %}
-                                        <a href="{% url 'editar_movimiento' 'ingreso' movimiento.id %}" class="edit-btn">Editar</a>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% endfor %}
-        {% else %}
-            <table class="history-table">
-                <thead>
-                    <tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Importe</th><th>Acciones</th></tr>
-                </thead>
-                <tbody>
-                    {% for movimiento in movimientos %}
-                        <tr class="{% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}gasto-row{% else %}ingreso-row{% endif %}">
-                            <td>{{ movimiento.fecha }}</td>
-                            <td>{{ movimiento.get_categoria_display }}</td>
-                            <td>{{ movimiento.descripcion }}</td>
-                            <td>
-                                {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}-{% endif %}
-                                {{ movimiento.importe|floatformat:2 }} €
-                            </td>
-                            <td>
-                                {% if movimiento.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Otros,Compra de Consumibles' %}
-                                    <a href="{% url 'editar_movimiento' 'gasto' movimiento.id %}" class="edit-btn">Editar</a>
-                                {% else %}
-                                    <a href="{% url 'editar_movimiento' 'ingreso' movimiento.id %}" class="edit-btn">Editar</a>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr><td colspan="5" style="text-align: center; padding: 20px;">No hay movimientos en este periodo.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% endif %}
-
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Descripción</th>
+                    <th style="text-align: right;">Importe</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movimiento in movimientos %}
+                    {% with es_gasto=movimiento|get_class_name|is_gasto %}
+                    <tr class="{% if es_gasto %}gasto-row{% else %}ingreso-row{% endif %}">
+                        <td>{{ movimiento.fecha|date:"d/m/Y" }}</td>
+                        <td>{{ movimiento.get_categoria_display }}</td>
+                        <td>{{ movimiento.descripcion }}</td>
+                        <td style="text-align: right;">
+                            {% if es_gasto %}-{% endif %}
+                            {{ movimiento.importe|floatformat:2 }} €
+                        </td>
+                        <td>
+                            {% if es_gasto %}
+                                <a href="{% url 'editar_movimiento' 'gasto' movimiento.id %}" class="edit-btn">Editar</a>
+                            {% else %}
+                                <a href="{% url 'editar_movimiento' 'ingreso' movimiento.id %}" class="edit-btn">Editar</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endwith %}
+                {% empty %}
+                    <tr><td colspan="5" style="text-align: center; padding: 20px;">No hay movimientos en este periodo.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </body>
 </html>
