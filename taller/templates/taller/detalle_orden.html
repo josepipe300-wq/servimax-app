@@ -15,7 +15,7 @@
         .items-table th, .items-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
         .items-table th { background-color: #e9ecef; }
         .status-form, .factura-form { margin-top: 30px; padding: 20px; background-color: #e9ecef; border-radius: 5px; }
-        .status-form select, .factura-form input, .factura-form select { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        .status-form select, .factura-form input, .factura-form select, .factura-form textarea { text-transform: uppercase; width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
         .status-form button, .factura-form button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; }
         .factura-form button, .btn-pdf { background-color: #28a745; width: 100%; padding: 15px; font-size: 1.2em; text-decoration: none; display: block; text-align: center; color: white; border-radius: 4px;}
         .header { display: flex; justify-content: space-between; align-items: center; }
@@ -39,7 +39,7 @@
         {% if factura %}
             <div class="financial-summary">
                 <h3>Resumen Financiero</h3>
-                <p><strong>Total Factura:</strong> {{ factura.total_final|floatformat:2 }} €</p>
+                <p><strong>Total {% if factura.es_factura %}Factura{% else %}Recibo{% endif %}:</strong> {{ factura.total_final|floatformat:2 }} €</p>
                 <p><strong>Total Pagado (Abonos):</strong> {{ abonos|floatformat:2 }} €</p>
                 <p><strong>Pendiente de Pago:</strong> <strong style="color: #dc3545;">{{ pendiente_pago|floatformat:2 }} €</strong></p>
             </div>
@@ -47,7 +47,7 @@
 
         <div class="info-grid">
             <div class="info-item"><strong>Cliente:</strong> {{ orden.cliente.nombre }} ({{ orden.cliente.telefono }})</div>
-            <div class="info-item"><strong>Vehículo:</strong> {{ orden.vehiculo.marca }} {{ orden.vehiculo.modelo }} ({{ orden.vehiculo.matricula }})</div>
+            <div class="info-item"><strong>Vehículo:</strong> {{ orden.vehiculo.marca }} {{ orden.vehiculo.modelo }} ({{ orden.vehiculo.matricula }}) - <strong>{{ orden.vehiculo.kilometraje }} km</strong></div>
         </div>
         <div class="info-item" style="margin-top: 20px;"><strong>Problema Reportado:</strong><p>{{ orden.problema|linebreaks }}</p></div>
         
@@ -90,13 +90,13 @@
 
         {% if factura %}
             <div class="factura-form">
-                <h2>Factura Generada</h2>
-                <a href="{% url 'ver_factura_pdf' factura.id %}" class="btn-pdf" target="_blank">📄 Ver Factura PDF</a>
-                <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">Modificar Factura</a>
+                <h2>Documento Generado</h2>
+                <a href="{% url 'ver_factura_pdf' factura.id %}" class="btn-pdf" target="_blank">📄 Ver {% if factura.es_factura %}Factura{% else %}Recibo{% endif %} PDF</a>
+                <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">Modificar {% if factura.es_factura %}Factura{% else %}Recibo{% endif %}</a>
             </div>
         {% else %}
             <div class="factura-form">
-                <h2>Generar Factura</h2>
+                <h2>Generar Factura o Recibo</h2>
                 <form id="factura-form" action="{% url 'generar_factura' orden.id %}" method="post">
                     {% csrf_token %}
                     <h4>Repuestos</h4>
@@ -112,18 +112,10 @@
                     {% endfor %}
 
                     <h4>Consumibles</h4>
-                    <div class="checkbox-container">
-                        <input type="checkbox" id="add_consumible" name="add_consumible">
-                        <label for="add_consumible">Añadir consumible (aceite, etc.)</label>
+                    <div id="consumibles-container">
                     </div>
-                    <div id="consumible_campos" style="display: none;">
-                        <select name="tipo_consumible">
-                            <option value="">Selecciona tipo</option>
-                            {% for tipo in tipos_consumible %}<option value="{{ tipo.id }}">{{ tipo.nombre }}</option>{% endfor %}
-                        </select>
-                        <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cantidad usada (Ej: 4.5)">
-                        <input type="number" step="0.01" name="consumible_pvp_total" placeholder="Precio Total a Cobrar (€)">
-                    </div>
+                    <button type="button" id="add-consumible-btn" style="width: auto; margin-bottom: 20px;">+ Añadir Consumible</button>
+
                     
                     <h4>Mano de Obra</h4>
                     <div id="mano-de-obra-container">
@@ -132,28 +124,22 @@
                             <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required>
                         </div>
                     </div>
-                    <button type="button" id="add-mano-obra">+ Añadir línea de trabajo</button>
+                    <button type="button" id="add-mano-obra" style="width: auto;">+ Añadir línea de trabajo</button>
                     
                     <h4 style="margin-top: 20px;">Finalizar</h4>
                     <div class="checkbox-container">
                         <input type="checkbox" id="aplicar_iva" name="aplicar_iva">
-                        <label for="aplicar_iva">Aplicar IVA (21%)</label>
+                        <label for="aplicar_iva">Generar FACTURA (Aplicar IVA 21%)</label>
                     </div>
                     <hr>
-                    <button type="submit">Calcular y Crear Factura</button>
+                    <button type="submit">Crear Documento</button>
                 </form>
             </div>
         {% endif %}
     </div>
 
     <script>
-        // Lógica para mostrar/ocultar campos de consumibles
-        document.getElementById('add_consumible').addEventListener('change', (e) => {
-            document.getElementById('consumible_campos').style.display = e.target.checked ? 'block' : 'none';
-        });
-
-        // Lógica para añadir nuevas líneas de mano de obra
-        document.getElementById('add-mano-obra').addEventListener('click', () => {
+        document.getElementById('add-mano-obra')?.addEventListener('click', () => {
             const container = document.getElementById('mano-de-obra-container');
             const newItem = document.createElement('div');
             newItem.classList.add('mano-obra-item');
@@ -163,6 +149,55 @@
             `;
             container.appendChild(newItem);
         });
+
+        document.getElementById('add-consumible-btn')?.addEventListener('click', () => {
+            const container = document.getElementById('consumibles-container');
+            const newItem = document.createElement('div');
+            newItem.classList.add('consumible-item');
+            newItem.innerHTML = `
+                <select name="tipo_consumible" required>
+                    <option value="">--- Selecciona tipo ---</option>
+                    {% for tipo in tipos_consumible %}<option value="{{ tipo.id }}">{{ tipo.nombre }}</option>{% endfor %}
+                </select>
+                <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cantidad usada (Ej: 4.5)" required>
+                <input type="number" step="0.01" name="consumible_pvp_total" placeholder="Precio Total a Cobrar (€)" required>
+                <hr style="margin-top: 0; margin-bottom: 15px;">
+            `;
+            container.appendChild(newItem);
+        });
+
+        const facturaForm = document.getElementById('factura-form');
+        if (facturaForm) {
+            facturaForm.addEventListener('submit', function(event) {
+                let preciosInvalidos = false;
+                const pvpInputs = this.querySelectorAll('.pvp-input');
+                
+                pvpInputs.forEach(input => {
+                    const pvp = parseFloat(input.value);
+                    const coste = parseFloat(input.dataset.coste);
+                    if (pvp < coste) {
+                        preciosInvalidos = true;
+                        alert(`El PVP de "${input.previousElementSibling.textContent.split('(')[0].trim()}" no puede ser menor que su coste de ${coste.toFixed(2)}€.`);
+                    }
+                });
+
+                if (preciosInvalidos) {
+                    event.preventDefault();
+                }
+            });
+
+            facturaForm.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') {
+                    event.preventDefault();
+                    const formElements = Array.from(this.elements).filter(el => el.offsetParent !== null);
+                    const currentIndex = formElements.indexOf(event.target);
+                    const nextElement = formElements[currentIndex + 1];
+                    if (nextElement) {
+                        nextElement.focus();
+                    }
+                }
+            });
+        }
     </script>
 </body>
 </html>

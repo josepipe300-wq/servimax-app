@@ -270,8 +270,10 @@ def editar_movimiento(request, tipo, movimiento_id):
 def generar_factura(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion, id=orden_id)
     if request.method == 'POST':
+        es_factura = 'aplicar_iva' in request.POST
         Factura.objects.filter(orden=orden).delete()
-        factura = Factura.objects.create(orden=orden)
+        factura = Factura.objects.create(orden=orden, es_factura=es_factura)
+
         subtotal = Decimal('0.00')
         repuestos = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
         for repuesto in repuestos:
@@ -280,6 +282,7 @@ def generar_factura(request, orden_id):
                 pvp = Decimal(pvp_str)
                 subtotal += pvp
                 LineaFactura.objects.create(factura=factura, tipo='Repuesto', descripcion=repuesto.descripcion, cantidad=1, precio_unitario=pvp)
+        
         gastos_otros = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Otros')
         for gasto in gastos_otros:
             pvp_str = request.POST.get(f'pvp_otro_{gasto.id}')
@@ -287,26 +290,31 @@ def generar_factura(request, orden_id):
                 pvp = Decimal(pvp_str)
                 subtotal += pvp
                 LineaFactura.objects.create(factura=factura, tipo='Externo', descripcion=gasto.descripcion, cantidad=1, precio_unitario=pvp)
-        if 'add_consumible' in request.POST:
-            tipo_id = request.POST.get('tipo_consumible')
-            cantidad_str = request.POST.get('consumible_cantidad')
-            pvp_total_str = request.POST.get('consumible_pvp_total')
-            if tipo_id and cantidad_str and pvp_total_str:
-                tipo = TipoConsumible.objects.get(id=tipo_id)
-                cantidad = Decimal(cantidad_str)
-                pvp_total = Decimal(pvp_total_str)
+
+        tipos_consumible = request.POST.getlist('tipo_consumible')
+        cantidades_consumible = request.POST.getlist('consumible_cantidad')
+        pvps_consumible = request.POST.getlist('consumible_pvp_total')
+
+        for i in range(len(tipos_consumible)):
+            if tipos_consumible[i] and cantidades_consumible[i] and pvps_consumible[i]:
+                tipo = TipoConsumible.objects.get(id=tipos_consumible[i])
+                cantidad = Decimal(cantidades_consumible[i])
+                pvp_total = Decimal(pvps_consumible[i])
                 subtotal += pvp_total
-                LineaFactura.objects.create(factura=factura, tipo='Consumible', descripcion=f'{tipo.nombre}', cantidad=cantidad, precio_unitario=pvp_total/cantidad)
+                LineaFactura.objects.create(factura=factura, tipo='Consumible', descripcion=f'{tipo.nombre}', cantidad=cantidad, precio_unitario=pvp_total/cantidad if cantidad > 0 else 0)
+
         descripciones = request.POST.getlist('mano_obra_desc')
         importes = request.POST.getlist('mano_obra_importe')
         for desc, importe_str in zip(descripciones, importes):
             if desc and importe_str:
                 importe = Decimal(importe_str)
                 subtotal += importe
-                LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=desc, cantidad=1, precio_unitario=importe)
+                LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=f"Mano de Obra: {desc}", cantidad=1, precio_unitario=importe)
+        
         iva_calculado = Decimal('0.00')
-        if 'aplicar_iva' in request.POST:
+        if es_factura:
             iva_calculado = subtotal * Decimal('0.21')
+        
         total_final = subtotal + iva_calculado
         factura.subtotal = subtotal
         factura.iva = iva_calculado
@@ -316,6 +324,7 @@ def generar_factura(request, orden_id):
         orden.save()
         return redirect('detalle_orden', orden_id=orden.id)
     return redirect('detalle_orden', orden_id=orden.id)
+
 
 def ver_factura_pdf(request, factura_id):
     factura = get_object_or_404(Factura, id=factura_id)
@@ -526,7 +535,7 @@ def contabilidad(request):
     elif periodo == 'mes':
         ingresos = ingresos.filter(fecha__month=hoy.month, fecha__year=hoy.year)
         gastos = gastos.filter(fecha__month=hoy.month, fecha__year=hoy.year)
-        facturas = facturas.filter(fecha_emision__month=hoy.month, fecha_emision__year=hoy.year)
+        facturas = facturas.filter(fecha_emision__month=hoy.month, fecha__emision__year=hoy.year)
     total_ingresado = ingresos.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastado = gastos.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_ganancia = Decimal('0.00')
