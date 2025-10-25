@@ -927,7 +927,7 @@ def contabilidad(request):
     elif periodo == 'mes':
         ingresos = ingresos.filter(fecha__month=hoy.month, fecha__year=hoy.year)
         gastos = gastos.filter(fecha__month=hoy.month, fecha__year=hoy.year)
-        facturas = facturas.filter(fecha_emision__month=hoy.month, fecha__emision__year=hoy.year)
+        facturas = facturas.filter(fecha_emision__month=hoy.month, fecha_emision__year=hoy.year)
 
     total_ingresado = ingresos.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastado = gastos.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
