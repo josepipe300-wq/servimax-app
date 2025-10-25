@@ -60,6 +60,7 @@ class Gasto(models.Model):
         ('Sueldos', 'Sueldos'),
         ('Herramientas', 'Herramientas'),
         ('Suministros', 'Suministros'),
+        ('Gasolina/Diesel', 'Gasolina/Diesel'), # <-- NUEVA CATEGORÍA AÑADIDA AQUÍ
         ('Otros', 'Otros'),
         ('Compra de Consumibles', 'Compra de Consumibles'),
     ]
@@ -67,15 +68,15 @@ class Gasto(models.Model):
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     descripcion = models.CharField(max_length=255, null=True, blank=True)
-    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
-    empleado = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True)
-    # --- NUEVO CAMPO ---
+    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True) # Referencia directa OK porque Vehiculo está definido antes
+    empleado = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True) # Referencia directa OK porque Empleado está definido antes
     pagado_con_tarjeta = models.BooleanField(default=False)
-    # -------------------
+
     def __str__(self):
         display_importe = self.importe if self.importe is not None else 0
-        pago = " [TARJETA]" if self.pagado_con_tarjeta else "" # Añadido texto distintivo
+        pago = " [TARJETA]" if self.pagado_con_tarjeta else ""
         return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€{pago}"
+
     def save(self, *args, **kwargs):
         if self.descripcion:
             self.descripcion = self.descripcion.upper()
@@ -93,12 +94,12 @@ class Ingreso(models.Model):
     importe = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=255)
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True)
-    # --- NUEVO CAMPO ---
-    es_tpv = models.BooleanField(default=False) # Indica si el ingreso fue por TPV
-    # -------------------
+    es_tpv = models.BooleanField(default=False)
+
     def __str__(self):
-        metodo = " [TPV]" if self.es_tpv else "" # Añadido texto distintivo
+        metodo = " [TPV]" if self.es_tpv else ""
         return f"{self.fecha} - {self.get_categoria_display()} - {self.importe}€{metodo}"
+
     def save(self, *args, **kwargs):
         self.descripcion = self.descripcion.upper()
         super(Ingreso, self).save(*args, **kwargs)

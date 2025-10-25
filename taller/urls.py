@@ -1,5 +1,5 @@
 # taller/urls.py
-from django.urls import path
+from django.urls import path # Asegúrate de importar path
 from . import views
 
 urlpatterns = [
@@ -28,11 +28,13 @@ urlpatterns = [
     path('cuentas-por-cobrar/', views.cuentas_por_cobrar, name='cuentas_por_cobrar'),
 
     # --- Rutas para Desglose de Gastos ---
+    # La ruta de sueldos no necesita cambio porque empleado_nombre no debería tener '/'
     path('informe-gastos/desglose/sueldos/<str:empleado_nombre>/', views.informe_gastos_desglose, {'categoria': 'Sueldos'}, name='desglose_sueldos_empleado'),
-    path('informe-gastos/desglose/<str:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
+    # --- MODIFICACIÓN AQUÍ: Cambiar <str:categoria> por <path:categoria> ---
+    path('informe-gastos/desglose/<path:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
 
-    # --- RUTA PARA DESGLOSE DE INGRESOS ---
-    path('informe-ingresos/desglose/<str:categoria>/', views.informe_ingresos_desglose, name='informe_ingresos_desglose'),
+    # --- RUTA PARA DESGLOSE DE INGRESOS (También se beneficia del cambio si alguna categoría tuviera '/') ---
+    path('informe-ingresos/desglose/<path:categoria>/', views.informe_ingresos_desglose, name='informe_ingresos_desglose'),
 
     # --- NUEVA RUTA PARA INFORME DE TARJETA ---
     path('informe-tarjeta/', views.informe_tarjeta, name='informe_tarjeta'),
