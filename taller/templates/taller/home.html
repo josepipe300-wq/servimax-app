@@ -8,41 +8,51 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
         h1, h2 { color: #333; }
-        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; text-align: center; margin-bottom: 30px; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; text-align: center; margin-bottom: 30px; } /* Ajustado minmax */
         .card { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .card h2 { margin-top: 0; font-size: 1.1em; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
-        .card .amount { font-size: 2.5em; font-weight: bold; }
+        .card h2 { margin-top: 0; font-size: 1.0em; color: #555; text-transform: uppercase; letter-spacing: 0.5px; } /* Reducido font-size */
+        .card .amount { font-size: 2.0em; font-weight: bold; } /* Reducido font-size */
         .ingresos { color: #28a745; }
         .gastos { color: #dc3545; }
-        .beneficio { color: #007bff; }
-        .action-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
-        .btn { display: block; padding: 20px; border-radius: 8px; text-decoration: none; color: #fff; font-size: 1.2em; font-weight: bold; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15); transition: transform 0.2s; }
+        .balance-caja { color: #ffc107; } /* Color para caja */
+        .balance-tarjeta { color: #17a2b8; } /* Color para tarjeta */
+        .negativo { color: #dc3545; } /* Clase para valores negativos */
+        .action-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-top: 20px; } /* Ajustado minmax */
+        .btn { display: block; padding: 15px; border-radius: 8px; text-decoration: none; color: #fff; font-size: 1.1em; font-weight: bold; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15); transition: transform 0.2s; } /* Reducido padding y font-size */
         .btn:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
         .btn-ingresar { background-color: #17a2b8; }
         .btn-gasto { background-color: #ffc107; color: #333; }
         .btn-ingreso-dinero { background-color: #28a745; }
         .history-table { width: 100%; margin-top: 20px; border-collapse: collapse; background-color: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
-        .history-table th, .history-table td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
+        .history-table th, .history-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; font-size: 0.9em;} /* Reducido padding y font-size */
         .history-table th { background-color: #e9ecef; color: #333; }
         .gasto-row td { color: #dc3545; font-weight: 500; }
         .ingreso-row td { color: #28a745; font-weight: 500; }
+        .movimiento-metodo { font-size: 0.8em; color: #6c757d; margin-left: 5px; } /* Estilo para [TPV]/[TARJETA] */
     </style>
 </head>
 <body>
     <h1>Balance Mensual</h1>
     <div class="dashboard">
         <div class="card">
-            <h2>INGRESOS</h2>
+            <h2>Ingresos Mes</h2>
             <p class="amount ingresos">{{ total_ingresos|floatformat:2 }} €</p>
         </div>
         <div class="card">
-            <h2>GASTOS</h2>
+            <h2>Gastos Mes</h2>
             <p class="amount gastos">{{ total_gastos|floatformat:2 }} €</p>
         </div>
+        {# --- NUEVA TARJETA BALANCE CAJA --- #}
         <div class="card">
-            <h2>BENEFICIO</h2>
-            <p class="amount beneficio">{{ beneficio|floatformat:2 }} €</p>
+            <h2>Balance Caja</h2>
+            <p class="amount balance-caja {% if balance_caja < 0 %}negativo{% endif %}">{{ balance_caja|floatformat:2 }} €</p>
         </div>
+        {# --- NUEVA TARJETA BALANCE TARJETA --- #}
+        <div class="card">
+            <h2>Balance Tarjeta</h2>
+            <p class="amount balance-tarjeta {% if balance_tarjeta < 0 %}negativo{% endif %}">{{ balance_tarjeta|floatformat:2 }} €</p>
+        </div>
+        {# --- EL BLOQUE COMENTADO ANTERIOR HA SIDO ELIMINADO COMPLETAMENTE --- #}
     </div>
     <hr>
     <h2>Acciones Rápidas</h2>
@@ -55,6 +65,7 @@
         <a href="{% url 'contabilidad' %}" class="btn" style="background-color: #fd7e14;">📊 Contabilidad</a>
         <a href="{% url 'cuentas_por_cobrar' %}" class="btn" style="background-color: #dc3545;">🚨 Cuentas por Cobrar</a>
         <a href="{% url 'stock_inicial_consumible' %}" class="btn" style="background-color: #191970;">📦 Stock Inicial</a>
+        <a href="{% url 'informe_tarjeta' %}" class="btn" style="background-color: #6f42c1;">💳 Informe Tarjeta</a>
     </div>
     <div style="margin-top: 40px;">
         <h2>Últimos Movimientos</h2>
@@ -73,7 +84,15 @@
                     <tr class="{% if es_gasto %}gasto-row{% else %}ingreso-row{% endif %}">
                         <td>{{ movimiento.fecha|date:"d/m/Y" }}</td>
                         <td>{{ movimiento.get_categoria_display }}</td>
-                        <td>{{ movimiento.descripcion }}</td>
+                        <td>
+                            {{ movimiento.descripcion }}
+                            {# Mostrar [TPV] o [TARJETA] si aplica #}
+                            {% if not es_gasto and movimiento.es_tpv %}
+                                <span class="movimiento-metodo">[TPV]</span>
+                            {% elif es_gasto and movimiento.pagado_con_tarjeta %}
+                                <span class="movimiento-metodo">[TARJETA]</span>
+                            {% endif %}
+                        </td>
                         <td style="text-align: right;">
                             {% if es_gasto %}-{% endif %}
                             {{ movimiento.importe|floatformat:2 }} €

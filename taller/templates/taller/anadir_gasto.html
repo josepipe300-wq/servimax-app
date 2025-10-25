@@ -57,6 +57,12 @@
                         {% endfor %}
                     </select>
                 </div>
+                 {# --- AÑADIR ESTO --- #}
+                <div style="margin-bottom: 15px;">
+                    <input type="checkbox" id="pagado_con_tarjeta" name="pagado_con_tarjeta" value="true" style="width: auto; margin-right: 10px;">
+                    <label for="pagado_con_tarjeta" style="display: inline;">¿Pagado con tarjeta?</label>
+                </div>
+                {# ------------------- #}
             </div>
 
             <div id="campos-consumible" style="display: none;">
@@ -73,8 +79,14 @@
                 <input type="number" step="0.01" id="cantidad" name="cantidad">
                 <label for="coste_total">Coste Total (€):</label>
                 <input type="number" step="0.01" id="coste_total" name="coste_total">
+                 {# --- AÑADIR ESTO TAMBIÉN PARA CONSUMIBLES --- #}
+                <div style="margin-bottom: 15px;">
+                    <input type="checkbox" id="pagado_con_tarjeta_consumible" name="pagado_con_tarjeta" value="true" style="width: auto; margin-right: 10px;">
+                    <label for="pagado_con_tarjeta_consumible" style="display: inline;">¿Pagado con tarjeta?</label>
+                </div>
+                {# --------------------------------------------- #}
             </div>
-            
+
             <button type="submit">Guardar Gasto</button>
         </form>
     </div>
@@ -85,6 +97,10 @@
         const camposConsumible = document.getElementById('campos-consumible');
         const campoVehiculo = document.getElementById('campo-vehiculo');
         const campoEmpleado = document.getElementById('campo-empleado');
+        // Checkboxes de pago con tarjeta
+        const checkboxNormal = document.getElementById('pagado_con_tarjeta');
+        const checkboxConsumible = document.getElementById('pagado_con_tarjeta_consumible');
+
 
         function actualizarFormulario() {
             const selectedValue = categoriaSelect.value;
@@ -93,10 +109,26 @@
             campoVehiculo.style.display = 'none';
             campoEmpleado.style.display = 'none';
 
+            // Ocultamos ambos checkboxes por defecto
+            checkboxNormal.parentElement.style.display = 'none';
+            checkboxConsumible.parentElement.style.display = 'none';
+
+
             if (selectedValue === 'Compra de Consumibles') {
                 camposConsumible.style.display = 'block';
+                // Mostramos el checkbox de consumibles
+                checkboxConsumible.parentElement.style.display = 'block';
+                // Aseguramos que el otro checkbox no envíe datos si no es visible
+                checkboxNormal.checked = false;
+
+
             } else {
                 camposGastoNormal.style.display = 'block';
+                 // Mostramos el checkbox normal
+                checkboxNormal.parentElement.style.display = 'block';
+                 // Aseguramos que el otro checkbox no envíe datos si no es visible
+                checkboxConsumible.checked = false;
+
                 if (selectedValue === 'Repuestos' || selectedValue === 'Otros') {
                     campoVehiculo.style.display = 'block';
                 } else if (selectedValue === 'Sueldos') {

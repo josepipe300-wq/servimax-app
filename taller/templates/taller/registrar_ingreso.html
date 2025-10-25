@@ -45,7 +45,14 @@
                     <option value="{{ orden.id }}">{{ orden }}</option>
                 {% endfor %}
             </select>
-            
+
+            {# --- AÑADIR ESTO --- #}
+            <div style="margin-bottom: 15px;">
+                <input type="checkbox" id="es_tpv" name="es_tpv" value="true" style="width: auto; margin-right: 10px;">
+                <label for="es_tpv" style="display: inline;">¿Ingreso por TPV (Tarjeta)?</label>
+            </div>
+            {# ------------------- #}
+
             <button type="submit">Guardar Ingreso</button>
         </form>
     </div>

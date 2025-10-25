@@ -1,8 +1,9 @@
+# taller/models.py
 from django.db import models
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
-    telefono = models.CharField(max_length=20, unique=True)
+    telefono = models.CharField(max_length=20, unique=True) # MANTENIDO COMO UNIQUE
     def __str__(self):
         return self.nombre
     def save(self, *args, **kwargs):
@@ -42,7 +43,7 @@ class OrdenDeReparacion(models.Model):
     def save(self, *args, **kwargs):
         self.problema = self.problema.upper()
         # La siguiente línea ha sido eliminada para corregir el error
-        # self.estado = self.estado.upper() 
+        # self.estado = self.estado.upper()
         super(OrdenDeReparacion, self).save(*args, **kwargs)
 
 class Empleado(models.Model):
@@ -68,9 +69,13 @@ class Gasto(models.Model):
     descripcion = models.CharField(max_length=255, null=True, blank=True)
     vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
     empleado = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True)
+    # --- NUEVO CAMPO ---
+    pagado_con_tarjeta = models.BooleanField(default=False)
+    # -------------------
     def __str__(self):
         display_importe = self.importe if self.importe is not None else 0
-        return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€"
+        pago = " [TARJETA]" if self.pagado_con_tarjeta else "" # Añadido texto distintivo
+        return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€{pago}"
     def save(self, *args, **kwargs):
         if self.descripcion:
             self.descripcion = self.descripcion.upper()
@@ -88,8 +93,12 @@ class Ingreso(models.Model):
     importe = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=255)
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True)
+    # --- NUEVO CAMPO ---
+    es_tpv = models.BooleanField(default=False) # Indica si el ingreso fue por TPV
+    # -------------------
     def __str__(self):
-        return f"{self.fecha} - {self.get_categoria_display()} - {self.importe}€"
+        metodo = " [TPV]" if self.es_tpv else "" # Añadido texto distintivo
+        return f"{self.fecha} - {self.get_categoria_display()} - {self.importe}€{metodo}"
     def save(self, *args, **kwargs):
         self.descripcion = self.descripcion.upper()
         super(Ingreso, self).save(*args, **kwargs)
