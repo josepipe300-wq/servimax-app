@@ -24,9 +24,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'whitenoise.runserver_nostatic',
     'django.contrib.staticfiles',
-    'cloudinary', # <-- Asegúrate que esta ya estaba
-    'cloudinary_storage', # <-- AÑADE ESTA LÍNEA AQUÍ
+    'cloudinary', # <-- SOLO ESTA LÍNEA PARA CLOUDINARY
+    # 'cloudinary_storage', # <-- ASEGÚRATE DE QUE ESTA LÍNEA NO ESTÉ O ESTÉ COMENTADA
 ]
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -84,27 +85,23 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # --- CONFIGURACIÓN DE ALMACENAMIENTO (Cloudinary o Local) ---
 
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
-# *** TRYING A DIFFERENT BACKEND PATH ***
-CLOUDINARY_MEDIA_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage' # Keep original name as fallback reference
-# ALTERNATIVE_CLOUDINARY_BACKEND = 'cloudinary.storage.CloudinaryStorage' # Potential simpler path - LET'S TRY THIS
+CLOUDINARY_MEDIA_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage' # Esta ruta ES correcta para el backend
 
 if CLOUDINARY_URL:
     # --- Configuración para Cloudinary (Producción/Render) ---
-    # *** TRY USING THE ALTERNATIVE PATH ***
-    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage' # Revertimos al original por ahora, el error podría ser otro.
+    DEFAULT_FILE_STORAGE = CLOUDINARY_MEDIA_BACKEND
 
     STORAGES = {
         "default": {
-            # *** TRY USING THE ALTERNATIVE PATH ***
-             "BACKEND": 'cloudinary_storage.storage.MediaCloudinaryStorage', # Revertimos al original.
+            "BACKEND": CLOUDINARY_MEDIA_BACKEND,
         },
         "staticfiles": {
              "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-             # "BACKEND": "cloudinary_storage.storage.StaticHashedCloudinaryStorage", # If using Cloudinary for static
+             # "BACKEND": "cloudinary_storage.storage.StaticHashedCloudinaryStorage", # Si usas Cloudinary para estáticos
         },
     }
-    MEDIA_URL = '/media/'
-    MEDIA_ROOT = ''
+    MEDIA_URL = '/media/' # Cloudinary gestionará la URL final
+    MEDIA_ROOT = '' # No usado
 
 else:
     # --- Configuración Local (Desarrollo) ---
@@ -121,8 +118,8 @@ else:
         },
     }
 
-# Ensure Whitenoise middleware is present if used for staticfiles
+# Asegurar configuración Whitenoise si se usa para estáticos
 if STORAGES.get("staticfiles", {}).get("BACKEND") == 'whitenoise.storage.CompressedManifestStaticFilesStorage':
-    pass # Middleware is already added above
+    pass # Middleware ya añadido
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
