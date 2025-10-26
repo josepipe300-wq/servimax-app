@@ -1,5 +1,6 @@
 # taller/models.py
 from django.db import models
+from django.utils import timezone # Importar timezone para la fecha de creación
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
@@ -29,6 +30,7 @@ class OrdenDeReparacion(models.Model):
     vehiculo = models.ForeignKey(Vehiculo, on_delete=models.CASCADE)
     fecha_entrada = models.DateTimeField(auto_now_add=True)
     problema = models.TextField()
+    presupuesto_origen = models.OneToOneField('Presupuesto', on_delete=models.SET_NULL, null=True, blank=True, related_name='orden_generada')
     ESTADO_CHOICES = [
         ('Recibido', 'Recibido'),
         ('En Diagnostico', 'En Diagnóstico'),
@@ -176,3 +178,63 @@ class FotoVehiculo(models.Model):
     def save(self, *args, **kwargs):
         self.descripcion = self.descripcion.upper()
         super(FotoVehiculo, self).save(*args, **kwargs)
+
+# --- NUEVOS MODELOS PARA PRESUPUESTOS ---
+
+class Presupuesto(models.Model):
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, help_text="Cliente al que se dirige el presupuesto.")
+    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True, help_text="Vehículo asociado (opcional, si ya existe).")
+    # Campos para datos del vehículo si no existe uno asociado aún
+    matricula_nueva = models.CharField(max_length=20, blank=True, null=True, help_text="Matrícula si es un vehículo nuevo.")
+    marca_nueva = models.CharField(max_length=50, blank=True, null=True, help_text="Marca si es un vehículo nuevo.")
+    modelo_nuevo = models.CharField(max_length=50, blank=True, null=True, help_text="Modelo si es un vehículo nuevo.")
+
+    fecha_creacion = models.DateTimeField(default=timezone.now, editable=False)
+    problema_o_trabajo = models.TextField(help_text="Descripción del problema o trabajo a presupuestar.")
+    ESTADO_CHOICES = [
+        ('Pendiente', 'Pendiente'),
+        ('Aceptado', 'Aceptado'),
+        ('Rechazado', 'Rechazado'),
+        ('Convertido', 'Convertido a Orden'), # Nuevo estado para indicar que se usó para una orden
+    ]
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='Pendiente')
+    total_estimado = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="Cálculo total del presupuesto.")
+
+    def __str__(self):
+        identificador_vehiculo = self.vehiculo.matricula if self.vehiculo else self.matricula_nueva if self.matricula_nueva else "Sin vehículo especificado"
+        return f"Presupuesto #{self.id} - {self.cliente.nombre} ({identificador_vehiculo})"
+
+    def save(self, *args, **kwargs):
+        # Convertir a mayúsculas los campos nuevos de vehículo si existen
+        if self.matricula_nueva:
+            self.matricula_nueva = self.matricula_nueva.upper()
+        if self.marca_nueva:
+            self.marca_nueva = self.marca_nueva.upper()
+        if self.modelo_nuevo:
+            self.modelo_nuevo = self.modelo_nuevo.upper()
+        self.problema_o_trabajo = self.problema_o_trabajo.upper()
+
+        # Podríamos recalcular el total_estimado aquí si quisiéramos
+        # total = self.lineas.aggregate(Sum(F('cantidad') * F('precio_unitario_estimado')))['total'] or Decimal('0.00')
+        # self.total_estimado = total # Haría falta importar F y Decimal
+
+        super(Presupuesto, self).save(*args, **kwargs)
+
+class LineaPresupuesto(models.Model):
+    presupuesto = models.ForeignKey(Presupuesto, related_name='lineas', on_delete=models.CASCADE)
+    TIPO_CHOICES = LineaFactura.TIPO_CHOICES # Reutilizamos las mismas opciones que en Factura
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    descripcion = models.CharField(max_length=255)
+    cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=1)
+    precio_unitario_estimado = models.DecimalField(max_digits=10, decimal_places=2)
+
+    @property
+    def total_linea_estimado(self):
+        return self.cantidad * self.precio_unitario_estimado
+
+    def __str__(self):
+        return f"Línea ({self.tipo}) para Presupuesto #{self.presupuesto.id}"
+
+    def save(self, *args, **kwargs):
+        self.descripcion = self.descripcion.upper()
+        super(LineaPresupuesto, self).save(*args, **kwargs)

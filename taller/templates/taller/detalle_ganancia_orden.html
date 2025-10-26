@@ -13,8 +13,10 @@
         .detail-table th { background-color: #e9ecef; }
         .header { display: flex; justify-content: space-between; align-items: center; }
         .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-        .summary { margin-top: 20px; text-align: right; font-size: 1.2em; }
-        /* --- NUEVOS ESTILOS --- */
+        .summary { margin-top: 20px; text-align: right; font-size: 1.2em; border-top: 1px solid #eee; padding-top: 15px; }
+        .summary p { margin: 8px 0; }
+        .saldo-positivo { color: #28a745; }
+        .saldo-negativo { color: #dc3545; }
         .info-box {
             border: 1px solid #eee;
             padding: 15px;
@@ -33,11 +35,11 @@
         <hr>
 
         <div class="info-box">
-            <p><strong>Fecha Factura:</strong> {{ orden.factura.fecha_emision|date:"d/m/Y" }}</p>
+            <p><strong>Fecha Factura:</strong> {{ factura.fecha_emision|date:"d/m/Y" }}</p>
             <p><strong>Cliente:</strong> {{ orden.cliente.nombre }}</p>
             <p><strong>Vehículo:</strong> {{ orden.vehiculo }}</p>
         </div>
-        
+
         <h2>Detalles de la Ganancia</h2>
         <table class="detail-table">
             <thead>
@@ -63,8 +65,21 @@
         </table>
 
         <div class="summary">
-            <p>Ganancia Total del Trabajo: <strong>{{ ganancia_total|floatformat:2 }} €</strong></p>
+            <p>Ganancia Total del Trabajo (Base Cobrada - Costes): <strong>{{ ganancia_total|floatformat:2 }} €</strong></p>
+            <hr style="border-top: 1px dashed #ccc; margin: 10px 0;">
+            <p>Total {% if factura.es_factura %}Factura{% else %}Recibo{% endif %}: {{ factura.total_final|floatformat:2 }} €</p>
+            <p>Total Pagado (Abonos): {{ abonos_totales|floatformat:2 }} €</p>
+            {# Mostrar Saldo del Cliente #}
+            {% if saldo_cliente > 0.01 %}
+                <p><strong class="saldo-positivo">Saldo a favor del cliente: {{ saldo_cliente|floatformat:2 }} €</strong></p>
+            {% elif saldo_cliente < -0.01 %}
+                {# CORREGIDO: Usar la variable saldo_cliente_abs calculada en la vista #}
+                <p><strong class="saldo-negativo">Pendiente de pago por el cliente: {{ saldo_cliente_abs|floatformat:2 }} €</strong></p>
+            {% else %}
+                 <p><strong>Estado de cuenta: Saldado</strong></p>
+            {% endif %}
         </div>
+
     </div>
 </body>
 </html>

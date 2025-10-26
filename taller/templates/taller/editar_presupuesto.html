@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Presupuesto #{{ presupuesto_existente.id }} - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 900px; margin: auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1, h2, h3 { color: #333; }
+        input, select, textarea { text-transform: uppercase; width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        textarea { resize: vertical; min-height: 80px; }
+        button, .btn-add { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; margin-top: 5px; }
+        /* Botón de guardar cambios en amarillo */
+        .btn-submit { background-color: #ffc107; color: #333; width: 100%; padding: 15px; font-size: 1.2em; margin-top: 20px;}
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+        .section { margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .linea-item { display: grid; grid-template-columns: 1fr 2fr 100px 120px 50px; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .linea-item label { display: none; } /* Ocultar labels dentro de la línea */
+        .btn-remove { background-color: #dc3545; font-size: 0.8em; padding: 5px 10px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Editando Presupuesto #{{ presupuesto_existente.id }}</h1>
+            {# Enlace para cancelar y volver al detalle del presupuesto que se estaba editando #}
+            <a href="{% url 'detalle_presupuesto' presupuesto_existente.id %}" class="back-btn">← Cancelar y Volver</a>
+        </div>
+        <hr>
+
+        {# El action apunta a la URL de edición #}
+        <form id="presupuesto-form" action="{% url 'editar_presupuesto' presupuesto_existente.id %}" method="post">
+            {% csrf_token %}
+
+            <div class="section">
+                <h2>Cliente</h2>
+                <label for="cliente_existente">Seleccionar Cliente Existente:</label>
+                <select id="cliente_existente" name="cliente_existente">
+                    <option value="">--- O Crear Nuevo Cliente Abajo ---</option>
+                    {% for cliente in clientes %}
+                        {# Preseleccionar el cliente del presupuesto existente #}
+                        <option value="{{ cliente.id }}" {% if presupuesto_existente.cliente.id == cliente.id %}selected{% endif %}>
+                            {{ cliente.nombre }} ({{ cliente.telefono }})
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <div id="nuevo_cliente_fields">
+                    <label for="cliente_nombre">Nombre Nuevo Cliente:</label>
+                    <input type="text" id="cliente_nombre" name="cliente_nombre">
+                    <label for="cliente_telefono">Teléfono Nuevo Cliente:</label>
+                    <input type="text" id="cliente_telefono" name="cliente_telefono">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Vehículo</h2>
+                 <label for="vehiculo_existente">Seleccionar Vehículo Existente (del cliente):</label>
+                 <select id="vehiculo_existente" name="vehiculo_existente">
+                    <option value="">--- O Introducir Datos Abajo ---</option>
+                    {% for vehiculo in vehiculos %}
+                        {# Preseleccionar el vehículo del presupuesto si existe #}
+                        <option value="{{ vehiculo.id }}" data-cliente="{{ vehiculo.cliente.id }}" style="display: none;" {% if presupuesto_existente.vehiculo.id == vehiculo.id %}selected{% endif %}>
+                            {{ vehiculo }}
+                        </option>
+                    {% endfor %}
+                </select>
+
+                 <div id="nuevo_vehiculo_fields">
+                     {# Pre-rellenar con datos nuevos si el presupuesto no tenía vehículo asociado #}
+                    <label for="matricula_nueva">Matrícula Nueva:</label>
+                    <input type="text" id="matricula_nueva" name="matricula_nueva" value="{{ presupuesto_existente.matricula_nueva|default:'' }}">
+                    <label for="marca_nueva">Marca Nueva:</label>
+                    <input type="text" id="marca_nueva" name="marca_nueva" value="{{ presupuesto_existente.marca_nueva|default:'' }}">
+                    <label for="modelo_nuevo">Modelo Nuevo:</label>
+                    <input type="text" id="modelo_nuevo" name="modelo_nuevo" value="{{ presupuesto_existente.modelo_nuevo|default:'' }}">
+                 </div>
+            </div>
+
+            <div class="section">
+                <h2>Descripción del Trabajo</h2>
+                <label for="problema_o_trabajo">Problema / Tareas a presupuestar:</label>
+                 {# Pre-rellenar con la descripción existente #}
+                <textarea id="problema_o_trabajo" name="problema_o_trabajo" required>{{ presupuesto_existente.problema_o_trabajo }}</textarea>
+            </div>
+
+            <div class="section">
+                <h2>Líneas del Presupuesto</h2>
+                <div id="lineas-container">
+                    {# Las líneas se cargarán aquí con JavaScript #}
+                </div>
+                <button type="button" class="btn-add" id="add-linea-btn">+ Añadir Línea</button>
+            </div>
+
+            <button type="submit" class="btn-submit">Guardar Cambios</button>
+        </form>
+    </div>
+
+    <script>
+        const clienteSelect = document.getElementById('cliente_existente');
+        const nuevoClienteFields = document.getElementById('nuevo_cliente_fields');
+        const vehiculoSelect = document.getElementById('vehiculo_existente');
+        const nuevoVehiculoFields = document.getElementById('nuevo_vehiculo_fields');
+        const lineasContainer = document.getElementById('lineas-container');
+        const addLineaBtn = document.getElementById('add-linea-btn');
+        // Obtener las líneas existentes pasadas desde la vista
+        const lineasExistentes = JSON.parse('{{ lineas_existentes_json|escapejs }}');
+
+        // Función para ocultar/mostrar campos de nuevo cliente y filtrar vehículos
+        function handleClienteChange() {
+            const clienteSeleccionado = clienteSelect.value;
+            if (clienteSeleccionado) {
+                nuevoClienteFields.classList.add('hidden');
+                document.getElementById('cliente_nombre').value = '';
+                document.getElementById('cliente_telefono').value = '';
+            } else {
+                nuevoClienteFields.classList.remove('hidden');
+            }
+            filterVehiculos(clienteSeleccionado);
+        }
+
+        // Función para ocultar/mostrar campos de nuevo vehículo
+        function handleVehiculoChange() {
+            if (vehiculoSelect.value) {
+                nuevoVehiculoFields.classList.add('hidden');
+                document.getElementById('matricula_nueva').value = '';
+                document.getElementById('marca_nueva').value = '';
+                document.getElementById('modelo_nuevo').value = '';
+            } else {
+                nuevoVehiculoFields.classList.remove('hidden');
+            }
+        }
+
+        // Función para filtrar vehículos según el cliente seleccionado
+        function filterVehiculos(selectedClienteId) {
+            let primerVehiculoVisible = null;
+            // No reseteamos la selección aquí para mantener la selección inicial si es válida
+            // vehiculoSelect.value = "";
+
+            for (const option of vehiculoSelect.options) {
+                if (option.value === "") continue;
+
+                const vehiculoClienteId = option.getAttribute('data-cliente');
+                const shouldDisplay = !selectedClienteId || (vehiculoClienteId === selectedClienteId);
+                option.style.display = shouldDisplay ? 'block' : 'none';
+                if (shouldDisplay && !primerVehiculoVisible) {
+                    primerVehiculoVisible = option.value;
+                }
+            }
+             // Si el vehículo seleccionado actualmente pertenece al cliente, mantenerlo. Si no, deseleccionar.
+             const currentSelectedOption = vehiculoSelect.options[vehiculoSelect.selectedIndex];
+             if (currentSelectedOption && currentSelectedOption.value !== "" && currentSelectedOption.getAttribute('data-cliente') !== selectedClienteId && selectedClienteId !== "") {
+                  vehiculoSelect.value = ""; // Deseleccionar si el vehículo no es del cliente
+             }
+
+            handleVehiculoChange();
+        }
+
+        // Función para añadir una nueva línea (puede recibir datos para pre-rellenar)
+        function addLinea(lineaData = null) {
+            const newLinea = document.createElement('div');
+            newLinea.classList.add('linea-item');
+
+            // Crear el select de tipo
+            let tipoSelectHTML = `<select name="linea_tipo" required><option value="">Tipo...</option>`;
+            {% for value, name in tipos_linea %}
+            tipoSelectHTML += `<option value="{{ value }}" ${lineaData && lineaData.tipo === '{{ value }}' ? 'selected' : ''}>{{ name }}</option>`;
+            {% endfor %}
+            tipoSelectHTML += `</select>`;
+
+            // Crear el resto de inputs, pre-rellenando si hay datos
+            const descripcionInput = `<input type="text" name="linea_descripcion" placeholder="Descripción" value="${lineaData ? lineaData.descripcion : ''}" required>`;
+            const cantidadInput = `<input type="number" step="0.01" min="0" name="linea_cantidad" placeholder="Cant." value="${lineaData ? lineaData.cantidad : '1'}" required>`;
+            const precioInput = `<input type="number" step="0.01" min="0" name="linea_precio_unitario" placeholder="Precio Unit. (€)" value="${lineaData ? lineaData.precio_unitario_estimado : ''}" required>`;
+            const removeButton = `<button type="button" class="btn-remove" onclick="removeLinea(this)">X</button>`;
+
+            newLinea.innerHTML = tipoSelectHTML + descripcionInput + cantidadInput + precioInput + removeButton;
+            lineasContainer.appendChild(newLinea);
+        }
+
+        // Función para eliminar una línea
+        function removeLinea(button) {
+            button.closest('.linea-item').remove();
+        }
+
+        // Event listeners
+        clienteSelect.addEventListener('change', handleClienteChange);
+        vehiculoSelect.addEventListener('change', handleVehiculoChange);
+        addLineaBtn.addEventListener('click', () => addLinea()); // Pasar sin argumentos para línea nueva
+
+        // Estado inicial al cargar la página
+        handleClienteChange(); // Filtra vehículos y ajusta visibilidad cliente
+        // Cargar las líneas existentes
+        if (lineasExistentes && lineasExistentes.length > 0) {
+            lineasExistentes.forEach(linea => addLinea(linea));
+        } else {
+            addLinea(); // Añadir una línea vacía si no hay existentes
+        }
+
+    </script>
+</body>
+</html>

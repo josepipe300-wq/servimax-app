@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Presupuestos - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        .budget-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .budget-table th, .budget-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .budget-table th { background-color: #e9ecef; }
+        .budget-table tbody tr[data-url]:hover { background-color: #f5f5f5; cursor: pointer; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn, .btn-new { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+        .btn-new { background-color: #007bff; }
+        .estado-pendiente { background-color: #ffc107; color: #333; padding: 3px 6px; border-radius: 3px; font-size: 0.9em;}
+        .estado-aceptado { background-color: #28a745; color: white; padding: 3px 6px; border-radius: 3px; font-size: 0.9em;}
+        .estado-rechazado { background-color: #dc3545; color: white; padding: 3px 6px; border-radius: 3px; font-size: 0.9em;}
+        .estado-convertido { background-color: #17a2b8; color: white; padding: 3px 6px; border-radius: 3px; font-size: 0.9em;}
+         /* Estilos para filtros */
+        .filters { margin-bottom: 15px; margin-top: 15px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;} /* Añadido flex-wrap */
+        .filters label { margin-right: 5px; font-weight: bold;}
+        .filters select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; } /* Ajustado padding */
+        .filters button { padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;} /* Ajustado padding */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Lista de Presupuestos</h1>
+            <div>
+                 <a href="{% url 'crear_presupuesto' %}" class="btn-new" style="margin-right: 10px;">+ Crear Nuevo</a>
+                 <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
+            </div>
+        </div>
+        <hr>
+
+        {# Filtros por estado, año y mes #}
+        <div class="filters">
+            <form method="get" action="{% url 'lista_presupuestos' %}" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <label for="ano">Año:</label>
+                    <select name="ano" id="ano">
+                        <option value="">Todos</option>
+                        {% for ano in anos_disponibles %} {# Usar anos_disponibles pasado desde la vista #}
+                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="mes">Mes:</label>
+                    <select name="mes" id="mes">
+                        <option value="">Todo el Año</option>
+                        {% for i in meses_del_ano %} {# Usar meses_del_ano pasado desde la vista #}
+                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="estado_filtro">Estado:</label>
+                    <select name="estado" id="estado_filtro">
+                        <option value="">--- Todos ---</option>
+                        {% for value, name in estados_posibles %}
+                            <option value="{{ value }}" {% if estado_actual == value %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit">Filtrar</button>
+            </form>
+        </div>
+
+
+        <table class="budget-table">
+            <thead>
+                <tr>
+                    <th># Pres.</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Vehículo</th>
+                    <th style="text-align: right;">Total Est.</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in presupuestos %}
+                    {# Hacer la fila clickeable para ir al detalle #}
+                    <tr data-url="{% url 'detalle_presupuesto' p.id %}">
+                        <td>{{ p.id }}</td>
+                        <td>{{ p.fecha_creacion|date:"d/m/Y H:i" }}</td>
+                        <td>{{ p.cliente.nombre }}</td>
+                        <td>
+                            {% if p.vehiculo %}
+                                {{ p.vehiculo }}
+                            {% elif p.matricula_nueva %}
+                                {{ p.marca_nueva }} {{ p.modelo_nuevo }} ({{ p.matricula_nueva }})*
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">{{ p.total_estimado|floatformat:2 }} €</td>
+                        <td>
+                            <span class="estado-{{ p.estado|lower }}">{{ p.get_estado_display }}</span>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        {# Mensaje actualizado para reflejar filtros #}
+                        <td colspan="6" style="text-align: center; padding: 20px;">
+                            No hay presupuestos que coincidan con los filtros seleccionados.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p><small>* Indica vehículo no existente en la base de datos al crear el presupuesto.</small></p>
+    </div>
+
+    <script>
+        document.querySelectorAll('tr[data-url]').forEach(row => {
+            row.addEventListener('click', () => {
+                window.location.href = row.dataset.url;
+            });
+        });
+    </script>
+
+</body>
+</html>

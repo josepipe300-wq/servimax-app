@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear Presupuesto - ServiMax</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 900px; margin: auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1, h2, h3 { color: #333; }
+        input, select, textarea { text-transform: uppercase; width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        textarea { resize: vertical; min-height: 80px; }
+        button, .btn-add { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; margin-top: 5px; }
+        .btn-submit { background-color: #28a745; width: 100%; padding: 15px; font-size: 1.2em; margin-top: 20px;}
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
+        .section { margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .linea-item { display: grid; grid-template-columns: 1fr 2fr 100px 120px 50px; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .linea-item label { display: none; } /* Ocultar labels dentro de la línea */
+        .btn-remove { background-color: #dc3545; font-size: 0.8em; padding: 5px 10px; }
+        .hidden { display: none; } /* Para ocultar/mostrar secciones */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Nuevo Presupuesto</h1>
+            <a href="{% url 'home' %}" class="back-btn">← Cancelar y Volver</a>
+        </div>
+        <hr>
+
+        <form id="presupuesto-form" action="{% url 'crear_presupuesto' %}" method="post">
+            {% csrf_token %}
+
+            <div class="section">
+                <h2>Cliente</h2>
+                <label for="cliente_existente">Seleccionar Cliente Existente:</label>
+                <select id="cliente_existente" name="cliente_existente">
+                    <option value="">--- O Crear Nuevo Cliente Abajo ---</option>
+                    {% for cliente in clientes %}
+                        <option value="{{ cliente.id }}">{{ cliente.nombre }} ({{ cliente.telefono }})</option>
+                    {% endfor %}
+                </select>
+
+                <div id="nuevo_cliente_fields">
+                    <label for="cliente_nombre">Nombre Nuevo Cliente:</label>
+                    <input type="text" id="cliente_nombre" name="cliente_nombre">
+                    <label for="cliente_telefono">Teléfono Nuevo Cliente:</label>
+                    <input type="text" id="cliente_telefono" name="cliente_telefono">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Vehículo</h2>
+                 <label for="vehiculo_existente">Seleccionar Vehículo Existente:</label>
+                 <select id="vehiculo_existente" name="vehiculo_existente">
+                    <option value="">--- O Introducir Datos Abajo ---</option>
+                    {% for vehiculo in vehiculos %}
+                        <option value="{{ vehiculo.id }}" data-cliente="{{ vehiculo.cliente.id }}">{{ vehiculo }}</option> {# Añadido data-cliente #}
+                    {% endfor %}
+                </select>
+
+                 <div id="nuevo_vehiculo_fields">
+                    <label for="matricula_nueva">Matrícula Nueva:</label>
+                    <input type="text" id="matricula_nueva" name="matricula_nueva">
+                    <label for="marca_nueva">Marca Nueva:</label>
+                    <input type="text" id="marca_nueva" name="marca_nueva">
+                    <label for="modelo_nuevo">Modelo Nuevo:</label>
+                    <input type="text" id="modelo_nuevo" name="modelo_nuevo">
+                 </div>
+            </div>
+
+            <div class="section">
+                <h2>Descripción del Trabajo</h2>
+                <label for="problema_o_trabajo">Problema / Tareas a presupuestar:</label>
+                <textarea id="problema_o_trabajo" name="problema_o_trabajo" required></textarea>
+            </div>
+
+            <div class="section">
+                <h2>Líneas del Presupuesto</h2>
+                <div id="lineas-container">
+                    </div>
+                <button type="button" class="btn-add" id="add-linea-btn">+ Añadir Línea</button>
+            </div>
+
+            <button type="submit" class="btn-submit">Guardar Presupuesto</button>
+        </form>
+    </div>
+
+    <script>
+        const clienteSelect = document.getElementById('cliente_existente');
+        const nuevoClienteFields = document.getElementById('nuevo_cliente_fields');
+        const vehiculoSelect = document.getElementById('vehiculo_existente');
+        const nuevoVehiculoFields = document.getElementById('nuevo_vehiculo_fields');
+        const lineasContainer = document.getElementById('lineas-container');
+        const addLineaBtn = document.getElementById('add-linea-btn');
+
+        // Función para ocultar/mostrar campos de nuevo cliente
+        function toggleNuevoCliente() {
+            if (clienteSelect.value) {
+                nuevoClienteFields.classList.add('hidden');
+                // Opcional: limpiar campos de nuevo cliente
+                document.getElementById('cliente_nombre').value = '';
+                document.getElementById('cliente_telefono').value = '';
+            } else {
+                nuevoClienteFields.classList.remove('hidden');
+            }
+            // Filtrar vehículos al cambiar cliente
+            filterVehiculos();
+        }
+
+        // Función para ocultar/mostrar campos de nuevo vehículo y filtrar vehículos por cliente
+        function toggleNuevoVehiculo() {
+            if (vehiculoSelect.value) {
+                nuevoVehiculoFields.classList.add('hidden');
+                // Opcional: limpiar campos de nuevo vehículo
+                document.getElementById('matricula_nueva').value = '';
+                document.getElementById('marca_nueva').value = '';
+                document.getElementById('modelo_nuevo').value = '';
+            } else {
+                nuevoVehiculoFields.classList.remove('hidden');
+            }
+        }
+
+        // Función para filtrar vehículos según el cliente seleccionado
+        function filterVehiculos() {
+            const selectedClienteId = clienteSelect.value;
+            let firstVisibleOptionSet = false; // Para seleccionar el primer vehículo del cliente si existe
+
+            // Primero, resetear la selección de vehículo si se cambia el cliente
+            vehiculoSelect.value = "";
+            toggleNuevoVehiculo(); // Asegura que los campos de nuevo vehículo se muestren si no hay selección
+
+            for (const option of vehiculoSelect.options) {
+                if (option.value === "") continue; // Saltar la opción placeholder
+
+                const vehiculoClienteId = option.getAttribute('data-cliente');
+                if (selectedClienteId && vehiculoClienteId === selectedClienteId) {
+                    option.style.display = 'block';
+                     if (!firstVisibleOptionSet) {
+                         // Opcional: seleccionar automáticamente el primer vehículo del cliente
+                         // vehiculoSelect.value = option.value;
+                         // toggleNuevoVehiculo(); // Ocultar campos nuevos si seleccionamos uno
+                         // firstVisibleOptionSet = true;
+                     }
+                } else if (selectedClienteId) {
+                    option.style.display = 'none'; // Ocultar si no coincide y hay cliente seleccionado
+                } else {
+                    option.style.display = 'block'; // Mostrar todos si no hay cliente seleccionado
+                }
+            }
+             // Si después de filtrar, el valor seleccionado es una opción oculta, resetearlo
+             if (vehiculoSelect.options[vehiculoSelect.selectedIndex]?.style.display === 'none') {
+                vehiculoSelect.value = "";
+                toggleNuevoVehiculo();
+             }
+
+        }
+
+        // Función para añadir una nueva línea de presupuesto
+        function addLinea() {
+            const newLinea = document.createElement('div');
+            newLinea.classList.add('linea-item');
+            newLinea.innerHTML = `
+                <select name="linea_tipo" required>
+                    <option value="">Tipo...</option>
+                    {% for value, name in tipos_linea %}
+                    <option value="{{ value }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="linea_descripcion" placeholder="Descripción" required>
+                <input type="number" step="0.01" name="linea_cantidad" placeholder="Cant." value="1" required>
+                <input type="number" step="0.01" name="linea_precio_unitario" placeholder="Precio Unit. (€)" required>
+                <button type="button" class="btn-remove" onclick="removeLinea(this)">X</button>
+            `;
+            lineasContainer.appendChild(newLinea);
+        }
+
+        // Función para eliminar una línea de presupuesto
+        function removeLinea(button) {
+            button.closest('.linea-item').remove();
+        }
+
+        // Event listeners
+        clienteSelect.addEventListener('change', toggleNuevoCliente);
+        vehiculoSelect.addEventListener('change', toggleNuevoVehiculo);
+        addLineaBtn.addEventListener('click', addLinea);
+
+        // Estado inicial al cargar la página
+        toggleNuevoCliente();
+        // toggleNuevoVehiculo(); // No es necesario llamar aquí, filterVehiculos ya lo hace
+        addLinea(); // Añadir una línea por defecto al cargar
+
+    </script>
+</body>
+</html>

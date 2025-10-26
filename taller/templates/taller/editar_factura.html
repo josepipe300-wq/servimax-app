@@ -45,10 +45,6 @@
             
             <h4>Mano de Obra</h4>
             <div id="mano-de-obra-container">
-                <div class="mano-obra-item">
-                    <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" required>
-                    <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required>
-                </div>
             </div>
             <button type="button" id="add-mano-obra" style="width: auto;">+ Añadir línea de trabajo</button>
             
@@ -63,62 +59,126 @@
     </div>
     
     <script>
-        document.getElementById('add-mano-obra').addEventListener('click', () => {
+        // Obtener las líneas existentes del contexto
+        const lineasExistentes = JSON.parse('{{ lineas_existentes_json|escapejs }}');
+
+        // --- FUNCIONES DINÁMICAS (EXISTENTES) ---
+
+        // 1. Función para añadir línea de Mano de Obra (adaptada para rellenar datos)
+        function addManoDeObra(lineaData = null) {
             const container = document.getElementById('mano-de-obra-container');
             const newItem = document.createElement('div');
             newItem.classList.add('mano-obra-item');
-            newItem.innerHTML = `<input type="text" name="mano_obra_desc" placeholder="Descripción"><input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)">`;
+            newItem.innerHTML = `
+                <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" value="${lineaData ? lineaData.descripcion : ''}" required>
+                <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" value="${lineaData ? lineaData.precio_unitario : ''}" required>
+            `;
             container.appendChild(newItem);
-        });
+        }
 
-        document.getElementById('add-consumible-btn').addEventListener('click', () => {
+        // 2. Función para añadir línea de Consumible (adaptada para rellenar datos)
+        function addConsumible(lineaData = null) {
             const container = document.getElementById('consumibles-container');
             const newItem = document.createElement('div');
             newItem.classList.add('consumible-item');
+            
+            // Re-calcular pvp_total a partir de unitario * cantidad para rellenar el input de PVP Total
+            let pvpTotal = '';
+            if (lineaData) {
+                const cantidad = parseFloat(lineaData.cantidad);
+                const precioUnitario = parseFloat(lineaData.precio_unitario);
+                pvpTotal = (cantidad * precioUnitario).toFixed(2);
+            }
+            
+            let optionsHTML = '<option value="">--- Selecciona tipo ---</option>';
+            {% for tipo in tipos_consumible %}
+                // Usa tipo_consumible_id del JSON para la pre-selección
+                const isSelected = lineaData && lineaData.tipo_consumible_id === {{ tipo.id }};
+                optionsHTML += `<option value="{{ tipo.id }}" ${isSelected ? 'selected' : ''}>{{ tipo.nombre }}</option>`;
+            {% endfor %}
+            
             newItem.innerHTML = `
-                <select name="tipo_consumible" required>
-                    <option value="">--- Selecciona tipo ---</option>
-                    {% for tipo in tipos_consumible %}<option value="{{ tipo.id }}">{{ tipo.nombre }}</option>{% endfor %}
-                </select>
-                <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cantidad usada (Ej: 4.5)" required>
-                <input type="number" step="0.01" name="consumible_pvp_total" placeholder="Precio Total a Cobrar (€)" required>
+                <select name="tipo_consumible" required>${optionsHTML}</select>
+                <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cantidad usada (Ej: 4.5)" value="${lineaData ? lineaData.cantidad : ''}" required>
+                <input type="number" step="0.01" name="consumible_pvp_total" placeholder="Precio Total a Cobrar (€)" value="${pvpTotal}" required>
                 <hr style="margin-top: 0; margin-bottom: 15px;">
             `;
             container.appendChild(newItem);
-        });
+        }
 
-        const facturaForm = document.getElementById('factura-form');
-        if (facturaForm) {
-            facturaForm.addEventListener('submit', function(event) {
-                let preciosInvalidos = false;
-                const pvpInputs = this.querySelectorAll('.pvp-input');
-                
-                pvpInputs.forEach(input => {
-                    const pvp = parseFloat(input.value);
-                    const coste = parseFloat(input.dataset.coste);
-                    if (pvp < coste) {
-                        preciosInvalidos = true;
-                        alert(`El PVP de "${input.previousElementSibling.textContent.split('(')[0].trim()}" no puede ser menor que su coste de ${coste.toFixed(2)}€.`);
+        // --- EVENT LISTENERS (USANDO LAS FUNCIONES ADAPTADAS) ---
+
+        document.getElementById('add-mano-obra').addEventListener('click', () => addManoDeObra());
+        document.getElementById('add-consumible-btn').addEventListener('click', () => addConsumible());
+
+        // --- LÓGICA DE PRE-CARGA DE DATOS AL INICIO ---
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            let hasManoDeObra = false;
+            
+            lineasExistentes.forEach(linea => {
+                if (linea.tipo === 'Repuesto' && linea.repuesto_id) {
+                    // 1. Repuestos (Estático)
+                    const input = document.querySelector(`input[name="pvp_repuesto_${linea.repuesto_id}"]`);
+                    if (input) {
+                        input.value = linea.precio_unitario;
+                    }
+                } else if (linea.tipo === 'Externo' && linea.externo_id) {
+                    // 2. Trabajos Externos (Estático)
+                    const input = document.querySelector(`input[name="pvp_otro_${linea.externo_id}"]`);
+                    if (input) {
+                        input.value = linea.precio_unitario;
+                    }
+                } else if (linea.tipo === 'Consumible') {
+                    // 3. Consumibles (Dinámico)
+                    addConsumible(linea);
+                } else if (linea.tipo === 'Mano de Obra') {
+                    // 4. Mano de Obra (Dinámico)
+                    addManoDeObra(linea);
+                    hasManoDeObra = true;
+                }
+            });
+
+            // Asegurar que al menos haya una línea de Mano de Obra si no se cargó ninguna existente.
+            if (!hasManoDeObra) {
+                addManoDeObra();
+            }
+
+            // --- LÓGICA DE VALIDACIÓN PVP Y NAVEGACIÓN (EXISTENTE) ---
+
+            const facturaForm = document.getElementById('factura-form');
+            if (facturaForm) {
+                facturaForm.addEventListener('submit', function(event) {
+                    let preciosInvalidos = false;
+                    const pvpInputs = this.querySelectorAll('.pvp-input');
+                    
+                    pvpInputs.forEach(input => {
+                        const pvp = parseFloat(input.value);
+                        const coste = parseFloat(input.dataset.coste);
+                        if (pvp < coste) {
+                            preciosInvalidos = true;
+                            alert(`El PVP de "${input.previousElementSibling.textContent.split('(')[0].trim()}" no puede ser menor que su coste de ${coste.toFixed(2)}€.`);
+                        }
+                    });
+
+                    if (preciosInvalidos) {
+                        event.preventDefault();
                     }
                 });
 
-                if (preciosInvalidos) {
-                    event.preventDefault();
-                }
-            });
-
-            facturaForm.addEventListener('keydown', function(event) {
-                if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') {
-                    event.preventDefault();
-                    const formElements = Array.from(this.elements).filter(el => el.offsetParent !== null);
-                    const currentIndex = formElements.indexOf(event.target);
-                    const nextElement = formElements[currentIndex + 1];
-                    if (nextElement) {
-                        nextElement.focus();
+                facturaForm.addEventListener('keydown', function(event) {
+                    if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') {
+                        event.preventDefault();
+                        const formElements = Array.from(this.elements).filter(el => el.offsetParent !== null);
+                        const currentIndex = formElements.indexOf(event.target);
+                        const nextElement = formElements[currentIndex + 1];
+                        if (nextElement) {
+                            nextElement.focus();
+                        }
                     }
-                }
-            });
-        }
+                });
+            }
+        });
     </script>
 </body>
 </html>
