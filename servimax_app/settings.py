@@ -28,6 +28,7 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 INSTALLED_APPS = [
     'taller',
+    # 'cloudinary_storage', # <-- ESTA LÍNEA SE ELIMINA O COMENTA SI EXISTÍA
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -35,7 +36,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'whitenoise.runserver_nostatic', # Para servir estáticos en desarrollo con runserver
     'django.contrib.staticfiles',
-    'cloudinary', # <-- AÑADIDO para Cloudinary
+    'cloudinary', # <-- ASEGÚRATE DE QUE ESTA LÍNEA ESTÉ PRESENTE
 ]
 
 MIDDLEWARE = [
