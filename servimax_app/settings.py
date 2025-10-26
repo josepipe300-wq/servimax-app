@@ -24,8 +24,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'whitenoise.runserver_nostatic',
     'django.contrib.staticfiles',
-    'cloudinary', # <-- SOLO ESTA LÍNEA PARA CLOUDINARY
-    # 'cloudinary_storage', # <-- ASEGÚRATE DE QUE ESTA LÍNEA NO ESTÉ O ESTÉ COMENTADA
+    'cloudinary', # App correcta
 ]
 
 MIDDLEWARE = [
@@ -85,22 +84,24 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # --- CONFIGURACIÓN DE ALMACENAMIENTO (Cloudinary o Local) ---
 
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
-CLOUDINARY_MEDIA_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage' # Esta ruta ES correcta para el backend
+# *** INTENTANDO RUTA ALTERNATIVA PARA EL BACKEND ***
+# CLOUDINARY_MEDIA_BACKEND_ORIGINAL = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+CLOUDINARY_MEDIA_BACKEND_ALT = 'cloudinary.storage.CloudinaryStorage' # Ruta más directa
 
 if CLOUDINARY_URL:
     # --- Configuración para Cloudinary (Producción/Render) ---
-    DEFAULT_FILE_STORAGE = CLOUDINARY_MEDIA_BACKEND
+    DEFAULT_FILE_STORAGE = CLOUDINARY_MEDIA_BACKEND_ALT # *** USANDO RUTA ALTERNATIVA ***
 
     STORAGES = {
         "default": {
-            "BACKEND": CLOUDINARY_MEDIA_BACKEND,
+            "BACKEND": CLOUDINARY_MEDIA_BACKEND_ALT, # *** USANDO RUTA ALTERNATIVA ***
         },
         "staticfiles": {
              "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
              # "BACKEND": "cloudinary_storage.storage.StaticHashedCloudinaryStorage", # Si usas Cloudinary para estáticos
         },
     }
-    MEDIA_URL = '/media/' # Cloudinary gestionará la URL final
+    MEDIA_URL = '/media/' # Cloudinary gestionará la URL final, pero Django la necesita
     MEDIA_ROOT = '' # No usado
 
 else:
@@ -120,6 +121,6 @@ else:
 
 # Asegurar configuración Whitenoise si se usa para estáticos
 if STORAGES.get("staticfiles", {}).get("BACKEND") == 'whitenoise.storage.CompressedManifestStaticFilesStorage':
-    pass # Middleware ya añadido
+    pass
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
