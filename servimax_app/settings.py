@@ -28,7 +28,6 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 INSTALLED_APPS = [
     'taller',
-    'cloudinary_storage', # <-- AÑADIDO para Cloudinary
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
