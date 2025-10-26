@@ -8,12 +8,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-p_%woq5*pl+-#ad=^=2_#i1vsyf9&a*-p6$xob*eak%3$cyp44')
 
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+# DEBUG debe ser False en producción (Render lo configura automáticamente a False si no lo pones)
+# Para pruebas, puedes leerlo de una variable de entorno, pero asegúrate que en Render sea False.
+DEBUG = os.environ.get('DEBUG', 'False') == 'True' # Cambiado el default a False
 
 ALLOWED_HOSTS = []
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
+# Application definition
 
 INSTALLED_APPS = [
     'taller',
@@ -22,14 +26,14 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'whitenoise.runserver_nostatic',
+    'whitenoise.runserver_nostatic', # Necesario para runserver si usas whitenoise
     'django.contrib.staticfiles',
-    'cloudinary', # App correcta
+    'cloudinary', # App de Cloudinary
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # Whitenoise primero después de Security
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -58,13 +62,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'servimax_app.wsgi.application'
 
+# Database
 DATABASES = {
     'default': dj_database_url.config(
+        # Usa DATABASE_URL de Render, o sqlite local como fallback
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600
     )
 }
 
+# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',},
@@ -72,36 +79,35 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',},
 ]
 
+# Internationalization
 LANGUAGE_CODE = 'es-es'
 TIME_ZONE = 'Europe/Madrid'
 USE_I18N = True
 USE_TZ = True
 
+# Static files (CSS, JavaScript, Images) served by Whitenoise
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'taller/static'),]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# Asegurar que Whitenoise esté configurado para estáticos
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
-# --- CONFIGURACIÓN DE ALMACENAMIENTO (Cloudinary o Local) ---
+# --- CONFIGURACIÓN DE ALMACENAMIENTO DE MEDIOS (Cloudinary o Local) ---
 
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
-# *** INTENTANDO RUTA ALTERNATIVA PARA EL BACKEND ***
-# CLOUDINARY_MEDIA_BACKEND_ORIGINAL = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-CLOUDINARY_MEDIA_BACKEND_ALT = 'cloudinary.storage.CloudinaryStorage' # Ruta más directa
+# ** USANDO LA RUTA ESTÁNDAR DOCUMENTADA **
+CLOUDINARY_MEDIA_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 if CLOUDINARY_URL:
     # --- Configuración para Cloudinary (Producción/Render) ---
-    DEFAULT_FILE_STORAGE = CLOUDINARY_MEDIA_BACKEND_ALT # *** USANDO RUTA ALTERNATIVA ***
-
-    STORAGES = {
-        "default": {
-            "BACKEND": CLOUDINARY_MEDIA_BACKEND_ALT, # *** USANDO RUTA ALTERNATIVA ***
-        },
-        "staticfiles": {
-             "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-             # "BACKEND": "cloudinary_storage.storage.StaticHashedCloudinaryStorage", # Si usas Cloudinary para estáticos
-        },
-    }
-    MEDIA_URL = '/media/' # Cloudinary gestionará la URL final, pero Django la necesita
+    DEFAULT_FILE_STORAGE = CLOUDINARY_MEDIA_BACKEND
+    # Añadir explícitamente a STORAGES también
+    STORAGES["default"] = {"BACKEND": CLOUDINARY_MEDIA_BACKEND}
+    MEDIA_URL = '/media/' # Django necesita esto, Cloudinary genera la URL final
     MEDIA_ROOT = '' # No usado
 
 else:
@@ -109,18 +115,9 @@ else:
     MEDIA_URL = '/media/'
     MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
     DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+    # Añadir explícitamente a STORAGES
+    STORAGES["default"] = {"BACKEND": DEFAULT_FILE_STORAGE}
 
-    STORAGES = {
-        "default": {
-            "BACKEND": "django.core.files.storage.FileSystemStorage",
-        },
-        "staticfiles": {
-            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-        },
-    }
 
-# Asegurar configuración Whitenoise si se usa para estáticos
-if STORAGES.get("staticfiles", {}).get("BACKEND") == 'whitenoise.storage.CompressedManifestStaticFilesStorage':
-    pass
-
+# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
