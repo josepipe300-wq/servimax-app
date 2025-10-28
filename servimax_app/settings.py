@@ -13,7 +13,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-p_%woq5*pl+-#a
 
 # DEBUG debe ser False en producción (Render lo configura automáticamente a False si no lo pones)
 # Para pruebas, puedes leerlo de una variable de entorno, pero asegúrate que en Render sea False.
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False') == 'True' # Cambiado el default a False
 
 ALLOWED_HOSTS = []
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
