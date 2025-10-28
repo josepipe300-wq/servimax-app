@@ -3,6 +3,9 @@
 from pathlib import Path
 import os
 import dj_database_url
+from dotenv import load_dotenv # <-- Importar dotenv
+
+load_dotenv() # <-- Cargar variables del archivo .env
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -10,7 +13,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-p_%woq5*pl+-#a
 
 # DEBUG debe ser False en producción (Render lo configura automáticamente a False si no lo pones)
 # Para pruebas, puedes leerlo de una variable de entorno, pero asegúrate que en Render sea False.
-DEBUG = os.environ.get('DEBUG', 'False') == 'True' # Cambiado el default a False
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = []
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
@@ -29,6 +32,7 @@ INSTALLED_APPS = [
     'whitenoise.runserver_nostatic', # Necesario para runserver si usas whitenoise
     'django.contrib.staticfiles',
     'cloudinary', # App de Cloudinary
+    'cloudinary_storage', # <-- Asegúrate que está aquí (con guion bajo)
 ]
 
 MIDDLEWARE = [
