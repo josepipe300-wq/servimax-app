@@ -2,11 +2,11 @@
 from django.db import models
 from django.utils import timezone # Importar timezone para la fecha de creación
 from decimal import Decimal # <-- Asegúrate que Decimal está importado
-from django.db.models import Sum # <-- ¡AÑADIR ESTA IMPORTACIÓN!
+from django.db.models import Sum # <-- Asegúrate que Sum está importado
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
-    telefono = models.CharField(max_length=20, unique=True) # MANTENIDO COMO UNIQUE
+    telefono = models.CharField(max_length=20, unique=True)
     def __str__(self):
         return self.nombre
     def save(self, *args, **kwargs):
@@ -236,7 +236,7 @@ class LineaPresupuesto(models.Model):
         self.descripcion = self.descripcion.upper()
         super(LineaPresupuesto, self).save(*args, **kwargs)
 
-# --- NUEVO MODELO PROXY PARA VER STOCK ---
+# --- MODELO PROXY PARA VER STOCK ---
 class TipoConsumibleStock(TipoConsumible):
     class Meta:
         proxy = True
@@ -247,19 +247,48 @@ class TipoConsumibleStock(TipoConsumible):
     def stock_actual(self):
         # Sumar todas las compras
         total_comprado = CompraConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad'))['total'] or Decimal('0.00')
-        # Sumar todos los usos
-        total_usado = UsoConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_usada'))['total'] or Decimal('0.00')
-        # Calcular stock
-        stock = total_comprado - total_usado
-        return stock.quantize(Decimal('0.01')) # Devolver con 2 decimales
+        # Sumar todos los usos en órdenes
+        total_usado_ordenes = UsoConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_usada'))['total'] or Decimal('0.00')
+        # --- NUEVO: Sumar todos los ajustes manuales ---
+        total_ajustado = AjusteStockConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_ajustada'))['total'] or Decimal('0.00')
+
+        # --- CÁLCULO MODIFICADO ---
+        stock = total_comprado - total_usado_ordenes + total_ajustado
+        return stock.quantize(Decimal('0.01'))
 
     @property
     def alerta_stock(self):
-        # Comprobar si hay nivel mínimo y si el stock es bajo
         if self.nivel_minimo_stock is not None and self.stock_actual <= self.nivel_minimo_stock:
             return "⚠️ BAJO"
         elif self.nivel_minimo_stock is not None:
             return "✅ OK"
         else:
             return "N/A"
-# --- FIN NUEVO MODELO PROXY ---
+# --- FIN MODELO PROXY ---
+
+# --- NUEVO MODELO PARA AJUSTES MANUALES ---
+class AjusteStockConsumible(models.Model):
+    tipo = models.ForeignKey(TipoConsumible, on_delete=models.CASCADE, verbose_name="Tipo de Consumible")
+    cantidad_ajustada = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        help_text="Cantidad a añadir (positivo) o quitar (negativo) del stock."
+    )
+    motivo = models.CharField(
+        max_length=255,
+        help_text="Razón del ajuste (Ej: Uso interno, Inventario físico, Pérdida)"
+    )
+    fecha_ajuste = models.DateField(default=timezone.now, verbose_name="Fecha del Ajuste")
+
+    def __str__(self):
+        accion = "Añadido" if self.cantidad_ajustada > 0 else "Quitado"
+        return f"{accion} {abs(self.cantidad_ajustada)} {self.tipo.unidad_medida} de {self.tipo.nombre} ({self.motivo})"
+
+    def save(self, *args, **kwargs):
+        self.motivo = self.motivo.upper()
+        super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = "Ajuste de Stock"
+        verbose_name_plural = "Ajustes de Stock"
+        ordering = ['-fecha_ajuste', '-id']
+# --- FIN NUEVO MODELO ---

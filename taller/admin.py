@@ -8,49 +8,54 @@ from .models import (
     Empleado,
     Ingreso,
     Factura,
-    LineaFactura, # Asegúrate de importar LineaFactura
+    LineaFactura,
     TipoConsumible,
     CompraConsumible,
-    UsoConsumible, # Asegúrate de importar UsoConsumible
-    Presupuesto, # Asegúrate de importar Presupuesto
-    LineaPresupuesto, # Asegúrate de importar LineaPresupuesto
-    FotoVehiculo, # Asegúrate de importar FotoVehiculo
-    TipoConsumibleStock # Importar el nuevo modelo proxy
+    UsoConsumible,
+    Presupuesto,
+    LineaPresupuesto,
+    FotoVehiculo,
+    TipoConsumibleStock,
+    AjusteStockConsumible # <-- Importar el nuevo modelo
 )
-# Importaciones adicionales necesarias para el cálculo en el admin de stock
 from django.db.models import Sum
 from decimal import Decimal
 
-# Personalización para OrdenDeReparacion (Existente)
+# Personalización para OrdenDeReparacion
 class OrdenDeReparacionAdmin(admin.ModelAdmin):
     list_display = ('id', 'vehiculo', 'cliente', 'estado', 'fecha_entrada')
     list_filter = ('estado', 'fecha_entrada')
     search_fields = ('vehiculo__matricula', 'cliente__nombre', 'vehiculo__marca', 'vehiculo__modelo')
 
-# Personalización para CompraConsumible (Existente)
+# Personalización para CompraConsumible
 class CompraConsumibleAdmin(admin.ModelAdmin):
     list_display = ('tipo', 'fecha_compra', 'cantidad', 'coste_total', 'coste_por_unidad')
     readonly_fields = ('coste_por_unidad',)
 
-# Personalización para TipoConsumible (Modificada)
+# Personalización para TipoConsumible
 class TipoConsumibleAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'unidad_medida', 'nivel_minimo_stock') # Mostrar en la lista
-    fields = ('nombre', 'unidad_medida', 'nivel_minimo_stock') # Organizar el formulario de edición
+    list_display = ('nombre', 'unidad_medida', 'nivel_minimo_stock')
+    fields = ('nombre', 'unidad_medida', 'nivel_minimo_stock')
 
-# --- NUEVA CLASE ADMIN PARA STOCK ---
+# --- NUEVA CLASE ADMIN PARA AJUSTES ---
+@admin.register(AjusteStockConsumible)
+class AjusteStockConsumibleAdmin(admin.ModelAdmin):
+    list_display = ('fecha_ajuste', 'tipo', 'cantidad_ajustada', 'motivo')
+    list_filter = ('tipo', 'fecha_ajuste')
+    search_fields = ('tipo__nombre', 'motivo')
+    # fields = ('tipo', 'cantidad_ajustada', 'motivo', 'fecha_ajuste') # Descomentar si quieres la fecha editable
+# --- FIN NUEVA CLASE ADMIN ---
+
+# Clase Admin para la vista de Stock (Existente)
 @admin.register(TipoConsumibleStock)
 class TipoConsumibleStockAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'unidad_medida', 'stock_actual', 'nivel_minimo_stock', 'alerta_stock')
-    # Hacemos que solo se pueda ver, no editar directamente desde aquí
     readonly_fields = ('stock_actual', 'alerta_stock')
-    list_filter = ('unidad_medida',) # Opcional: filtro por unidad
-    search_fields = ('nombre',) # Opcional: buscador por nombre
+    list_filter = ('unidad_medida',)
+    search_fields = ('nombre',)
 
-    # Para evitar que aparezca el botón "Añadir Stock de Consumible"
     def has_add_permission(self, request):
         return False
-
-    # Opcional: Para evitar que se pueda borrar desde esta vista
     def has_delete_permission(self, request, obj=None):
         return False
 
@@ -62,12 +67,12 @@ admin.site.register(Empleado)
 admin.site.register(Ingreso)
 admin.site.register(Factura)
 admin.site.register(LineaFactura)
-admin.site.register(TipoConsumible, TipoConsumibleAdmin) # Usar la clase personalizada
-admin.site.register(CompraConsumible, CompraConsumibleAdmin) # Usar la clase personalizada
+admin.site.register(TipoConsumible, TipoConsumibleAdmin)
+admin.site.register(CompraConsumible, CompraConsumibleAdmin)
 admin.site.register(UsoConsumible)
-admin.site.register(OrdenDeReparacion, OrdenDeReparacionAdmin) # Usar la clase personalizada
+admin.site.register(OrdenDeReparacion, OrdenDeReparacionAdmin)
 admin.site.register(Presupuesto)
 admin.site.register(LineaPresupuesto)
 admin.site.register(FotoVehiculo)
 
-# Nota: TipoConsumibleStock se registra usando el decorador @admin.register arriba
+# Nota: TipoConsumibleStock y AjusteStockConsumible se registran usando el decorador @admin.register arriba
