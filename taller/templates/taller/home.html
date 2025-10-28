@@ -10,45 +10,66 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
         h1, h2 { color: #333; }
-        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; text-align: center; margin-bottom: 30px; } /* Ajustado minmax */
+        /* --- ESTILO PARA EL HEADER MODIFICADO --- */
+        .header { display: flex; justify-content: space-between; align-items: flex-start; /* Alinea items arriba */ flex-wrap: wrap; /* Permite que el botón baje si no cabe */ gap: 10px; /* Espacio entre título/saludo y botón */ margin-bottom: 20px; /* Espacio debajo del header */ }
+        .header h1 { margin-bottom: 0; } /* Quitar margen inferior del h1 */
+        .header p { margin-top: 5px; color: #555; } /* Estilo para el saludo */
+        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; align-self: center; /* Centrar botón verticalmente si baja */}
+        /* --- FIN ESTILO HEADER --- */
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; text-align: center; margin-bottom: 30px; }
         .card { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .card h2 { margin-top: 0; font-size: 1.0em; color: #555; text-transform: uppercase; letter-spacing: 0.5px; } /* Reducido font-size */
-        .card .amount { font-size: 2.0em; font-weight: bold; } /* Reducido font-size */
+        .card h2 { margin-top: 0; font-size: 1.0em; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card .amount { font-size: 2.0em; font-weight: bold; }
         .ingresos { color: #28a745; }
         .gastos { color: #dc3545; }
-        .balance-caja { color: #ffc107; } /* Color para caja */
-        .balance-tarjeta { color: #17a2b8; } /* Color para tarjeta */
-        .negativo { color: #dc3545; } /* Clase para valores negativos */
-        .action-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-top: 20px; } /* Ajustado minmax */
-        .btn { display: block; padding: 15px; border-radius: 8px; text-decoration: none; color: #fff; font-size: 1.1em; font-weight: bold; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15); transition: transform 0.2s; } /* Reducido padding y font-size */
+        .balance-caja { color: #ffc107; }
+        .balance-tarjeta { color: #17a2b8; }
+        .negativo { color: #dc3545; }
+        .action-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-top: 20px; }
+        .btn { display: block; padding: 15px; border-radius: 8px; text-decoration: none; color: #fff; font-size: 1.1em; font-weight: bold; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15); transition: transform 0.2s; }
         .btn:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
         .btn-ingresar { background-color: #17a2b8; }
         .btn-gasto { background-color: #ffc107; color: #333; }
         .btn-ingreso-dinero { background-color: #28a745; }
         .history-table { width: 100%; margin-top: 20px; border-collapse: collapse; background-color: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
-        .history-table th, .history-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; font-size: 0.9em;} /* Reducido padding y font-size */
+        .history-table th, .history-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; font-size: 0.9em;}
         .history-table th { background-color: #e9ecef; color: #333; }
         .gasto-row td { color: #dc3545; font-weight: 500; }
         .ingreso-row td { color: #28a745; font-weight: 500; }
-        .movimiento-metodo { font-size: 0.8em; color: #6c757d; margin-left: 5px; } /* Estilo para [TPV]/[TARJETA] */
+        .movimiento-metodo { font-size: 0.8em; color: #6c757d; margin-left: 5px; }
     </style>
 </head>
 <body>
-    <h1>Balance Mensual</h1>
-    {# --- SECCIÓN DE ALERTAS DE STOCK --- #}
-{% if alertas_stock %}
-    <div class="alertas-stock" style="background-color: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-        <h2 style="margin-top: 0; color: #856404;">⚠️ Alertas de Stock Bajo</h2>
-        <ul style="margin: 0; padding-left: 20px;">
-            {% for alerta in alertas_stock %}
-                <li style="margin-bottom: 5px;">
-                    <strong>{{ alerta.nombre }}:</strong> Quedan aprox. {{ alerta.stock_actual|floatformat:2 }} {{ alerta.unidad }} (Mínimo: {{ alerta.minimo|floatformat:2 }})
-                </li>
-            {% endfor %}
-        </ul>
+
+    <div class="header">
+        {% if user.is_authenticated %}
+            <div>
+                <h1>Balance Mensual</h1>
+                <p>Hola, {{ user.username }}</p>
+            </div>
+            <form method="post" action="{% url 'logout' %}" style="margin: 0;">
+                {% csrf_token %}
+                <button type="submit" class="back-btn" style="background-color: #dc3545; border: none; cursor: pointer; font-size: 1em;">Cerrar Sesión</button>
+            </form>
+        {% else %}
+            <h1>Balance Mensual</h1>
+            <a href="{% url 'login' %}" class="btn btn-new" style="background-color: #007bff;">Iniciar Sesión</a>
+        {% endif %}
     </div>
-{% endif %}
-{# --- FIN SECCIÓN DE ALERTAS --- #}
+
+    {% if alertas_stock %}
+        <div class="alertas-stock" style="background-color: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+            <h2 style="margin-top: 0; color: #856404;">⚠️ Alertas de Stock Bajo</h2>
+            <ul style="margin: 0; padding-left: 20px;">
+                {% for alerta in alertas_stock %}
+                    <li style="margin-bottom: 5px;">
+                        <strong>{{ alerta.nombre }}:</strong> Quedan aprox. {{ alerta.stock_actual|floatformat:2 }} {{ alerta.unidad }} (Mínimo: {{ alerta.minimo|floatformat:2 }})
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
     <div class="dashboard">
         <div class="card">
             <h2>Ingresos Mes</h2>
@@ -58,32 +79,35 @@
             <h2>Gastos Mes</h2>
             <p class="amount gastos">{{ total_gastos|floatformat:2 }} €</p>
         </div>
-        {# --- NUEVA TARJETA BALANCE CAJA --- #}
         <div class="card">
             <h2>Balance Caja</h2>
             <p class="amount balance-caja {% if balance_caja < 0 %}negativo{% endif %}">{{ balance_caja|floatformat:2 }} €</p>
         </div>
-        {# --- NUEVA TARJETA BALANCE TARJETA --- #}
         <div class="card">
             <h2>Balance Tarjeta</h2>
-            <p class="amount balance-tarjeta {% if balance_tarjeta < 0 %}negativo{% endif %}">{{ balance_tarjeta|floatformat:2 }} €</p>
+            <p class="amount balance-tarjeta {% if balance_caja < 0 %}negativo{% endif %}">{{ balance_tarjeta|floatformat:2 }} €</p>
         </div>
-        {# --- EL BLOQUE COMENTADO ANTERIOR HA SIDO ELIMINADO COMPLETAMENTE --- #}
     </div>
     <hr>
     <h2>Acciones Rápidas</h2>
     <div class="action-buttons">
-        <a href="{% url 'ingresar_vehiculo' %}" class="btn btn-ingresar">➕ Ingresar Vehículo</a>
-        <a href="{% url 'anadir_gasto' %}" class="btn btn-gasto">➖ Añadir Gasto</a>
-        <a href="{% url 'registrar_ingreso' %}" class="btn btn-ingreso-dinero">💰 Registrar Ingreso</a>
+        {# --- Condición CORREGIDA para ocultar botones de acción --- #}
+        {% if not is_read_only_user %}
+            <a href="{% url 'ingresar_vehiculo' %}" class="btn btn-ingresar">➕ Ingresar Vehículo</a>
+            <a href="{% url 'anadir_gasto' %}" class="btn btn-gasto">➖ Añadir Gasto</a>
+            <a href="{% url 'registrar_ingreso' %}" class="btn btn-ingreso-dinero">💰 Registrar Ingreso</a>
+            <a href="{% url 'crear_presupuesto' %}" class="btn" style="background-color: #ffc107; color: #333;">📝 Crear Presupuesto</a>
+        {% endif %}
+        {# --- Fin Condición --- #}
+
+        {# --- Botones siempre visibles --- #}
         <a href="{% url 'lista_ordenes' %}" class="btn" style="background-color: #6c757d;">📋 Órdenes Activas</a>
         <a href="{% url 'historial_ordenes' %}" class="btn" style="background-color: #343a40;">🗂️ Historial Trabajos</a>
         <a href="{% url 'contabilidad' %}" class="btn" style="background-color: #fd7e14;">📊 Contabilidad</a>
         <a href="{% url 'cuentas_por_cobrar' %}" class="btn" style="background-color: #dc3545;">🚨 Cuentas por Cobrar</a>
         <a href="{% url 'informe_tarjeta' %}" class="btn" style="background-color: #6f42c1;">💳 Informe Tarjeta</a>
         <a href="{% url 'lista_presupuestos' %}" class="btn" style="background-color: #ffc107; color: #333;">📋 Ver Presupuestos</a>
-        <a href="{% url 'crear_presupuesto' %}" class="btn" style="background-color: #ffc107; color: #333;">📝 Crear Presupuesto</a>
-        
+        {# --- Fin Botones siempre visibles --- #}
     </div>
     <div style="margin-top: 40px;">
         <h2>Últimos Movimientos</h2>
@@ -104,7 +128,6 @@
                         <td>{{ movimiento.get_categoria_display }}</td>
                         <td>
                             {{ movimiento.descripcion }}
-                            {# Mostrar [TPV] o [TARJETA] si aplica #}
                             {% if not es_gasto and movimiento.es_tpv %}
                                 <span class="movimiento-metodo">[TPV]</span>
                             {% elif es_gasto and movimiento.pagado_con_tarjeta %}

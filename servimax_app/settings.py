@@ -13,17 +13,23 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-p_%woq5*pl+-#a
 
 # DEBUG debe ser False en producción (Render lo configura automáticamente a False si no lo pones)
 # Para pruebas, puedes leerlo de una variable de entorno, pero asegúrate que en Render sea False.
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+# DEBUG = True # <-- Descomentar esta línea para pruebas locales si da problemas ALLOWED_HOSTS
+DEBUG = True
 
 ALLOWED_HOSTS = []
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+# Añadir host local si DEBUG es True
+if DEBUG:
+    ALLOWED_HOSTS.append('127.0.0.1')
+    ALLOWED_HOSTS.append('localhost')
+
 
 # Application definition
 
 INSTALLED_APPS = [
-    'taller',
+    'taller.apps.TallerConfig', # <-- Mejor usar la configuración explícita de la app
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -32,7 +38,8 @@ INSTALLED_APPS = [
     'whitenoise.runserver_nostatic', # Necesario para runserver si usas whitenoise
     'django.contrib.staticfiles',
     'cloudinary', # App de Cloudinary
-    'cloudinary_storage', # <-- Asegúrate que está aquí (con guion bajo)
+    'cloudinary_storage', # App para integración con Django Storages
+    # 'django_storages', # django-storages ya no es necesaria si solo usas cloudinary_storage
 ]
 
 MIDDLEWARE = [
@@ -51,7 +58,9 @@ ROOT_URLCONF = 'servimax_app.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # --- AÑADIR DIRECTORIO PARA PLANTILLAS DE AUTENTICACIÓN ---
+        'DIRS': [BASE_DIR / 'templates'], # Busca plantillas en una carpeta 'templates' en la raíz
+        # --- FIN AÑADIDO ---
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -98,30 +107,34 @@ STORAGES = {
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
+    # --- MOVER LA CONFIGURACIÓN DE 'default' AQUÍ DENTRO ---
+    "default": {}, # Dejar vacío por ahora, se llenará abajo
 }
 
 # --- CONFIGURACIÓN DE ALMACENAMIENTO DE MEDIOS (Cloudinary o Local) ---
 
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
-# ** USANDO LA RUTA ESTÁNDAR DOCUMENTADA **
 CLOUDINARY_MEDIA_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 if CLOUDINARY_URL:
     # --- Configuración para Cloudinary (Producción/Render) ---
-    DEFAULT_FILE_STORAGE = CLOUDINARY_MEDIA_BACKEND
-    # Añadir explícitamente a STORAGES también
-    STORAGES["default"] = {"BACKEND": CLOUDINARY_MEDIA_BACKEND}
-    MEDIA_URL = '/media/' # Django necesita esto, Cloudinary genera la URL final
-    MEDIA_ROOT = '' # No usado
+    # DEFAULT_FILE_STORAGE ya no se usa directamente, se configura en STORAGES
+    STORAGES["default"]["BACKEND"] = CLOUDINARY_MEDIA_BACKEND # Configurar backend default
+    MEDIA_URL = '/media/' # Cloudinary genera la URL final
+    MEDIA_ROOT = '' # No usado por Cloudinary
 
 else:
     # --- Configuración Local (Desarrollo) ---
     MEDIA_URL = '/media/'
     MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-    DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
-    # Añadir explícitamente a STORAGES
-    STORAGES["default"] = {"BACKEND": DEFAULT_FILE_STORAGE}
+    STORAGES["default"]["BACKEND"] = 'django.core.files.storage.FileSystemStorage' # Configurar backend default
 
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- CONFIGURACIÓN DE AUTENTICACIÓN ---
+LOGIN_REDIRECT_URL = '/'  # Redirigir a la página principal (home) después del login
+LOGOUT_REDIRECT_URL = '/' # Redirigir a la página principal (home) después del logout
+LOGIN_URL = '/accounts/login/' # La URL donde estará la página de login
+# --- FIN CONFIGURACIÓN ---
