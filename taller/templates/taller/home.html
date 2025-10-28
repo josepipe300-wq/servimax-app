@@ -33,6 +33,20 @@
 </head>
 <body>
     <h1>Balance Mensual</h1>
+    {# --- SECCIÓN DE ALERTAS DE STOCK --- #}
+{% if alertas_stock %}
+    <div class="alertas-stock" style="background-color: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+        <h2 style="margin-top: 0; color: #856404;">⚠️ Alertas de Stock Bajo</h2>
+        <ul style="margin: 0; padding-left: 20px;">
+            {% for alerta in alertas_stock %}
+                <li style="margin-bottom: 5px;">
+                    <strong>{{ alerta.nombre }}:</strong> Quedan aprox. {{ alerta.stock_actual|floatformat:2 }} {{ alerta.unidad }} (Mínimo: {{ alerta.minimo|floatformat:2 }})
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endif %}
+{# --- FIN SECCIÓN DE ALERTAS --- #}
     <div class="dashboard">
         <div class="card">
             <h2>Ingresos Mes</h2>

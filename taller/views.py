@@ -109,21 +109,39 @@ def home(request):
     balance_tarjeta = ingresos_tpv - gastos_tarjeta
     ultimos_gastos = Gasto.objects.order_by('-id')[:5]
     ultimos_ingresos = Ingreso.objects.order_by('-id')[:5]
-    # Fallback más seguro para la fecha en lambda
     movimientos_combinados = sorted(
         list(ultimos_gastos) + list(ultimos_ingresos),
         key=lambda mov: mov.fecha if hasattr(mov, 'fecha') else timezone.now().date(),
         reverse=True
     )
     movimientos_recientes = movimientos_combinados[:5]
+
+    # --- CÁLCULO DE STOCK Y ALERTAS ---
+    tipos_consumible = TipoConsumible.objects.all()
+    alertas_stock = []
+    for tipo in tipos_consumible:
+        total_comprado = CompraConsumible.objects.filter(tipo=tipo).aggregate(total=Sum('cantidad'))['total'] or Decimal('0.00')
+        total_usado = UsoConsumible.objects.filter(tipo=tipo).aggregate(total=Sum('cantidad_usada'))['total'] or Decimal('0.00')
+        stock_actual = total_comprado - total_usado
+        if tipo.nivel_minimo_stock is not None and stock_actual <= tipo.nivel_minimo_stock:
+            alertas_stock.append({
+                'nombre': tipo.nombre,
+                'stock_actual': stock_actual,
+                'unidad': tipo.unidad_medida,
+                'minimo': tipo.nivel_minimo_stock
+            })
+    # --- FIN CÁLCULO DE STOCK ---
+
+    # ---> ¡ASEGÚRATE DE QUE ESTAS LÍNEAS ESTÉN INDENTADAS CORRECTAMENTE! <---
     context = {
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
         'balance_caja': balance_caja,
         'balance_tarjeta': balance_tarjeta,
         'movimientos_recientes': movimientos_recientes,
+        'alertas_stock': alertas_stock, 
     }
-    return render(request, 'taller/home.html', context)
+    return render(request, 'taller/home.html', context) # <--- Esta línea también debe estar indentada
 
 
 # --- VISTA INGRESAR VEHÍCULO ---
