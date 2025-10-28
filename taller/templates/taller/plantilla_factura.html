@@ -1,9 +1,10 @@
-{% load static %}
 <!DOCTYPE html>
+{% load static %}
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>{% if factura.es_factura %}Factura{% else %}Recibo{% endif %} #{{ factura.id }}</title>
+    <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <style>
         @page { size: a4 portrait; margin: 1.5cm; }
         body { font-family: sans-serif; font-size: 11px; }

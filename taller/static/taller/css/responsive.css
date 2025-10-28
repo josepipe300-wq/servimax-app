@@ -1,0 +1,121 @@
+/* responsive.css */
+
+/* Aplica estos estilos solo en pantallas de 768px de ancho o menos */
+@media (max-width: 768px) {
+
+    /* Ajustes generales */
+    body {
+        padding: 10px; /* Menos padding en pantallas pequeñas */
+        font-size: 14px; /* Opcional: ajustar tamaño de fuente base */
+    }
+    .container {
+        padding: 15px; /* Menos padding interno */
+    }
+    h1 {
+        font-size: 1.5em; /* Reducir tamaño de encabezados principales */
+    }
+    h2 {
+        font-size: 1.2em;
+    }
+    .header {
+        flex-direction: column; /* Poner título y botón uno debajo del otro */
+        align-items: flex-start; /* Alinear al inicio */
+        gap: 10px; /* Espacio entre título y botón */
+    }
+    .back-btn, .btn-new {
+        padding: 8px 12px; /* Botones un poco más pequeños */
+        font-size: 0.9em;
+    }
+
+    /* --- Ajustes específicos por página --- */
+
+    /* Home (home.html) */
+    .dashboard, .action-buttons, .summary-grid /* Reutilizamos summary-grid para otros informes */ {
+        grid-template-columns: 1fr; /* Una sola columna */
+        gap: 15px;
+    }
+    .card .amount {
+        font-size: 1.8em; /* Tamaño de números más pequeño */
+    }
+    .btn {
+        padding: 12px;
+        font-size: 1em;
+    }
+    .history-table th, .history-table td {
+        padding: 8px; /* Menos espacio en celdas */
+        font-size: 0.85em; /* Letra más pequeña en tablas */
+        /* Forzar el texto a ajustarse si es muy largo */
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+
+    /* Tablas de Informes y Listas (ej: historial_ordenes, informe_rentabilidad, cuentas_por_cobrar, etc.) */
+    .report-table, .order-table, .budget-table, .detail-table, .items-table, .lines-table {
+        display: block; /* Cambiar tabla a bloque */
+        overflow-x: auto; /* Permitir scroll horizontal si no cabe */
+        white-space: nowrap; /* Evitar que el texto salte de línea dentro de la celda */
+        font-size: 0.85em;
+    }
+    .report-table th, .report-table td,
+    .order-table th, .order-table td,
+    .budget-table th, .budget-table td,
+    .detail-table th, .detail-table td,
+    .items-table th, .items-table td,
+    .lines-table th, .lines-table td {
+        padding: 8px;
+        white-space: normal; /* Permitir salto de línea en celdas si es necesario */
+    }
+     /* Forzar ajuste de texto en celdas específicas si es necesario */
+    .report-table td:nth-child(5), /* Columna problema en historial */
+    .order-table td:nth-child(5),
+    .detail-table td:nth-child(2) /* Columna descripción en desgloses */
+     {
+        white-space: normal;
+        min-width: 150px; /* Ancho mínimo para que no se comprima demasiado */
+    }
+
+
+    /* Formularios (ej: crear_presupuesto, ingresar_vehiculo) */
+    .linea-item { /* Para crear_presupuesto */
+        grid-template-columns: 1fr; /* Cada input en su propia línea */
+        gap: 5px;
+        margin-bottom: 15px; /* Más espacio entre líneas */
+        padding-bottom: 10px;
+        border-bottom: 1px dashed #eee;
+    }
+    .linea-item select, .linea-item input {
+        width: 100%; /* Ocupar todo el ancho disponible */
+    }
+    .linea-item .btn-remove {
+       width: auto; /* Ajustar botón de eliminar */
+       margin-top: 5px;
+       justify-self: flex-end; /* Alinear a la derecha */
+    }
+    .photo-grid { /* Para ingresar_vehiculo */
+        grid-template-columns: 1fr; /* Una foto por línea */
+    }
+
+    /* Filtros (ej: lista_presupuestos, historial_ordenes) */
+    .filters {
+        flex-direction: column; /* Poner filtros uno debajo del otro */
+        align-items: stretch; /* Ocupar todo el ancho */
+    }
+     .filters form div {
+         display: flex; /* Alinear label y select horizontalmente */
+         justify-content: space-between; /* Espaciarlos */
+         align-items: center;
+         margin-bottom: 5px;
+     }
+     .filters form label {
+         margin-right: 10px; /* Espacio entre label y select */
+         margin-bottom: 0;
+     }
+    .filters select, .filters button {
+        width: 100%; /* Ocupar todo el ancho */
+        box-sizing: border-box; /* Incluir padding/border en el ancho */
+    }
+    .filters button {
+        margin-top: 10px;
+    }
+
+}
