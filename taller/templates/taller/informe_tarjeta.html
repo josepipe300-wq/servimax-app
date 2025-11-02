@@ -13,9 +13,11 @@
         h1 { color: #333; }
         .header { display: flex; justify-content: space-between; align-items: center; }
         .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-        .filters { margin-bottom: 20px; }
-        .filters a { padding: 10px 15px; text-decoration: none; background-color: #e9ecef; color: #333; border-radius: 5px; margin-right: 10px; }
-        .filters a.active { background-color: #007bff; color: white; }
+        /* --- Estilos para filtros (MODIFICADO) --- */
+        .filters { margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
+        .filters select, .filters button { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        .filters button { background-color: #007bff; color: white; cursor: pointer; }
+        /* --- FIN Estilos para filtros --- */
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; text-align: center; margin-bottom: 30px; }
         .card { background-color: #f8f9fa; padding: 20px; border-radius: 8px; }
         .card h2 { margin-top: 0; font-size: 1.1em; color: #555; text-transform: uppercase; }
@@ -37,11 +39,29 @@
             <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
         </div>
 
-        <div class="filters">
-            <a href="?periodo=semana" class="{% if periodo_seleccionado == 'semana' %}active{% endif %}">Esta Semana</a>
-            <a href="?periodo=mes" class="{% if periodo_seleccionado == 'mes' %}active{% endif %}">Este Mes</a>
-            <a href="?periodo=todo" class="{% if periodo_seleccionado == 'todo' %}active{% endif %}">Ver Todo</a>
-        </div>
+        <form method="get" action="{% url 'informe_tarjeta' %}">
+            <div class="filters">
+                <div>
+                    <label for="ano">Año:</label>
+                    <select name="ano" id="ano">
+                        <option value="">Todos</option>
+                        {% for ano in anos_disponibles %}
+                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="mes">Mes:</label>
+                    <select name="mes" id="mes">
+                        <option value="">Todo el Año</option>
+                        {% for i in meses_del_ano %}
+                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit">Filtrar</button>
+            </div>
+        </form>
         <hr>
 
         <div class="summary-grid">

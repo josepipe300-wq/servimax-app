@@ -71,8 +71,7 @@ def obtener_ordenes_relevantes():
     ids_relevantes = list(ordenes_no_entregadas.values_list('id', flat=True)) + ordenes_entregadas_con_saldo
     return OrdenDeReparacion.objects.filter(id__in=list(set(ids_relevantes))).select_related('vehiculo', 'cliente')
 
-
-# --- VISTA HOME (TOTALMENTE MODIFICADA) ---
+# --- VISTA HOME (Corregida) ---
 @login_required
 def home(request):
     hoy = timezone.now()
@@ -107,20 +106,11 @@ def home(request):
     total_gastos = gastos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
 
     # --- Parte 3: Cálculo de Balances HISTÓRICOS (Para las 2 últimas tarjetas) ---
-    # ¡Esta es la corrección! Hacemos consultas nuevas sin filtro de fecha.
-
-    # Total HISTÓRICO de ingresos en efectivo (No TPV)
     total_ingresos_efectivo_hist = Ingreso.objects.filter(es_tpv=False).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    # Total HISTÓRICO de gastos en efectivo (No Tarjeta)
     total_gastos_efectivo_hist = Gasto.objects.filter(pagado_con_tarjeta=False).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    # El balance de caja es el total histórico
     balance_caja = total_ingresos_efectivo_hist - total_gastos_efectivo_hist
-
-    # Total HISTÓRICO de ingresos por TPV
     total_ingresos_tpv_hist = Ingreso.objects.filter(es_tpv=True).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    # Total HISTÓRICO de gastos con tarjeta
     total_gastos_tarjeta_hist = Gasto.objects.filter(pagado_con_tarjeta=True).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    # El balance de tarjeta es el total histórico
     balance_tarjeta = total_ingresos_tpv_hist - total_gastos_tarjeta_hist
 
     # --- Parte 4: Movimientos Recientes (Esto se queda igual) ---
@@ -170,7 +160,6 @@ def home(request):
         'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/home.html', context)
-# --- FIN VISTA HOME ---
 
 
 # --- VISTA INGRESAR VEHÍCULO ---
@@ -245,7 +234,7 @@ def ingresar_vehiculo(request):
     context = { 'presupuestos_disponibles': presupuestos_disponibles }
     return render(request, 'taller/ingresar_vehiculo.html', context)
 
-# --- VISTA AÑADIR GASTO (MODIFICADA) ---
+# --- VISTA AÑADIR GASTO (Corregida) ---
 @login_required
 def anadir_gasto(request):
     if request.method == 'POST':
@@ -275,33 +264,24 @@ def anadir_gasto(request):
                     except ValueError: return redirect('anadir_gasto')
 
                     CompraConsumible.objects.create(tipo=tipo_consumible, fecha_compra=fecha_compra, cantidad=cantidad, coste_total=coste_total)
-                    
-                    # --- CORREGIDO --- (Se añade la fecha_compra al crear el Gasto)
                     Gasto.objects.create(fecha=fecha_compra, categoria=categoria, importe=coste_total,
                                         descripcion=f"Compra de {cantidad} {tipo_consumible.unidad_medida} de {tipo_consumible.nombre}",
                                         pagado_con_tarjeta=pagado_con_tarjeta)
-                    # --- FIN CORRECCIÓN ---
             except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('anadir_gasto')
         else:
             if not request.user.has_perm('taller.add_gasto'):
                  return HttpResponseForbidden("No tienes permiso para añadir gastos.")
 
             importe_str = request.POST.get('importe'); descripcion = request.POST.get('descripcion', '')
-            
-            # --- CORREGIDO --- (Se lee la fecha del formulario)
             fecha_gasto_str = request.POST.get('fecha_gasto')
             try: fecha_gasto = datetime.strptime(fecha_gasto_str, '%Y-%m-%d').date() if fecha_gasto_str else timezone.now().date()
             except ValueError: fecha_gasto = timezone.now().date()
-            # --- FIN CORRECCIÓN ---
-
             try:
                 importe = Decimal(importe_str) if importe_str else None
                 if importe is not None and importe < 0: importe = None
             except (ValueError, TypeError, Decimal.InvalidOperation): importe = None
 
-            # --- CORREGIDO --- (Se pasa la fecha_gasto al crear el Gasto)
             gasto = Gasto(fecha=fecha_gasto, categoria=categoria, importe=importe, descripcion=descripcion.upper(), pagado_con_tarjeta=pagado_con_tarjeta)
-            # --- FIN CORRECCIÓN ---
 
             if categoria in ['Repuestos', 'Otros']:
                 vehiculo_id = request.POST.get('vehiculo')
@@ -339,10 +319,9 @@ def anadir_gasto(request):
         'categorias_gasto': Gasto.CATEGORIA_CHOICES, 'categorias_gasto_select': categorias_gasto_choices,
     }
     return render(request, 'taller/anadir_gasto.html', context)
-# --- FIN VISTA AÑADIR GASTO ---
 
 
-# --- VISTA REGISTRAR INGRESO (MODIFICADA) ---
+# --- VISTA REGISTRAR INGRESO (Corregida) ---
 @login_required
 def registrar_ingreso(request):
     if request.method == 'POST':
@@ -351,21 +330,15 @@ def registrar_ingreso(request):
 
         categoria = request.POST['categoria']; importe_str = request.POST.get('importe')
         descripcion = request.POST.get('descripcion', ''); es_tpv = request.POST.get('es_tpv') == 'true'
-        
-        # --- CORREGIDO --- (Se lee la fecha del formulario)
         fecha_ingreso_str = request.POST.get('fecha_ingreso')
         try: fecha_ingreso = datetime.strptime(fecha_ingreso_str, '%Y-%m-%d').date() if fecha_ingreso_str else timezone.now().date()
         except ValueError: fecha_ingreso = timezone.now().date()
-        # --- FIN CORRECCIÓN ---
-
         try:
             importe = Decimal(importe_str) if importe_str else Decimal('0.00')
             if importe <= 0: return redirect('registrar_ingreso')
         except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('registrar_ingreso')
 
-        # --- CORREGIDO --- (Se pasa la fecha_ingreso al crear el Ingreso)
         ingreso = Ingreso(fecha=fecha_ingreso, categoria=categoria, importe=importe, descripcion=descripcion.upper(), es_tpv=es_tpv)
-        # --- FIN CORRECCIÓN ---
 
         if categoria == 'Taller':
             orden_id = request.POST.get('orden')
@@ -383,7 +356,6 @@ def registrar_ingreso(request):
     categorias_ingreso = Ingreso.CATEGORIA_CHOICES
     context = { 'ordenes': ordenes_filtradas, 'categorias_ingreso': categorias_ingreso }
     return render(request, 'taller/registrar_ingreso.html', context)
-# --- FIN VISTA REGISTRAR INGRESO ---
 
 
 # --- VISTA STOCK INICIAL ---
@@ -604,12 +576,49 @@ def editar_presupuesto(request, presupuesto_id):
     return render(request, 'taller/editar_presupuesto.html', context)
 
 
-# --- VISTA LISTA ORDENES ---
+# --- VISTA LISTA ORDENES (MODIFICADA) ---
 @login_required
 def lista_ordenes(request):
-    ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('cliente', 'vehiculo').order_by('-fecha_entrada')
-    context = { 'ordenes': ordenes_activas }
+    ordenes_qs = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('cliente', 'vehiculo').order_by('-fecha_entrada')
+
+    # --- LÓGICA DE FILTRO AÑADIDA ---
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+
+    if ano_seleccionado:
+        try:
+            ano_int = int(ano_seleccionado)
+            ordenes_qs = ordenes_qs.filter(fecha_entrada__year=ano_int)
+        except (ValueError, TypeError):
+            ano_seleccionado = None
+    if mes_seleccionado:
+         try:
+            mes_int = int(mes_seleccionado)
+            if 1 <= mes_int <= 12:
+                ordenes_qs = ordenes_qs.filter(fecha_entrada__month=mes_int)
+            else:
+                mes_seleccionado = None
+         except (ValueError, TypeError):
+            mes_seleccionado = None
+    
+    ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None
+    mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
+    # --- FIN LÓGICA DE FILTRO ---
+
+    context = { 
+        'ordenes': ordenes_qs,
+        # --- AÑADIDO AL CONTEXTO ---
+        'anos_y_meses': anos_y_meses_data, 
+        'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 
+        'mes_seleccionado': mes_sel_int, 
+        'meses_del_ano': range(1, 13)
+        # --- FIN AÑADIDO ---
+    }
     return render(request, 'taller/lista_ordenes.html', context)
+# --- FIN VISTA LISTA ORDENES ---
 
 
 # --- VISTA DETALLE ORDEN ---
@@ -1046,20 +1055,62 @@ def informe_ingresos_desglose(request, categoria):
     context = { 'titulo': titulo, 'ingresos_desglose': ingresos_desglose, 'total_desglose': total_desglose, 'ano_seleccionado': ano_seleccionado, 'mes_seleccionado': mes_seleccionado, 'categoria_original_url': categoria }
     return render(request, 'taller/informe_ingresos_desglose.html', context)
 
+
+# --- VISTA CONTABILIDAD (MODIFICADA) ---
 @login_required
 def contabilidad(request):
-    # ... (Lógica GET existente) ...
-    periodo = request.GET.get('periodo', 'mes'); hoy = timezone.now().date()
-    ingresos_qs = Ingreso.objects.all(); gastos_qs = Gasto.objects.all()
-    if periodo == 'semana':
-        inicio_semana = hoy - timedelta(days=hoy.weekday())
-        ingresos_qs = ingresos_qs.filter(fecha__gte=inicio_semana); gastos_qs = gastos_qs.filter(fecha__gte=inicio_semana)
-    elif periodo == 'mes':
-        ingresos_qs = ingresos_qs.filter(fecha__month=hoy.month, fecha__year=hoy.year); gastos_qs = gastos_qs.filter(fecha__month=hoy.month, fecha__year=hoy.year)
-    total_ingresado = ingresos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00'); total_gastado = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    hoy = timezone.now().date()
+    
+    # --- LÓGICA DE FILTRO AÑADIDA ---
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+
+    ingresos_qs = Ingreso.objects.all()
+    gastos_qs = Gasto.objects.all()
+
+    ano_sel_int = None
+    if ano_seleccionado:
+        try:
+            ano_sel_int = int(ano_seleccionado)
+            ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
+            gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
+        except (ValueError, TypeError):
+            ano_seleccionado = None
+    
+    mes_sel_int = None
+    if mes_seleccionado:
+         try:
+            mes_sel_int = int(mes_seleccionado)
+            if 1 <= mes_sel_int <= 12:
+                ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
+                gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
+            else:
+                mes_seleccionado = None
+         except (ValueError, TypeError):
+            mes_seleccionado = None
+    # --- FIN LÓGICA DE FILTRO ---
+
+    total_ingresado = ingresos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    total_gastado = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_ganancia = total_ingresado - total_gastado
-    context = { 'total_ingresado': total_ingresado, 'total_gastado': total_gastado, 'total_ganancia': total_ganancia, 'periodo_seleccionado': periodo }
+    
+    context = { 
+        'total_ingresado': total_ingresado, 
+        'total_gastado': total_gastado, 
+        'total_ganancia': total_ganancia, 
+        # --- AÑADIDO AL CONTEXTO ---
+        'anos_y_meses': anos_y_meses_data, 
+        'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 
+        'mes_seleccionado': mes_sel_int, 
+        'meses_del_ano': range(1, 13)
+        # --- FIN AÑADIDO ---
+    }
     return render(request, 'taller/contabilidad.html', context)
+# --- FIN VISTA CONTABILIDAD ---
+
 
 @login_required
 def cuentas_por_cobrar(request):
@@ -1087,21 +1138,64 @@ def cuentas_por_cobrar(request):
     context = { 'facturas_pendientes': facturas_pendientes, 'total_pendiente': total_pendiente, 'anos_disponibles': anos_disponibles, 'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13) }
     return render(request, 'taller/cuentas_por_cobrar.html', context)
 
+
+# --- VISTA INFORME TARJETA (MODIFICADA) ---
 @login_required
 def informe_tarjeta(request):
-    # ... (Lógica GET existente) ...
-    periodo = request.GET.get('periodo', 'mes'); hoy = timezone.now().date()
-    ingresos_tpv_qs = Ingreso.objects.filter(es_tpv=True); gastos_tarjeta_qs = Gasto.objects.filter(pagado_con_tarjeta=True)
-    if periodo == 'semana':
-        inicio_semana = hoy - timedelta(days=hoy.weekday())
-        ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__gte=inicio_semana); gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__gte=inicio_semana)
-    elif periodo == 'mes':
-        ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__month=hoy.month, fecha__year=hoy.year); gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__month=hoy.month, fecha__year=hoy.year)
-    total_ingresos_tpv = ingresos_tpv_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00'); total_gastos_tarjeta = gastos_tarjeta_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    hoy = timezone.now().date()
+    
+    # --- LÓGICA DE FILTRO AÑADIDA ---
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+
+    ingresos_tpv_qs = Ingreso.objects.filter(es_tpv=True)
+    gastos_tarjeta_qs = Gasto.objects.filter(pagado_con_tarjeta=True)
+
+    ano_sel_int = None
+    if ano_seleccionado:
+        try:
+            ano_sel_int = int(ano_seleccionado)
+            ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__year=ano_sel_int)
+            gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__year=ano_sel_int)
+        except (ValueError, TypeError):
+            ano_seleccionado = None
+            
+    mes_sel_int = None
+    if mes_seleccionado:
+         try:
+            mes_sel_int = int(mes_seleccionado)
+            if 1 <= mes_sel_int <= 12:
+                ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__month=mes_sel_int)
+                gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__month=mes_sel_int)
+            else:
+                mes_seleccionado = None
+         except (ValueError, TypeError):
+            mes_seleccionado = None
+    # --- FIN LÓGICA DE FILTRO ---
+    
+    total_ingresos_tpv = ingresos_tpv_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    total_gastos_tarjeta = gastos_tarjeta_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_tarjeta = total_ingresos_tpv - total_gastos_tarjeta
     movimientos_tarjeta = sorted(list(ingresos_tpv_qs) + list(gastos_tarjeta_qs), key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), reverse=True)
-    context = { 'total_ingresos_tpv': total_ingresos_tpv, 'total_gastos_tarjeta': total_gastos_tarjeta, 'balance_tarjeta': balance_tarjeta, 'movimientos_tarjeta': movimientos_tarjeta, 'periodo_seleccionado': periodo }
+    
+    context = { 
+        'total_ingresos_tpv': total_ingresos_tpv, 
+        'total_gastos_tarjeta': total_gastos_tarjeta, 
+        'balance_tarjeta': balance_tarjeta, 
+        'movimientos_tarjeta': movimientos_tarjeta, 
+        # --- AÑADIDO AL CONTEXTO ---
+        'anos_y_meses': anos_y_meses_data, 
+        'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 
+        'mes_seleccionado': mes_sel_int, 
+        'meses_del_ano': range(1, 13)
+        # --- FIN AÑADIDO ---
+    }
     return render(request, 'taller/informe_tarjeta.html', context)
+# --- FIN VISTA INFORME TARJETA ---
+
 
 @login_required
 def ver_presupuesto_pdf(request, presupuesto_id):
