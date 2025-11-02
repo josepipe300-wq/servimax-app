@@ -66,7 +66,9 @@ class Gasto(models.Model):
         ('Otros', 'Otros'),
         ('Compra de Consumibles', 'Compra de Consumibles'),
     ]
-    fecha = models.DateField(auto_now_add=True)
+    # --- CORREGIDO --- (Cambiado de auto_now_add=True a default=timezone.now)
+    fecha = models.DateField(default=timezone.now)
+    # --- FIN CORRECCIÓN ---
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     descripcion = models.CharField(max_length=255, null=True, blank=True)
@@ -91,7 +93,9 @@ class Ingreso(models.Model):
         ('Otras Ganancias', 'Otras Ganancias'),
         ('Otros', 'Otros Ingresos'),
     ]
-    fecha = models.DateField(auto_now_add=True)
+    # --- CORREGIDO --- (Cambiado de auto_now_add=True a default=timezone.now)
+    fecha = models.DateField(default=timezone.now)
+    # --- FIN CORRECCIÓN ---
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=255)
@@ -173,7 +177,9 @@ class UsoConsumible(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.CASCADE)
     tipo = models.ForeignKey(TipoConsumible, on_delete=models.CASCADE)
     cantidad_usada = models.DecimalField(max_digits=10, decimal_places=2)
-    fecha_uso = models.DateField(auto_now_add=True)
+    # --- CORREGIDO --- (Cambiado de auto_now_add=True a default=timezone.now)
+    fecha_uso = models.DateField(default=timezone.now)
+    # --- FIN CORRECCIÓN ---
     def __str__(self):
         return f"Uso de {self.cantidad_usada} {self.tipo.unidad_medida} en Orden #{self.orden.id}"
 
