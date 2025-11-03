@@ -117,9 +117,21 @@ class Factura(models.Model):
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     iva = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_final = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    
+    # --- CAMBIO AQUÍ: AÑADIR CAMPO DE NOTAS ---
+    notas_cliente = models.TextField(null=True, blank=True, help_text="Notas adicionales para el cliente")
+    # ------------------------------------------
+
     def __str__(self):
         documento = "Factura" if self.es_factura else "Recibo"
         return f"{documento} #{self.id} para Orden #{self.orden.id}"
+
+    # --- CAMBIO AQUÍ: AÑADIR MÉTODO SAVE PARA NOTAS ---
+    def save(self, *args, **kwargs):
+        if self.notas_cliente:
+            self.notas_cliente = self.notas_cliente.upper()
+        super(Factura, self).save(*args, **kwargs)
+    # -----------------------------------------------
 
 class LineaFactura(models.Model):
     factura = models.ForeignKey(Factura, related_name='lineas', on_delete=models.CASCADE)

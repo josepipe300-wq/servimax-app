@@ -623,6 +623,7 @@ def lista_ordenes(request):
 
 # --- VISTA DETALLE ORDEN ---
 @login_required
+@login_required
 def detalle_orden(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura'), id=orden_id)
     repuestos = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
@@ -633,14 +634,40 @@ def detalle_orden(request, orden_id):
     try: factura = orden.factura; pendiente_pago = factura.total_final - abonos
     except Factura.DoesNotExist: pass
 
-    if request.method == 'POST' and 'nuevo_estado' in request.POST:
-        if not request.user.has_perm('taller.change_ordendereparacion'):
-            return HttpResponseForbidden("No tienes permiso para modificar órdenes.")
+    # --- LÓGICA POST ACTUALIZADA ---
+    if request.method == 'POST':
+        form_type = request.POST.get('form_type')
 
-        nuevo_estado = request.POST['nuevo_estado']
-        if nuevo_estado in [choice[0] for choice in OrdenDeReparacion.ESTADO_CHOICES]:
-            orden.estado = nuevo_estado; orden.save()
-        return redirect('detalle_orden', orden_id=orden.id)
+        # Acción 1: Actualizar Estado de la Orden
+        if form_type == 'estado':
+            if not request.user.has_perm('taller.change_ordendereparacion'):
+                return HttpResponseForbidden("No tienes permiso para modificar órdenes.")
+            
+            nuevo_estado = request.POST.get('nuevo_estado')
+            if nuevo_estado in [choice[0] for choice in OrdenDeReparacion.ESTADO_CHOICES]:
+                orden.estado = nuevo_estado
+                orden.save()
+            return redirect('detalle_orden', orden_id=orden.id)
+
+        # Acción 2: Actualizar Kilometraje del Vehículo
+        elif form_type == 'kilometraje':
+            if not request.user.has_perm('taller.change_vehiculo'):
+                return HttpResponseForbidden("No tienes permiso para modificar vehículos.")
+            
+            try:
+                nuevo_km_str = request.POST.get('nuevo_kilometraje')
+                nuevo_km_int = int(nuevo_km_str)
+                
+                # Solo actualizamos si el kilometraje es un número positivo
+                if nuevo_km_int >= 0:
+                    vehiculo = orden.vehiculo
+                    vehiculo.kilometraje = nuevo_km_int
+                    vehiculo.save()
+            except (ValueError, TypeError):
+                # Si el valor no es un número válido, no hacemos nada y recargamos
+                pass
+            return redirect('detalle_orden', orden_id=orden.id)
+    # --- FIN LÓGICA POST ---
 
     context = {
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
@@ -721,11 +748,19 @@ def generar_factura(request, orden_id):
             return HttpResponseForbidden("No tienes permiso para generar o reemplazar facturas.")
 
         es_factura = 'aplicar_iva' in request.POST
+        # --- CAMBIO AQUÍ: OBTENER LAS NOTAS ---
+        notas = request.POST.get('notas_cliente', '')
+        # -------------------------------------
+
         with transaction.atomic():
             Factura.objects.filter(orden=orden).delete()
             UsoConsumible.objects.filter(orden=orden).delete()
 
-            factura = Factura.objects.create(orden=orden, es_factura=es_factura); subtotal = Decimal('0.00')
+            # --- CAMBIO AQUÍ: GUARDAR LAS NOTAS AL CREAR ---
+            factura = Factura.objects.create(orden=orden, es_factura=es_factura, notas_cliente=notas)
+            # ---------------------------------------------
+            
+            subtotal = Decimal('0.00')
             repuestos_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
             gastos_otros_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Otros')
             for repuesto in repuestos_qs:
@@ -765,10 +800,15 @@ def generar_factura(request, orden_id):
                         subtotal += importe
                         LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
                     except (ValueError, TypeError, Decimal.InvalidOperation): pass
+            
             iva_calculado = Decimal('0.00'); subtotal_positivo = max(subtotal, Decimal('0.00'))
             if es_factura: iva_calculado = (subtotal_positivo * Decimal('0.21')).quantize(Decimal('0.01'))
             total_final = subtotal_positivo + iva_calculado
-            factura.subtotal = subtotal; factura.iva = iva_calculado; factura.total_final = total_final; factura.save()
+            factura.subtotal = subtotal; factura.iva = iva_calculado; factura.total_final = total_final
+            
+            # El .save() aquí guardará las notas y las pondrá en mayúsculas (por el método del modelo)
+            factura.save() 
+            
             orden.estado = 'Listo para Recoger'; orden.save()
             return redirect('detalle_orden', orden_id=orden.id)
 

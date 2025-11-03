@@ -27,6 +27,11 @@
         .financial-summary { border: 2px solid #007bff; padding: 15px; margin-top: 20px; border-radius: 5px; }
         .photo-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
         .photo-gallery img { width: 100%; height: 100px; object-fit: cover; border-radius: 5px; border: 1px solid #ddd; }
+        /* --- AÑADIDO PARA EL NUEVO CAMPO DE NOTAS --- */
+        .factura-form textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
     </style>
 </head>
 <body>
@@ -78,6 +83,17 @@
             </form>
         </div>
 
+        <div class="status-form" style="background-color: #f8f9fa; border: 1px solid #e9ecef; margin-top: 15px;">
+            <h2>Actualizar Kilometraje</h2>
+            <form action="{% url 'detalle_orden' orden.id %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="kilometraje">
+                <label for="nuevo_kilometraje" style="display: none;">Kilometraje Actual del Vehículo:</label>
+                <input type="number" id="nuevo_kilometraje" name="nuevo_kilometraje" value="{{ orden.vehiculo.kilometraje }}" required
+                       style="font-size: 1.1em; padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box;">
+                <button type="submit" style="background-color: #ffc107; color: #333; margin-top: 10px;">Guardar KM</button>
+            </form>
+        </div>
         <div style="margin-top: 30px;">
             <h2>Gastos Asociados (Costes del Taller)</h2>
             <h3>Repuestos</h3>
@@ -128,6 +144,8 @@
                     </div>
                     <button type="button" id="add-mano-obra" style="width: auto;">+ Añadir línea de trabajo</button>
                     
+                    <h4 style="margin-top: 20px;">Notas para el Cliente (Opcional)</h4>
+                    <textarea name="notas_cliente" placeholder="Añadir observaciones, garantía, próximos mantenimientos, etc."></textarea>
                     <h4 style="margin-top: 20px;">Finalizar</h4>
                     <div class="checkbox-container">
                         <input type="checkbox" id="aplicar_iva" name="aplicar_iva">

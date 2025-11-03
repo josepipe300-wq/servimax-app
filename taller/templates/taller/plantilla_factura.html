@@ -78,7 +78,13 @@
             </tbody>
         </table>
 
-        <div class="totales">
+        {% if factura.notas_cliente %}
+        <div class="notas-cliente" style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; page-break-inside: avoid;">
+            <strong>Notas Adicionales:</strong>
+            <p style="font-size: 10px; white-space: pre-wrap; color: #333;">{{ factura.notas_cliente }}</p>
+        </div>
+        {% endif %}
+        <div class="totales" style="page-break-inside: avoid;">
             {% if factura.es_factura %}
                 <p><strong>Subtotal:</strong> {{ factura.subtotal|floatformat:2 }} €</p>
                 <p><strong>IVA (21%):</strong> {{ factura.iva|floatformat:2 }} €</p>
