@@ -208,18 +208,24 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             const fileInputs = document.querySelectorAll('input[type="file"][data-status-id]');
+            
             fileInputs.forEach(input => {
-                // 1. El listener 'change' original (funciona en desktop y a veces en móvil)
+                // 1. El listener 'change' (funciona en desktop)
                 input.addEventListener('change', () => {
                     updateUploadStatus(input.id, input.dataset.statusId);
                 });
             });
 
-            // 2. NUEVO LISTENER: Se activa cuando el usuario vuelve al navegador
-            // (después de usar la cámara)
-            window.addEventListener('focus', () => {
-                // Pequeña demora para dar tiempo al navegador a registrar el archivo
-                setTimeout(checkAllPhotoInputs, 300); 
+            // 2. NUEVO LISTENER: 'visibilitychange'
+            // Este es más fiable en móviles (especialmente iOS) que 'focus'.
+            // Se activa cuando el usuario vuelve de la cámara a la pestaña del navegador.
+            document.addEventListener('visibilitychange', () => {
+                // Si la pestaña vuelve a estar visible...
+                if (document.visibilityState === 'visible') {
+                    // Esperamos 500ms (0.5 segundos) para dar tiempo al navegador
+                    // a que actualice el estado del input ANTES de comprobarlo.
+                    setTimeout(checkAllPhotoInputs, 500);
+                }
             });
         });
     </script>
