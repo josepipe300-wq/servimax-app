@@ -5,20 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registrar Ingreso - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
-        .container { max-width: 700px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        input, textarea, select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { background-color: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; width: 100%; }
-        h1 { color: #333; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-    </style>
 </head>
 <body>
-    <div class="container">
+    <div class="form-container" style="max-width: 700px;">
         <div class="header">
             <h1>Registrar Nuevo Ingreso</h1>
             <a href="{% url 'home' %}" class="back-btn">← Volver</a>
@@ -42,6 +33,7 @@
 
             <label for="fecha_ingreso">Fecha del Ingreso (Opcional):</label>
             <input type="date" id="fecha_ingreso" name="fecha_ingreso">
+            
             <label for="orden">Asociar a Orden de Reparación (si es un pago de cliente):</label>
             <select id="orden" name="orden">
                 <option value="">--- Ninguna ---</option>
@@ -50,14 +42,12 @@
                 {% endfor %}
             </select>
 
-            {# --- AÑADIR ESTO --- #}
             <div style="margin-bottom: 15px;">
-                <input type="checkbox" id="es_tpv" name="es_tpv" value="true" style="width: auto; margin-right: 10px;">
-                <label for="es_tpv" style="display: inline;">¿Ingreso por TPV (Tarjeta)?</label>
+                <input type="checkbox" id="es_tpv" name="es_tpv" value="true">
+                <label for="es_tpv">¿Ingreso por TPV (Tarjeta)?</label>
             </div>
-            {# ------------------- #}
 
-            <button type="submit">Guardar Ingreso</button>
+            <button type="submit" class="btn-submit-green">Guardar Ingreso</button>
         </form>
     </div>
 </body>

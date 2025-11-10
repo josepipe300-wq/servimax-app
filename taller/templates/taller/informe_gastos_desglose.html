@@ -5,18 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ titulo }} - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
-        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-        .detail-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        .detail-table th, .detail-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        .detail-table th { background-color: #e9ecef; }
-        .total-summary { text-align: right; font-size: 1.5em; margin-top: 20px; color: #dc3545; }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -52,7 +42,7 @@
                 {% endfor %}
             </tbody>
         </table>
-        <div class="total-summary">
+        <div class="total-summary" style="color: #dc3545;">
             Total Gastado: <strong>{{ total_desglose|floatformat:2 }} €</strong>
         </div>
     </div>

@@ -5,21 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editar Factura #{{ factura_existente.id }} - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
-        .container { max-width: 900px; margin: auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h1, h2, h3, h4 { color: #333; }
-        input, select, textarea { text-transform: uppercase; width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background-color: #ffc107; color: #333; padding: 15px; font-size: 1.2em; border: none; border-radius: 4px; cursor: pointer; width: 100%; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-        .checkbox-container { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
-        .checkbox-container input { width: auto; }
-    </style>
 </head>
 <body>
-    <div class="container">
+    <div class="form-container"> 
         <div class="header">
             <h1>Editando {% if factura_existente.es_factura %}Factura{% else %}Recibo{% endif %} #{{ factura_existente.id }}</h1>
             <a href="{% url 'detalle_orden' orden.id %}" class="back-btn">← Cancelar y Volver</a>
@@ -43,30 +33,26 @@
             <h4>Consumibles</h4>
             <div id="consumibles-container">
             </div>
-            <button type="button" id="add-consumible-btn" style="width: auto; margin-bottom: 20px;">+ Añadir Consumible</button>
+            <button type="button" id="add-consumible-btn" class="btn-add">+ Añadir Consumible</button>
             
-            <h4>Mano de Obra</h4>
+            <h4 style="margin-top: 20px;">Mano de Obra</h4>
             <div id="mano-de-obra-container">
             </div>
-            <button type="button" id="add-mano-obra" style="width: auto;">+ Añadir línea de trabajo</button>
+            <button type="button" id="add-mano-obra" class="btn-add">+ Añadir línea de trabajo</button>
             
             <h4 style="margin-top: 20px;">Finalizar</h4>
             <div class="checkbox-container">
                 <input type="checkbox" id="aplicar_iva" name="aplicar_iva" {% if factura_existente.es_factura %}checked{% endif %}>
-                <label for="aplicar_iva">Generar FACTURA (Aplicar IVA 21%)</label>
+                <label for="aplicar_iva" style="margin-bottom: 0; font-weight: normal;">Generar FACTURA (Aplicar IVA 21%)</label>
             </div>
             <hr>
-            <button type="submit">Guardar Cambios</button>
+            <button type="submit" class="btn-submit-yellow">Guardar Cambios</button>
         </form>
     </div>
     
     <script>
-        // Obtener las líneas existentes del contexto
         const lineasExistentes = JSON.parse('{{ lineas_existentes_json|escapejs }}');
 
-        // --- FUNCIONES DINÁMICAS (EXISTENTES) ---
-
-        // 1. Función para añadir línea de Mano de Obra (adaptada para rellenar datos)
         function addManoDeObra(lineaData = null) {
             const container = document.getElementById('mano-de-obra-container');
             const newItem = document.createElement('div');
@@ -78,13 +64,11 @@
             container.appendChild(newItem);
         }
 
-        // 2. Función para añadir línea de Consumible (adaptada para rellenar datos)
         function addConsumible(lineaData = null) {
             const container = document.getElementById('consumibles-container');
             const newItem = document.createElement('div');
             newItem.classList.add('consumible-item');
             
-            // Re-calcular pvp_total a partir de unitario * cantidad para rellenar el input de PVP Total
             let pvpTotal = '';
             if (lineaData) {
                 const cantidad = parseFloat(lineaData.cantidad);
@@ -94,7 +78,6 @@
             
             let optionsHTML = '<option value="">--- Selecciona tipo ---</option>';
             {% for tipo in tipos_consumible %}
-                // Usa tipo_consumible_id del JSON para la pre-selección
                 const isSelected = lineaData && lineaData.tipo_consumible_id === {{ tipo.id }};
                 optionsHTML += `<option value="{{ tipo.id }}" ${isSelected ? 'selected' : ''}>{{ tipo.nombre }}</option>`;
             {% endfor %}
@@ -108,45 +91,34 @@
             container.appendChild(newItem);
         }
 
-        // --- EVENT LISTENERS (USANDO LAS FUNCIONES ADAPTADAS) ---
-
         document.getElementById('add-mano-obra').addEventListener('click', () => addManoDeObra());
         document.getElementById('add-consumible-btn').addEventListener('click', () => addConsumible());
 
-        // --- LÓGICA DE PRE-CARGA DE DATOS AL INICIO ---
-        
         document.addEventListener('DOMContentLoaded', () => {
             let hasManoDeObra = false;
             
             lineasExistentes.forEach(linea => {
                 if (linea.tipo === 'Repuesto' && linea.repuesto_id) {
-                    // 1. Repuestos (Estático)
                     const input = document.querySelector(`input[name="pvp_repuesto_${linea.repuesto_id}"]`);
                     if (input) {
                         input.value = linea.precio_unitario;
                     }
                 } else if (linea.tipo === 'Externo' && linea.externo_id) {
-                    // 2. Trabajos Externos (Estático)
                     const input = document.querySelector(`input[name="pvp_otro_${linea.externo_id}"]`);
                     if (input) {
                         input.value = linea.precio_unitario;
                     }
                 } else if (linea.tipo === 'Consumible') {
-                    // 3. Consumibles (Dinámico)
                     addConsumible(linea);
                 } else if (linea.tipo === 'Mano de Obra') {
-                    // 4. Mano de Obra (Dinámico)
                     addManoDeObra(linea);
                     hasManoDeObra = true;
                 }
             });
 
-            // Asegurar que al menos haya una línea de Mano de Obra si no se cargó ninguna existente.
             if (!hasManoDeObra) {
                 addManoDeObra();
             }
-
-            // --- LÓGICA DE VALIDACIÓN PVP Y NAVEGACIÓN (EXISTENTE) ---
 
             const facturaForm = document.getElementById('factura-form');
             if (facturaForm) {

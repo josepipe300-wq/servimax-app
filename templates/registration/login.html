@@ -4,18 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Iniciar Sesión - ServiMax</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 80vh; }
-        .login-container { max-width: 400px; width: 100%; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; }
-        h1 { color: #333; margin-bottom: 25px; }
-        input[type="text"], input[type="password"] { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; width: 100%; }
-        button:hover { background-color: #0056b3; }
-        label { display: block; text-align: left; margin-bottom: 5px; font-weight: bold; }
-        .errorlist { list-style: none; padding: 0; margin: 10px 0; color: #dc3545; font-weight: bold; }
-    </style>
+    
+    {# --- INICIO MODIFICACIÓN --- #}
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
+    {# --- FIN MODIFICACIÓN --- #}
 </head>
-<body>
+<body class="login-body">
     <div class="login-container">
         <h1>ServiMax Taller</h1>
         <hr style="margin-bottom: 25px;">
@@ -44,11 +39,8 @@
                 {{ form.password }}
             </div>
             <button type="submit">Iniciar Sesión</button>
-            <input type="hidden" name="next" value="{{ next }}"> {# Para redirigir después del login si venía de otra página #}
+            <input type="hidden" name="next" value="{{ next }}">
         </form>
-
-        {# Opcional: Enlace para recuperar contraseña (requiere configurar email) #}
-        {# <p style="margin-top: 15px;"><a href="{% url 'password_reset' %}">¿Olvidaste tu contraseña?</a></p> #}
 
     </div>
 </body>

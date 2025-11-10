@@ -6,23 +6,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Historial de Movimientos - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
-        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-        .history-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        .history-table th, .history-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        .history-table th { background-color: #e9ecef; }
-        .gasto-row td { color: #dc3545; font-weight: 500; }
-        .ingreso-row td { color: #28a745; font-weight: 500; }
-        .edit-btn { padding: 5px 10px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 0.9em; }
-        .filters { margin-bottom: 20px; }
-        .filters a { padding: 10px 15px; text-decoration: none; background-color: #e9ecef; color: #333; border-radius: 5px; margin-right: 10px; }
-        .filters a.active { background-color: #007bff; color: white; }
-    </style>
 </head>
 <body>
     <div class="container">

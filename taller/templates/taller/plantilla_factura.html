@@ -28,6 +28,9 @@
         th { background-color: #f2f2f2; }
         .totales { margin-top: 20px; text-align: right; width: 250px; margin-left: auto; }
         .totales p { margin: 5px 0; }
+        
+        /* --- ESTILO AÑADIDO PARA LOS DATOS DEL CLIENTE --- */
+        .cliente-info p { margin: 4px 0; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -40,8 +43,10 @@
                 <p>
                     <strong>Taller ServiMax</strong><br>
                     <em>Honestidad y Calidad</em><br>
-                    Polígono de Constantí<br>
-                    43120 Constantí, Tarragona<br>
+                    <strong>NIE:</strong> Y9305858A<br>
+                    <em>JOSE EVARDID MENDIETA CORTES</em><br>
+                    Carrer del Terrer 18<br>
+                    43840 Salou, Tarragona<br>
                     <strong>Teléfono:</strong> 642 99 30 63
                 </p>
             </div>
@@ -51,8 +56,16 @@
             <h3>Datos del Cliente</h3>
             <p>
                 <strong>Nombre:</strong> {{ cliente.nombre }}<br>
-                **Teléfono:** {{ cliente.telefono }}<br>
-                **Vehículo:** {{ vehiculo.marca }} {{ vehiculo.modelo }} - {{ vehiculo.matricula }}<br>
+                <strong>Teléfono:</strong> {{ cliente.telefono }}<br>
+                
+                {# --- INICIO DE LA MODIFICACIÓN --- #}
+                <strong>{{ cliente.get_tipo_documento_display|default:'DNI' }}:</strong> {{ cliente.documento_fiscal|default:'---' }}<br>
+                <strong>Dirección:</strong> {{ cliente.direccion_fiscal|default:'---' }}<br>
+                {{ cliente.codigo_postal_fiscal|default:'' }} {{ cliente.ciudad_fiscal|default:'' }} ({{ cliente.provincia_fiscal|default:'TARRAGONA' }})
+                <hr style="border: 0; border-top: 1px dashed #ccc; margin: 8px 0;">
+                {# --- FIN DE LA MODIFICACIÓN --- #}
+                
+                <strong>Vehículo:</strong> {{ vehiculo.marca }} {{ vehiculo.modelo }} - {{ vehiculo.matricula }}<br>
                 <strong>Kilometraje:</strong> {{ vehiculo.kilometraje }} km
             </p>
         </div>

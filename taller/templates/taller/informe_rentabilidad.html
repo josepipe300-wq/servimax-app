@@ -5,23 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Informe de Rentabilidad - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
-        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h1, h2 { color: #333; }
-        .report-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        .report-table th, .report-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        .report-table th { background-color: #e9ecef; }
-        .report-table tbody tr.clickable:hover { background-color: #f5f5f5; cursor: pointer; }
-        .filters { margin-bottom: 20px; }
-        .filters a { padding: 10px 15px; text-decoration: none; background-color: #e9ecef; color: #333; border-radius: 5px; margin-right: 10px; }
-        .filters a.active { background-color: #007bff; color: white; }
-        .total-summary { text-align: right; font-size: 1.2em; margin-top: 20px; }
-        .total-summary strong { font-size: 1.5em; color: #28a745; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-    </style>
 </head>
 <body>
     <div class="container">

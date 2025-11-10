@@ -5,32 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ingresar Vehículo - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
-        .container { max-width: 700px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        input, textarea, select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; text-transform: uppercase;} /* Añadido text-transform */
-        textarea { resize: vertical; min-height: 80px; }
-        button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; width: 100%; }
-        h1, h2, h3 { color: #333; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-        .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        /* Estilo para campos deshabilitados */
-        .readonly-field { background-color: #e9ecef; cursor: not-allowed; }
-        .section { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
-        /* --- ESTILO PARA EL CHECKMARK --- */
-        .upload-status {
-            color: #28a745; /* Verde */
-            font-weight: bold;
-            margin-left: 5px; /* Pequeño espacio */
-        }
-        /* --- FIN ESTILO CHECKMARK --- */
-    </style>
 </head>
 <body>
-    <div class="container">
+    <div class="form-container">
         <div class="header">
             <h1>Ingresar Nuevo Vehículo</h1>
             <a href="{% url 'home' %}" class="back-btn">← Volver</a>
@@ -45,26 +24,70 @@
                  <label for="presupuesto_select">Seleccionar Presupuesto Existente:</label>
                  <select id="presupuesto_select" name="presupuesto_asociado">
                      <option value="">--- Ninguno (Introducir datos manualmente) ---</option>
-                     {% for p in presupuestos_disponibles %}
+                     
+                     {% for p_data in presupuestos_disponibles_data %} 
+                         {% with p=p_data.presupuesto %}
                          <option value="{{ p.id }}"
                                  data-cliente-nombre="{{ p.cliente.nombre }}"
                                  data-cliente-telefono="{{ p.cliente.telefono }}"
+                                 
+                                 data-cliente-tipo-documento="{{ p_data.cliente_data.tipo_documento }}"
+                                 data-cliente-documento-fiscal="{{ p_data.cliente_data.documento_fiscal }}"
+                                 data-cliente-direccion-fiscal="{{ p_data.cliente_data.direccion_fiscal }}"
+                                 data-cliente-codigo-postal-fiscal="{{ p_data.cliente_data.codigo_postal_fiscal }}"
+                                 data-cliente-ciudad-fiscal="{{ p_data.cliente_data.ciudad_fiscal }}"
+                                 data-cliente-provincia-fiscal="{{ p_data.cliente_data.provincia_fiscal }}"
+                                 
                                  data-vehiculo-matricula="{{ p.vehiculo.matricula|default:p.matricula_nueva|default:'' }}"
                                  data-vehiculo-marca="{{ p.vehiculo.marca|default:p.marca_nueva|default:'' }}"
                                  data-vehiculo-modelo="{{ p.vehiculo.modelo|default:p.modelo_nuevo|default:'' }}"
                                  data-problema="{{ p.problema_o_trabajo|escape }}">
                              #{{ p.id }} - {{ p.cliente.nombre }} ({{ p.vehiculo.matricula|default:p.matricula_nueva|default:'S/M' }}) - {{ p.total_estimado|floatformat:2 }}€
                          </option>
+                         {% endwith %}
                      {% endfor %}
                  </select>
             </div>
 
             <div class="section">
                 <h2>Paso 1: Datos del Cliente</h2>
-                <label for="cliente_nombre">Nombre del Cliente:</label>
+                <label for="cliente_nombre">Nombre o Razón Social:</label>
                 <input type="text" id="cliente_nombre" name="cliente_nombre" required>
                 <label for="cliente_telefono">Teléfono:</label>
                 <input type="text" id="cliente_telefono" name="cliente_telefono" required>
+
+                <h3 style="margin-top: 20px; margin-bottom: 10px;">Datos Fiscales (Para Facturas)</h3>
+                
+                <div class="address-grid">
+                    <div>
+                        <label for="cliente_tipo_documento">Tipo Doc.:</label>
+                        <select id="cliente_tipo_documento" name="cliente_tipo_documento">
+                            <option value="DNI">DNI</option>
+                            <option value="NIE">NIE</option>
+                            <option value="NIF">NIF (Empresas)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="cliente_documento_fiscal">Nº Documento:</label>
+                        <input type="text" id="cliente_documento_fiscal" name="cliente_documento_fiscal">
+                    </div>
+                </div>
+
+                <label for="cliente_direccion_fiscal">Dirección Fiscal (Calle, nº):</label>
+                <input type="text" id="cliente_direccion_fiscal" name="cliente_direccion_fiscal">
+                
+                <div class="address-grid">
+                    <div>
+                        <label for="cliente_codigo_postal_fiscal">Código Postal:</label>
+                        <input type="text" id="cliente_codigo_postal_fiscal" name="cliente_codigo_postal_fiscal">
+                    </div>
+                    <div>
+                        <label for="cliente_ciudad_fiscal">Población:</label>
+                        <input type="text" id="cliente_ciudad_fiscal" name="cliente_ciudad_fiscal">
+                    </div>
+                </div>
+                <label for="cliente_provincia_fiscal">Provincia:</label>
+                <input type="text" id="cliente_provincia_fiscal" name="cliente_provincia_fiscal" value="TARRAGONA">
             </div>
 
             <div class="section">
@@ -84,7 +107,6 @@
                 <label for="problema">Problema / Tareas a realizar:</label>
                 <textarea id="problema" name="problema" required></textarea>
 
-                {## --- SECCIÓN DE FOTOS MODIFICADA --- ##}
                 <h3>Fotos del Vehículo (hasta 5)</h3>
                 <div class="photo-grid">
                     <div>
@@ -108,15 +130,14 @@
                         <input type="file" id="foto5" name="foto5" accept="image/*" capture="environment" data-status-id="status-foto5">
                     </div>
                 </div>
-                {## --- FIN SECCIÓN DE FOTOS MODIFICADA --- ##}
             </div>
 
-            <button type="submit" style="margin-top: 20px;">Crear Orden de Reparación</button>
+            <button type="submit">Crear Orden de Reparación</button>
         </form>
     </div>
 
     <script>
-        // --- SCRIPT PARA CARGAR DATOS DESDE PRESUPUESTO (EXISTENTE) ---
+        // --- SCRIPT PARA CARGAR DATOS DESDE PRESUPUESTO ---
         const presupuestoSelect = document.getElementById('presupuesto_select');
         const nombreClienteInput = document.getElementById('cliente_nombre');
         const telefonoClienteInput = document.getElementById('cliente_telefono');
@@ -124,10 +145,12 @@
         const marcaInput = document.getElementById('vehiculo_marca');
         const modeloInput = document.getElementById('vehiculo_modelo');
         const problemaTextarea = document.getElementById('problema');
-        const fieldsToToggleReadOnly = [
-            nombreClienteInput, telefonoClienteInput,
-            matriculaInput, marcaInput, modeloInput
-        ];
+        const tipoDocumentoInput = document.getElementById('cliente_tipo_documento');
+        const documentoFiscalInput = document.getElementById('cliente_documento_fiscal');
+        const direccionFiscalInput = document.getElementById('cliente_direccion_fiscal');
+        const codigoPostalFiscalInput = document.getElementById('cliente_codigo_postal_fiscal');
+        const ciudadFiscalInput = document.getElementById('cliente_ciudad_fiscal');
+        const provinciaFiscalInput = document.getElementById('cliente_provincia_fiscal');
 
         presupuestoSelect.addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
@@ -140,14 +163,12 @@
                 marcaInput.value = selectedOption.dataset.vehiculoMarca || '';
                 modeloInput.value = selectedOption.dataset.vehiculoModelo || '';
                 problemaTextarea.value = selectedOption.dataset.problema || '';
-
-                fieldsToToggleReadOnly.forEach(field => {
-                    field.readOnly = true;
-                    field.classList.add('readonly-field');
-                });
-                problemaTextarea.readOnly = false;
-                problemaTextarea.classList.remove('readonly-field');
-
+                tipoDocumentoInput.value = selectedOption.dataset.clienteTipoDocumento || 'DNI';
+                documentoFiscalInput.value = selectedOption.dataset.clienteDocumentoFiscal || '';
+                direccionFiscalInput.value = selectedOption.dataset.clienteDireccionFiscal || '';
+                codigoPostalFiscalInput.value = selectedOption.dataset.clienteCodigoPostalFiscal || '';
+                ciudadFiscalInput.value = selectedOption.dataset.clienteCiudadFiscal || '';
+                provinciaFiscalInput.value = selectedOption.dataset.clienteProvinciaFiscal || 'TARRAGONA';
             } else {
                 nombreClienteInput.value = '';
                 telefonoClienteInput.value = '';
@@ -155,35 +176,16 @@
                 marcaInput.value = '';
                 modeloInput.value = '';
                 problemaTextarea.value = '';
-
-                fieldsToToggleReadOnly.forEach(field => {
-                    field.readOnly = false;
-                    field.classList.remove('readonly-field');
-                });
-                problemaTextarea.readOnly = false;
-                problemaTextarea.classList.remove('readonly-field');
+                tipoDocumentoInput.value = 'DNI';
+                documentoFiscalInput.value = '';
+                direccionFiscalInput.value = '';
+                codigoPostalFiscalInput.value = '';
+                ciudadFiscalInput.value = '';
+                provinciaFiscalInput.value = 'TARRAGONA';
             }
         });
-
-        document.addEventListener('DOMContentLoaded', () => {
-             if (!presupuestoSelect.value) {
-                 fieldsToToggleReadOnly.forEach(field => {
-                    field.readOnly = false;
-                    field.classList.remove('readonly-field');
-                });
-                 problemaTextarea.readOnly = false;
-                 problemaTextarea.classList.remove('readonly-field');
-             } else {
-                 problemaTextarea.readOnly = false;
-                 problemaTextarea.classList.remove('readonly-field');
-             }
-        });
-        // --- FIN SCRIPT PRESUPUESTO ---
-    </script>
-
-    {## --- NUEVO SCRIPT PARA CHECKMARK DE FOTOS --- ##}
-    <script>
-        // Función para actualizar el estado (checkmark)
+        
+        // --- SCRIPT CHECKMARK FOTOS (MODIFICADO) ---
         function updateUploadStatus(inputId, statusId) {
             const inputElement = document.getElementById(inputId);
             const statusElement = document.getElementById(statusId);
@@ -195,20 +197,32 @@
                 }
             }
         }
+        
+        // Función para comprobar TODOS los inputs de fotos
+        function checkAllPhotoInputs() {
+            const fileInputs = document.querySelectorAll('input[type="file"][data-status-id]');
+            fileInputs.forEach(input => {
+                updateUploadStatus(input.id, input.dataset.statusId);
+            });
+        }
 
-        // Añadir el listener a cada input de archivo
         document.addEventListener('DOMContentLoaded', () => {
             const fileInputs = document.querySelectorAll('input[type="file"][data-status-id]');
             fileInputs.forEach(input => {
-                const statusId = input.dataset.statusId;
-                // Actualizar estado al cambiar el archivo
+                // 1. El listener 'change' original (funciona en desktop y a veces en móvil)
                 input.addEventListener('change', () => {
-                    updateUploadStatus(input.id, statusId);
+                    updateUploadStatus(input.id, input.dataset.statusId);
                 });
+            });
+
+            // 2. NUEVO LISTENER: Se activa cuando el usuario vuelve al navegador
+            // (después de usar la cámara)
+            window.addEventListener('focus', () => {
+                // Pequeña demora para dar tiempo al navegador a registrar el archivo
+                setTimeout(checkAllPhotoInputs, 300); 
             });
         });
     </script>
-    {## --- FIN NUEVO SCRIPT --- ##}
 
 </body>
 </html>

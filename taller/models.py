@@ -7,10 +7,38 @@ from django.db.models import Sum # <-- Asegúrate que Sum está importado
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
     telefono = models.CharField(max_length=20, unique=True)
+    
+    # --- CAMPOS AÑADIDOS ---
+    TIPO_DOCUMENTO_CHOICES = [
+        ('DNI', 'DNI'),
+        ('NIE', 'NIE'),
+        ('NIF', 'NIF (Empresas)'),
+    ]
+    tipo_documento = models.CharField(max_length=10, choices=TIPO_DOCUMENTO_CHOICES, default='DNI', null=True, blank=True)
+    documento_fiscal = models.CharField(max_length=20, null=True, blank=True, help_text="Número de DNI, NIE o NIF")
+    
+    # He dividido la dirección en campos estructurados, es mejor para las facturas
+    direccion_fiscal = models.CharField(max_length=255, null=True, blank=True, help_text="Calle, Número, Piso, Puerta")
+    codigo_postal_fiscal = models.CharField(max_length=10, null=True, blank=True)
+    ciudad_fiscal = models.CharField(max_length=100, null=True, blank=True)
+    provincia_fiscal = models.CharField(max_length=100, null=True, blank=True)
+    # --- FIN CAMPOS AÑADIDOS ---
+
     def __str__(self):
         return self.nombre
+
     def save(self, *args, **kwargs):
         self.nombre = self.nombre.upper()
+        # --- LÓGICA AÑADIDA PARA MAYÚSCULAS ---
+        if self.documento_fiscal:
+            self.documento_fiscal = self.documento_fiscal.upper()
+        if self.direccion_fiscal:
+            self.direccion_fiscal = self.direccion_fiscal.upper()
+        if self.ciudad_fiscal:
+            self.ciudad_fiscal = self.ciudad_fiscal.upper()
+        if self.provincia_fiscal:
+            self.provincia_fiscal = self.provincia_fiscal.upper()
+        # --- FIN LÓGICA AÑADIDA ---
         super(Cliente, self).save(*args, **kwargs)
 
 class Vehiculo(models.Model):

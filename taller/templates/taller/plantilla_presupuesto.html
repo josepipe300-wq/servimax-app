@@ -29,6 +29,9 @@
         .totales { margin-top: 20px; text-align: right; width: 250px; margin-left: auto; }
         .totales p { margin: 5px 0; }
         .nota { margin-top: 30px; font-size: 10px; color: #555; border-top: 1px solid #eee; padding-top: 10px;}
+        
+        /* --- ESTILO AÑADIDO PARA LOS DATOS DEL CLIENTE --- */
+        .cliente-info p { margin: 4px 0; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -41,8 +44,10 @@
                 <p>
                     <strong>Taller ServiMax</strong><br>
                     <em>Honestidad y Calidad</em><br>
-                    Polígono de Constantí<br>
-                    43120 Constantí, Tarragona<br>
+                    <strong>NIE:</strong> Y9305858A<br>
+                    <em>JOSE EVARDID MENDIETA CORTES</em><br>
+                    Carrer del Terrer 18<br>
+                    43840 Salou, Tarragona<br>
                     <strong>Teléfono:</strong> 642 99 30 63
                 </p>
             </div>
@@ -53,6 +58,14 @@
             <p>
                 <strong>Nombre:</strong> {{ presupuesto.cliente.nombre }}<br>
                 <strong>Teléfono:</strong> {{ presupuesto.cliente.telefono }}<br>
+                
+                {# --- INICIO DE LA MODIFICACIÓN --- #}
+                <strong>{{ presupuesto.cliente.get_tipo_documento_display|default:'DNI' }}:</strong> {{ presupuesto.cliente.documento_fiscal|default:'---' }}<br>
+                <strong>Dirección:</strong> {{ presupuesto.cliente.direccion_fiscal|default:'---' }}<br>
+                {{ presupuesto.cliente.codigo_postal_fiscal|default:'' }} {{ presupuesto.cliente.ciudad_fiscal|default:'' }} ({{ presupuesto.cliente.provincia_fiscal|default:'TARRAGONA' }})
+                <hr style="border: 0; border-top: 1px dashed #ccc; margin: 8px 0;">
+                {# --- FIN DE LA MODIFICACIÓN --- #}
+
                 <strong>Vehículo:</strong>
                 {% if presupuesto.vehiculo %}
                     {{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }} - {{ presupuesto.vehiculo.matricula }}

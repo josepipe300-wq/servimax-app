@@ -5,21 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Historial de Órdenes - ServiMax</title>
+    
+    {# --- INICIO MODIFICACIÓN --- #}
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
-        .container { max-width: 1200px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-        .report-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        .report-table th, .report-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        .report-table th { background-color: #e9ecef; }
-        .report-table tbody tr:hover { background-color: #f5f5f5; cursor: pointer; }
-        .filters { margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
-        .filters select, .filters button { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
-        .filters button { background-color: #007bff; color: white; cursor: pointer; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .back-btn { padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px; }
-    </style>
+    {# --- FIN MODIFICACIÓN (Style block eliminado) --- #}
+
 </head>
 <body>
     <div class="container">
@@ -79,5 +70,16 @@
             </tbody>
         </table>
     </div>
+    
+    {# Mantenemos el script de la fila clickeable #}
+    <script>
+        document.querySelectorAll('tr[onclick]').forEach(row => {
+            row.addEventListener('click', () => {
+                window.location = row.getAttribute('onclick').split("'")[1];
+            });
+            // Hacemos que el cursor sea 'pointer' desde JS por si acaso
+            row.style.cursor = 'pointer';
+        });
+    </script>
 </body>
 </html>

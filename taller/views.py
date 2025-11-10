@@ -162,15 +162,25 @@ def home(request):
     return render(request, 'taller/home.html', context)
 
 
-# --- VISTA INGRESAR VEHÍCULO ---
+# --- VISTA INGRESAR VEHÍCULO (MODIFICADA) ---
 @login_required
 def ingresar_vehiculo(request):
     if request.method == 'POST':
         if not request.user.has_perm('taller.add_ordendereparacion'):
             return HttpResponseForbidden("No tienes permiso para crear órdenes de reparación.")
 
+        # --- AÑADIDO: Obtener datos fiscales del cliente ---
         nombre_cliente = request.POST['cliente_nombre'].upper()
         telefono_cliente = request.POST['cliente_telefono']
+        
+        tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
+        documento_fiscal = request.POST.get('cliente_documento_fiscal', '')
+        direccion_fiscal = request.POST.get('cliente_direccion_fiscal', '')
+        codigo_postal_fiscal = request.POST.get('cliente_codigo_postal_fiscal', '')
+        ciudad_fiscal = request.POST.get('cliente_ciudad_fiscal', '')
+        provincia_fiscal = request.POST.get('cliente_provincia_fiscal', '')
+        # --- FIN AÑADIDO ---
+
         matricula_vehiculo = request.POST['vehiculo_matricula'].upper()
         marca_vehiculo = request.POST['vehiculo_marca'].upper()
         modelo_vehiculo = request.POST['vehiculo_modelo'].upper()
@@ -179,12 +189,23 @@ def ingresar_vehiculo(request):
         problema_reportado = request.POST['problema'].upper()
 
         with transaction.atomic():
+            # --- LÓGICA DE CLIENTE MODIFICADA ---
+            # 1. Obtener o crear el cliente por su teléfono (que es único)
             cliente, created = Cliente.objects.get_or_create(
                 telefono=telefono_cliente, defaults={'nombre': nombre_cliente}
             )
-            if not created and nombre_cliente and cliente.nombre != nombre_cliente:
-                cliente.nombre = nombre_cliente
-                cliente.save()
+            
+            # 2. Actualizar SIEMPRE los datos del cliente con la info del formulario
+            # (El .save() del modelo se encarga de pasarlo a mayúsculas)
+            cliente.nombre = nombre_cliente
+            cliente.tipo_documento = tipo_documento
+            cliente.documento_fiscal = documento_fiscal
+            cliente.direccion_fiscal = direccion_fiscal
+            cliente.codigo_postal_fiscal = codigo_postal_fiscal
+            cliente.ciudad_fiscal = ciudad_fiscal
+            cliente.provincia_fiscal = provincia_fiscal
+            cliente.save()
+            # --- FIN LÓGICA MODIFICADA ---
 
             vehiculo, v_created = Vehiculo.objects.get_or_create(
                 matricula=matricula_vehiculo,
@@ -230,9 +251,30 @@ def ingresar_vehiculo(request):
 
         return redirect('detalle_orden', orden_id=nueva_orden.id)
 
-    presupuestos_disponibles = Presupuesto.objects.filter(estado='Aceptado').select_related('cliente', 'vehiculo').order_by('-fecha_creacion')
-    context = { 'presupuestos_disponibles': presupuestos_disponibles }
+    # --- LÓGICA GET (MODIFICADA para pasar datos fiscales al JS) ---
+    # Tenemos que pasar también los datos fiscales de los clientes asociados a los presupuestos
+    presupuestos_disponibles_qs = Presupuesto.objects.filter(estado='Aceptado').select_related('cliente', 'vehiculo').order_by('-fecha_creacion')
+    
+    # Preparamos una lista para la plantilla que incluya los datos fiscales
+    presupuestos_con_datos_fiscales = []
+    for p in presupuestos_disponibles_qs:
+        presupuestos_con_datos_fiscales.append({
+            'presupuesto': p,
+            'cliente_data': {
+                'tipo_documento': p.cliente.tipo_documento or 'DNI',
+                'documento_fiscal': p.cliente.documento_fiscal or '',
+                'direccion_fiscal': p.cliente.direccion_fiscal or '',
+                'codigo_postal_fiscal': p.cliente.codigo_postal_fiscal or '',
+                'ciudad_fiscal': p.cliente.ciudad_fiscal or '',
+                'provincia_fiscal': p.cliente.provincia_fiscal or 'TARRAGONA',
+            }
+        })
+    
+    # Pasamos la nueva lista al contexto
+    context = { 'presupuestos_disponibles_data': presupuestos_con_datos_fiscales }
     return render(request, 'taller/ingresar_vehiculo.html', context)
+# --- FIN VISTA INGRESAR VEHÍCULO ---
+
 
 # --- VISTA AÑADIR GASTO (Corregida) ---
 @login_required
@@ -380,25 +422,54 @@ def stock_inicial_consumible(request):
     context = { 'tipos_consumible': tipos_consumible }
     return render(request, 'taller/stock_inicial_consumible.html', context)
 
-# --- VISTA CREAR PRESUPUESTO ---
+# --- VISTA CREAR PRESUPUESTO (MODIFICADA) ---
 @login_required
 def crear_presupuesto(request):
     if request.method == 'POST':
         if not request.user.has_perm('taller.add_presupuesto'):
             return HttpResponseForbidden("No tienes permiso para crear presupuestos.")
 
-        cliente_id = request.POST.get('cliente_existente'); nombre_cliente_form = request.POST.get('cliente_nombre', '').upper(); telefono_cliente_form = request.POST.get('cliente_telefono', '')
+        cliente_id = request.POST.get('cliente_existente')
+        # --- AÑADIDO: Obtener datos fiscales ---
+        nombre_cliente_form = request.POST.get('cliente_nombre', '').upper()
+        telefono_cliente_form = request.POST.get('cliente_telefono', '')
+        
+        tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
+        documento_fiscal = request.POST.get('cliente_documento_fiscal', '')
+        direccion_fiscal = request.POST.get('cliente_direccion_fiscal', '')
+        codigo_postal_fiscal = request.POST.get('cliente_codigo_postal_fiscal', '')
+        ciudad_fiscal = request.POST.get('cliente_ciudad_fiscal', '')
+        provincia_fiscal = request.POST.get('cliente_provincia_fiscal', '')
+        # --- FIN AÑADIDO ---
+        
         cliente = None; created = False
         try: # Usar transacción para la creación completa
             with transaction.atomic():
                 if cliente_id:
+                    # Usuario seleccionó un cliente existente
                     try: cliente = Cliente.objects.get(id=cliente_id)
                     except Cliente.DoesNotExist: pass
+                
                 elif nombre_cliente_form and telefono_cliente_form:
-                    try:
-                        cliente = Cliente.objects.get(telefono=telefono_cliente_form)
-                        if nombre_cliente_form and cliente.nombre != nombre_cliente_form: cliente.nombre = nombre_cliente_form; cliente.save()
-                    except Cliente.DoesNotExist: cliente = Cliente.objects.create(nombre=nombre_cliente_form, telefono=telefono_cliente_form); created = True
+                    # Usuario está creando un cliente nuevo (o actualizando uno existente por teléfono)
+                    # --- LÓGICA DE CLIENTE MODIFICADA (Igual a ingresar_vehiculo) ---
+                    # 1. Obtener o crear por teléfono
+                    cliente, created = Cliente.objects.get_or_create(
+                        telefono=telefono_cliente_form, 
+                        defaults={'nombre': nombre_cliente_form}
+                    )
+                    
+                    # 2. Actualizar todos los datos desde el formulario
+                    cliente.nombre = nombre_cliente_form
+                    cliente.tipo_documento = tipo_documento
+                    cliente.documento_fiscal = documento_fiscal
+                    cliente.direccion_fiscal = direccion_fiscal
+                    cliente.codigo_postal_fiscal = codigo_postal_fiscal
+                    cliente.ciudad_fiscal = ciudad_fiscal
+                    cliente.provincia_fiscal = provincia_fiscal
+                    cliente.save() # El modelo se encarga de .upper()
+                    # --- FIN LÓGICA MODIFICADA ---
+
                 if not cliente: return HttpResponse("Error: Cliente inválido o no proporcionado.", status=400)
 
                 vehiculo_id = request.POST.get('vehiculo_existente'); matricula_nueva = request.POST.get('matricula_nueva', '').upper(); marca_nueva = request.POST.get('marca_nueva', '').upper(); modelo_nuevo = request.POST.get('modelo_nuevo', '').upper()
@@ -408,10 +479,7 @@ def crear_presupuesto(request):
                         vehiculo = Vehiculo.objects.get(id=vehiculo_id)
                         if vehiculo.cliente != cliente: vehiculo.cliente = cliente; vehiculo.save()
                     except Vehiculo.DoesNotExist: pass
-                # Validar que si no hay vehiculo_id, se proporcionen datos nuevos (opcional, depende de si quieres permitir presupuestos sin vehículo)
-                # elif not matricula_nueva:
-                #    return HttpResponse("Error: Debes seleccionar un vehículo existente o introducir datos de uno nuevo.", status=400)
-
+                
                 problema = request.POST.get('problema_o_trabajo', '').upper()
                 presupuesto = Presupuesto.objects.create(cliente=cliente, vehiculo=vehiculo,
                     matricula_nueva=matricula_nueva if not vehiculo and matricula_nueva else None,
@@ -427,26 +495,24 @@ def crear_presupuesto(request):
                             cantidad = Decimal(cantidades_linea[i]); precio_unitario = Decimal(precios_linea[i])
                             if cantidad <= 0 or precio_unitario < 0: continue
                             linea_total = cantidad * precio_unitario; total_estimado_calculado += linea_total
-                            # Asegurar permiso para añadir líneas dentro del bucle
+                            
                             if not request.user.has_perm('taller.add_lineapresupuesto'):
                                 raise PermissionError("No tienes permiso para añadir líneas al presupuesto.")
 
                             LineaPresupuesto.objects.create(presupuesto=presupuesto, tipo=tipos_linea[i], descripcion=descripciones_linea[i].upper(), cantidad=cantidad, precio_unitario_estimado=precio_unitario)
                             lineas_creadas = True
                         except (ValueError, TypeError, Decimal.InvalidOperation):
-                            # Podríamos añadir un mensaje aquí o simplemente ignorar la línea inválida
                             pass
                         except PermissionError as pe:
-                            raise # Re-lanzar para que lo capture el bloque exterior
+                            raise 
 
                 presupuesto.total_estimado = total_estimado_calculado; presupuesto.save()
                 return redirect('detalle_presupuesto', presupuesto_id=presupuesto.id)
-        except PermissionError as pe: # Capturar error de permiso fuera del bucle
+        
+        except PermissionError as pe: 
              return HttpResponseForbidden(str(pe))
-        except Exception as e: # Capturar otros errores inesperados
-             # messages.error(request, f"Error inesperado al crear presupuesto: {e}") # Si usas messages
-             print(f"Error inesperado al crear presupuesto: {e}") # Log simple
-             # Redirigir a la misma página para que el usuario vea los datos que introdujo
+        except Exception as e: 
+             print(f"Error inesperado al crear presupuesto: {e}") 
              clientes = Cliente.objects.all().order_by('nombre'); vehiculos = Vehiculo.objects.select_related('cliente').order_by('matricula'); tipos_linea = LineaFactura.TIPO_CHOICES
              context = { 'clientes': clientes, 'vehiculos': vehiculos, 'tipos_linea': tipos_linea, 'error_message': f"Error: {e}" }
              return render(request, 'taller/crear_presupuesto.html', context, status=500)
@@ -454,8 +520,29 @@ def crear_presupuesto(request):
 
     # --- Lógica GET ---
     clientes = Cliente.objects.all().order_by('nombre'); vehiculos = Vehiculo.objects.select_related('cliente').order_by('matricula'); tipos_linea = LineaFactura.TIPO_CHOICES
-    context = { 'clientes': clientes, 'vehiculos': vehiculos, 'tipos_linea': tipos_linea }
+    
+    # --- AÑADIDO: Pasar datos fiscales de clientes al JS del formulario ---
+    # Necesitamos esto para la función JS 'toggleNuevoCliente'
+    clientes_con_datos_fiscales = []
+    for cliente in clientes:
+        clientes_con_datos_fiscales.append({
+            'cliente': cliente,
+            'cliente_data_json': json.dumps({
+                'tipo_documento': cliente.tipo_documento or 'DNI',
+                'documento_fiscal': cliente.documento_fiscal or '',
+                'direccion_fiscal': cliente.direccion_fiscal or '',
+                'codigo_postal_fiscal': cliente.codigo_postal_fiscal or '',
+                'ciudad_fiscal': cliente.ciudad_fiscal or '',
+                'provincia_fiscal': cliente.provincia_fiscal or 'TARRAGONA',
+            })
+        })
+    # --- FIN AÑADIDO ---
+    
+    # Pasamos la nueva lista al contexto
+    context = { 'clientes_data': clientes_con_datos_fiscales, 'vehiculos': vehiculos, 'tipos_linea': tipos_linea }
     return render(request, 'taller/crear_presupuesto.html', context)
+# --- FIN VISTA CREAR PRESUPUESTO ---
+
 
 # --- VISTA LISTA PRESUPUESTOS ---
 @login_required
@@ -521,18 +608,43 @@ def editar_presupuesto(request, presupuesto_id):
                 presupuesto_id_original = presupuesto.id
                 LineaPresupuesto.objects.filter(presupuesto=presupuesto).delete()
                 presupuesto.delete()
+                
+                # --- LÓGICA DE RE-CREACIÓN (MODIFICADA para incluir campos fiscales) ---
+                
+                cliente_id = request.POST.get('cliente_existente')
+                nombre_cliente_form = request.POST.get('cliente_nombre', '').upper()
+                telefono_cliente_form = request.POST.get('cliente_telefono', '')
 
-                # (Recreación del presupuesto y líneas...)
-                cliente_id = request.POST.get('cliente_existente'); nombre_cliente_form = request.POST.get('cliente_nombre', '').upper(); telefono_cliente_form = request.POST.get('cliente_telefono', '')
+                # --- AÑADIDO: Obtener datos fiscales ---
+                tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
+                documento_fiscal = request.POST.get('cliente_documento_fiscal', '')
+                direccion_fiscal = request.POST.get('cliente_direccion_fiscal', '')
+                codigo_postal_fiscal = request.POST.get('cliente_codigo_postal_fiscal', '')
+                ciudad_fiscal = request.POST.get('cliente_ciudad_fiscal', '')
+                provincia_fiscal = request.POST.get('cliente_provincia_fiscal', '')
+                # --- FIN AÑADIDO ---
+                
                 cliente = None
                 if cliente_id:
                     try: cliente = Cliente.objects.get(id=cliente_id)
                     except Cliente.DoesNotExist: pass
+                
                 elif nombre_cliente_form and telefono_cliente_form:
-                    try:
-                        cliente = Cliente.objects.get(telefono=telefono_cliente_form)
-                        if nombre_cliente_form and cliente.nombre != nombre_cliente_form: cliente.nombre = nombre_cliente_form; cliente.save()
-                    except Cliente.DoesNotExist: cliente = Cliente.objects.create(nombre=nombre_cliente_form, telefono=telefono_cliente_form)
+                    # --- LÓGICA MODIFICADA (Igual a crear_presupuesto) ---
+                    cliente, created = Cliente.objects.get_or_create(
+                        telefono=telefono_cliente_form,
+                        defaults={'nombre': nombre_cliente_form}
+                    )
+                    cliente.nombre = nombre_cliente_form
+                    cliente.tipo_documento = tipo_documento
+                    cliente.documento_fiscal = documento_fiscal
+                    cliente.direccion_fiscal = direccion_fiscal
+                    cliente.codigo_postal_fiscal = codigo_postal_fiscal
+                    cliente.ciudad_fiscal = ciudad_fiscal
+                    cliente.provincia_fiscal = provincia_fiscal
+                    cliente.save()
+                    # --- FIN LÓGICA MODIFICADA ---
+
                 if not cliente: raise ValueError("Error: Cliente inválido.")
 
                 vehiculo_id = request.POST.get('vehiculo_existente'); matricula_nueva = request.POST.get('matricula_nueva', '').upper(); marca_nueva = request.POST.get('marca_nueva', '').upper(); modelo_nuevo = request.POST.get('modelo_nuevo', '').upper()
@@ -549,7 +661,7 @@ def editar_presupuesto(request, presupuesto_id):
                     matricula_nueva=matricula_nueva if not vehiculo and matricula_nueva else None,
                     marca_nueva=marca_nueva if not vehiculo and marca_nueva else None,
                     modelo_nuevo=modelo_nuevo if not vehiculo and modelo_nuevo else None,
-                    problema_o_trabajo=problema, estado='Pendiente')
+                    problema_o_trabajo=problema, estado='Pendiente') # Se recrea como Pendiente
 
                 tipos_linea = request.POST.getlist('linea_tipo'); descripciones_linea = request.POST.getlist('linea_descripcion'); cantidades_linea = request.POST.getlist('linea_cantidad'); precios_linea = request.POST.getlist('linea_precio_unitario')
                 total_estimado_calculado = Decimal('0.00')
@@ -564,15 +676,40 @@ def editar_presupuesto(request, presupuesto_id):
                 nuevo_presupuesto.total_estimado = total_estimado_calculado; nuevo_presupuesto.save()
                 return redirect('detalle_presupuesto', presupuesto_id=nuevo_presupuesto.id)
         except Exception as e:
+            # Si algo falla, volvemos a la página de edición original
             return redirect('editar_presupuesto', presupuesto_id=presupuesto_id_original)
 
-    # --- Lógica GET ---
+    # --- Lógica GET (MODIFICADA para pasar datos fiscales) ---
     clientes = Cliente.objects.all().order_by('nombre'); vehiculos = Vehiculo.objects.select_related('cliente').order_by('matricula'); tipos_linea = LineaFactura.TIPO_CHOICES
+    
+    # --- AÑADIDO: Pasar datos fiscales de clientes al JS ---
+    clientes_con_datos_fiscales = []
+    for cliente in clientes:
+        clientes_con_datos_fiscales.append({
+            'cliente': cliente,
+            'cliente_data_json': json.dumps({
+                'tipo_documento': cliente.tipo_documento or 'DNI',
+                'documento_fiscal': cliente.documento_fiscal or '',
+                'direccion_fiscal': cliente.direccion_fiscal or '',
+                'codigo_postal_fiscal': cliente.codigo_postal_fiscal or '',
+                'ciudad_fiscal': cliente.ciudad_fiscal or '',
+                'provincia_fiscal': cliente.provincia_fiscal or 'TARRAGONA',
+            })
+        })
+    # --- FIN AÑADIDO ---
+    
     lineas_existentes_list = []
     for linea in presupuesto.lineas.all():
         linea_data = { 'tipo': linea.tipo, 'descripcion': linea.descripcion, 'cantidad': float(linea.cantidad), 'precio_unitario_estimado': float(linea.precio_unitario_estimado) }
         lineas_existentes_list.append(linea_data)
-    context = { 'presupuesto_existente': presupuesto, 'clientes': clientes, 'vehiculos': vehiculos, 'tipos_linea': tipos_linea, 'lineas_existentes_json': json.dumps(lineas_existentes_list) }
+        
+    context = { 
+        'presupuesto_existente': presupuesto, 
+        'clientes_data': clientes_con_datos_fiscales, # Modificado
+        'vehiculos': vehiculos, 
+        'tipos_linea': tipos_linea, 
+        'lineas_existentes_json': json.dumps(lineas_existentes_list) 
+    }
     return render(request, 'taller/editar_presupuesto.html', context)
 
 
@@ -815,7 +952,7 @@ def generar_factura(request, orden_id):
     return redirect('detalle_orden', orden_id=orden.id)
 
 
-# --- VISTA VER FACTURA PDF ---
+# --- VISTA VER FACTURA PDF (MODIFICADA para mostrar datos fiscales) ---
 @login_required
 def ver_factura_pdf(request, factura_id):
     factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=factura_id)
@@ -832,7 +969,20 @@ def ver_factura_pdf(request, factura_id):
     lineas_ordenadas_agrupadas = []
     for tipo in orden_tipos: lineas_ordenadas_agrupadas.extend(lineas_agrupadas[tipo])
     lineas_ordenadas_agrupadas.extend(otros_tipos)
-    context = { 'factura': factura, 'cliente': cliente, 'vehiculo': vehiculo, 'lineas': lineas_ordenadas_agrupadas, 'abonos': abonos, 'pendiente': pendiente, 'STATIC_URL': settings.STATIC_URL, 'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') }
+    
+    # --- AÑADIDO: Contexto para plantilla_factura.html (los datos fiscales ya están en 'cliente') ---
+    context = { 
+        'factura': factura, 
+        'cliente': cliente, # El objeto cliente ya tiene los campos fiscales
+        'vehiculo': vehiculo, 
+        'lineas': lineas_ordenadas_agrupadas, 
+        'abonos': abonos, 
+        'pendiente': pendiente, 
+        'STATIC_URL': settings.STATIC_URL, 
+        'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') 
+    }
+    # --- FIN AÑADIDO ---
+    
     template_path = 'taller/plantilla_factura.html'; template = get_template(template_path); html = template.render(context)
     response = HttpResponse(content_type='application/pdf')
     matricula_filename = factura.orden.vehiculo.matricula if factura.orden.vehiculo else 'SIN_MATRICULA'
@@ -854,6 +1004,7 @@ def ver_factura_pdf(request, factura_id):
     pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
     if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
     return response
+# --- FIN VISTA PDF ---
 
 
 # --- VISTA EDITAR FACTURA ---
@@ -874,23 +1025,12 @@ def editar_factura(request, factura_id):
         with transaction.atomic():
             UsoConsumible.objects.filter(orden=orden).delete()
             factura.delete()
-        # Pasar la request original a generar_factura
-        # No podemos pasar request directamente porque es un WSGIRequest en editar_factura
-        # y generar_factura espera un HttpRequest. Usaremos request._request si está disponible
-        # o crearemos una nueva si no (menos ideal). Lo más seguro es redirigir a una URL GET
-        # que llame a generar_factura, pero eso complica el flujo.
-        # Por simplicidad, intentaremos llamar directamente, aunque podría fallar
-        # si generar_factura depende mucho del tipo exacto de request.
-        # ¡OJO! Lo ideal sería refactorizar generar_factura para que acepte datos
-        # en lugar de depender directamente de request.POST
+        
         try:
-             # Pasamos el request original (HttpRequest) si está disponible
              original_request = getattr(request, '_request', request)
              return generar_factura(original_request, orden.id)
         except Exception as e:
-             # Manejar posible error si generar_factura falla
              print(f"Error al llamar a generar_factura desde editar_factura: {e}")
-             # Redirigir de vuelta al detalle de la orden como fallback
              return redirect('detalle_orden', orden_id=orden.id)
 
 
@@ -1244,7 +1384,15 @@ def ver_presupuesto_pdf(request, presupuesto_id):
          return HttpResponseForbidden("No tienes permiso para ver presupuestos.")
 
     lineas = presupuesto.lineas.all()
-    context = { 'presupuesto': presupuesto, 'lineas': lineas, 'STATIC_URL': settings.STATIC_URL, 'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') }
+    # --- AÑADIDO: Contexto para plantilla_presupuesto.html (los datos fiscales ya están en 'cliente') ---
+    context = { 
+        'presupuesto': presupuesto, 
+        'lineas': lineas, 
+        'STATIC_URL': settings.STATIC_URL, 
+        'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') 
+    }
+    # --- FIN AÑADIDO ---
+    
     template_path = 'taller/plantilla_presupuesto.html'; template = get_template(template_path); html = template.render(context)
     response = HttpResponse(content_type='application/pdf')
     matricula_filename = presupuesto.vehiculo.matricula if presupuesto.vehiculo else presupuesto.matricula_nueva if presupuesto.matricula_nueva else 'SIN_VEHICULO'
