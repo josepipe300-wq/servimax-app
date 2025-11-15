@@ -4,14 +4,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editar Factura #{{ factura_existente.id }} - ServiMax</title>
+    
+    {# --- INICIO DE LA MODIFICACIÓN (Título) --- #}
+    <title>Editar {% if factura_existente.es_factura %}Factura Nº {{ factura_existente.numero_factura }}{% else %}Recibo Nº {{ factura_existente.id }}{% endif %} - ServiMax</title>
+    {# --- FIN DE LA MODIFICACIÓN --- #}
+    
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
 </head>
 <body>
     <div class="form-container"> 
         <div class="header">
-            <h1>Editando {% if factura_existente.es_factura %}Factura{% else %}Recibo{% endif %} #{{ factura_existente.id }}</h1>
+            
+            {# --- INICIO DE LA MODIFICACIÓN (Título H1) --- #}
+            <h1>Editando {% if factura_existente.es_factura %}Factura Nº {{ factura_existente.numero_factura }}{% else %}Recibo Nº {{ factura_existente.id }}{% endif %}</h1>
+            {# --- FIN DE LA MODIFICACIÓN --- #}
+            
             <a href="{% url 'detalle_orden' orden.id %}" class="back-btn">← Cancelar y Volver</a>
         </div>
         <hr>
@@ -33,7 +41,7 @@
             <h4>Consumibles</h4>
             <div id="consumibles-container">
             </div>
-            <button type="button" id="add-consumible-btn" class="btn-add">+ Añadir Consumible</button>
+            <button type="button" id="add-consumible-btn" class="btn-add" style="margin-bottom: 20px;">+ Añadir Consumible</button>
             
             <h4 style="margin-top: 20px;">Mano de Obra</h4>
             <div id="mano-de-obra-container">

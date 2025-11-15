@@ -6,10 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalle Orden #{{ orden.id }} - ServiMax</title>
     
-    {# --- INICIO DE LA MODIFICACIÓN --- #}
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    {# --- FIN DE LA MODIFICACIÓN (el bloque <style> se ha eliminado) --- #}
 
 </head>
 <body>
@@ -21,11 +19,10 @@
         <p><strong>Estado Actual:</strong> <span style="background-color: #007bff; color: white; padding: 5px 10px; border-radius: 5px;">{{ orden.estado }}</span></p>
         <hr>
 
-        {# --- ESTE ES EL BLOQUE QUE MODIFICAMOS ANTES --- #}
         <div class="financial-summary">
             <h3>Resumen Financiero</h3>
             {% if factura %}
-                <p><strong>Total {% if factura.es_factura %}Factura{% else %}Recibo{% endif %}:</strong> {{ factura.total_final|floatformat:2 }} €</p>
+                <p><strong>Total {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}:</strong> {{ factura.total_final|floatformat:2 }} €</p>
                 <p><strong>Total Pagado (Abonos):</strong> {{ abonos|floatformat:2 }} €</p>
                 <p><strong>Pendiente de Pago:</strong> <strong style="color: #dc3545;">{{ pendiente_pago|floatformat:2 }} €</strong></p>
             {% else %}
@@ -37,7 +34,6 @@
                 {% endif %}
             {% endif %}
         </div>
-        {# --- FIN DEL BLOQUE --- #}
 
         <div class="info-grid">
             <div class="info-item"><strong>Cliente:</strong> {{ orden.cliente.nombre }} ({{ orden.cliente.telefono }})</div>
@@ -96,8 +92,12 @@
         {% if factura %}
             <div class="factura-form">
                 <h2>Documento Generado</h2>
-                <a href="{% url 'ver_factura_pdf' factura.id %}" class="btn-pdf" target="_blank">📄 Ver {% if factura.es_factura %}Factura{% else %}Recibo{% endif %} PDF</a>
-                <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">Modificar {% if factura.es_factura %}Factura{% else %}Recibo{% endif %}</a>
+                
+                {# --- INICIO DE LA MODIFICACIÓN (Botones) --- #}
+                <a href="{% url 'ver_factura_pdf' factura.id %}" class="btn-pdf" target="_blank">📄 Ver {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %} PDF</a>
+                <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">Modificar {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}</a>
+                {# --- FIN DE LA MODIFICACIÓN --- #}
+            
             </div>
         {% else %}
             <div class="factura-form">
@@ -119,7 +119,7 @@
                     <h4>Consumibles</h4>
                     <div id="consumibles-container">
                     </div>
-                    <button type="button" id="add-consumible-btn" style="width: auto; margin-bottom: 20px;">+ Añadir Consumible</button>
+                    <button type="button" id="add-consumible-btn" class="btn-add" style="margin-bottom: 20px;">+ Añadir Consumible</button>
 
                     
                     <h4>Mano de Obra</h4>
@@ -129,7 +129,7 @@
                             <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required>
                         </div>
                     </div>
-                    <button type="button" id="add-mano-obra" style="width: auto;">+ Añadir línea de trabajo</button>
+                    <button type="button" id="add-mano-obra" class="btn-add">+ Añadir línea de trabajo</button>
                     
                     <h4 style="margin-top: 20px;">Notas para el Cliente (Opcional)</h4>
                     <textarea name="notas_cliente" placeholder="Añadir observaciones, garantía, próximos mantenimientos, etc."></textarea>

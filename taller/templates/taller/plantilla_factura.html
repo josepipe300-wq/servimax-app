@@ -3,7 +3,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>{% if factura.es_factura %}Factura{% else %}Recibo{% endif %} #{{ factura.id }}</title>
+    <title>{% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}</title>
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <style>
         @page { size: a4 portrait; margin: 1.5cm; }
@@ -33,10 +33,16 @@
     <div class="container">
         <div class="header-container">
             <div class="info-factura">
-                <h2>{% if factura.es_factura %}Factura{% else %}Recibo{% endif %}</h2>
-                <p><strong>Número:</strong> {{ factura.id }}<br><strong>Fecha:</strong> {{ factura.fecha_emision|date:"d/m/Y" }}</p>
                 
-                {# --- INICIO DE LA MODIFICACIÓN (Datos del Taller) --- #}
+                {# --- INICIO DE LA MODIFICACIÓN (Nº de Factura/Recibo) --- #}
+                <h2>{% if factura.es_factura %}Factura{% else %}Recibo{% endif %}</h2>
+                <p>
+                    <strong>{% if factura.es_factura %}Factura Nº:{% else %}Recibo Nº:{% endif %}</strong> 
+                    {% if factura.es_factura %}{{ factura.numero_factura }}{% else %}{{ factura.id }}{% endif %}<br>
+                    <strong>Fecha:</strong> {{ factura.fecha_emision|date:"d/m/Y" }}
+                </p>
+                {# --- FIN DE LA MODIFICACIÓN --- #}
+                
                 <p>
                     <strong>Taller ServiMax</strong><br>
                     <em>Honestidad y Calidad</em><br>
@@ -50,7 +56,6 @@
                     
                     <strong>Teléfono:</strong> 642 99 30 63
                 </p>
-                {# --- FIN DE LA MODIFICACIÓN --- #}
             </div>
         </div>
 
@@ -60,14 +65,12 @@
                 <strong>Nombre:</strong> {{ cliente.nombre }}<br>
                 <strong>Teléfono:</strong> {{ cliente.telefono }}<br>
                 
-                {# --- INICIO DE LA MODIFICACIÓN (Datos del Cliente) --- #}
                 {% if factura.es_factura %}
                 <strong>{{ cliente.get_tipo_documento_display|default:'DNI' }}:</strong> {{ cliente.documento_fiscal|default:'---' }}<br>
                 <strong>Dirección:</strong> {{ cliente.direccion_fiscal|default:'---' }}<br>
                 {{ cliente.codigo_postal_fiscal|default:'' }} {{ cliente.ciudad_fiscal|default:'' }} ({{ cliente.provincia_fiscal|default:'TARRAGONA' }})
                 <hr style="border: 0; border-top: 1px dashed #ccc; margin: 8px 0;">
                 {% endif %}
-                {# --- FIN DE LA MODIFICACIÓN --- #}
                 
                 <strong>Vehículo:</strong> {{ vehiculo.marca }} {{ vehiculo.modelo }} - {{ vehiculo.matricula }}<br>
                 <strong>Kilometraje:</strong> {{ vehiculo.kilometraje }} km

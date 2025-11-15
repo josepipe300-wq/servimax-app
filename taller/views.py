@@ -252,10 +252,8 @@ def ingresar_vehiculo(request):
         return redirect('detalle_orden', orden_id=nueva_orden.id)
 
     # --- LÓGICA GET (MODIFICADA para pasar datos fiscales al JS) ---
-    # Tenemos que pasar también los datos fiscales de los clientes asociados a los presupuestos
     presupuestos_disponibles_qs = Presupuesto.objects.filter(estado='Aceptado').select_related('cliente', 'vehiculo').order_by('-fecha_creacion')
     
-    # Preparamos una lista para la plantilla que incluya los datos fiscales
     presupuestos_con_datos_fiscales = []
     for p in presupuestos_disponibles_qs:
         presupuestos_con_datos_fiscales.append({
@@ -270,7 +268,6 @@ def ingresar_vehiculo(request):
             }
         })
     
-    # Pasamos la nueva lista al contexto
     context = { 'presupuestos_disponibles_data': presupuestos_con_datos_fiscales }
     return render(request, 'taller/ingresar_vehiculo.html', context)
 # --- FIN VISTA INGRESAR VEHÍCULO ---
@@ -522,7 +519,6 @@ def crear_presupuesto(request):
     clientes = Cliente.objects.all().order_by('nombre'); vehiculos = Vehiculo.objects.select_related('cliente').order_by('matricula'); tipos_linea = LineaFactura.TIPO_CHOICES
     
     # --- AÑADIDO: Pasar datos fiscales de clientes al JS del formulario ---
-    # Necesitamos esto para la función JS 'toggleNuevoCliente'
     clientes_con_datos_fiscales = []
     for cliente in clientes:
         clientes_con_datos_fiscales.append({
@@ -538,7 +534,6 @@ def crear_presupuesto(request):
         })
     # --- FIN AÑADIDO ---
     
-    # Pasamos la nueva lista al contexto
     context = { 'clientes_data': clientes_con_datos_fiscales, 'vehiculos': vehiculos, 'tipos_linea': tipos_linea }
     return render(request, 'taller/crear_presupuesto.html', context)
 # --- FIN VISTA CREAR PRESUPUESTO ---
@@ -590,7 +585,7 @@ def detalle_presupuesto(request, presupuesto_id):
     context = { 'presupuesto': presupuesto, 'lineas': presupuesto.lineas.all(), 'estados_posibles': Presupuesto.ESTADO_CHOICES, 'orden_generada': orden_generada }
     return render(request, 'taller/detalle_presupuesto.html', context)
 
-# --- VISTA EDITAR PRESUPUESTO ---
+# --- VISTA EDITAR PRESUPUESTO (MODIFICADA) ---
 @login_required
 def editar_presupuesto(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
@@ -711,6 +706,7 @@ def editar_presupuesto(request, presupuesto_id):
         'lineas_existentes_json': json.dumps(lineas_existentes_list) 
     }
     return render(request, 'taller/editar_presupuesto.html', context)
+# --- FIN VISTA EDITAR PRESUPUESTO ---
 
 
 # --- VISTA LISTA ORDENES (MODIFICADA) ---
@@ -869,8 +865,7 @@ def editar_movimiento(request, tipo, movimiento_id):
         return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
 
 
-
-# --- VISTA GENERAR FACTURA ---
+# --- VISTA GENERAR FACTURA (MODIFICADA para numeración) ---
 @login_required
 def generar_factura(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo'), id=orden_id)
@@ -885,21 +880,44 @@ def generar_factura(request, orden_id):
             return HttpResponseForbidden("No tienes permiso para generar o reemplazar facturas.")
 
         es_factura = 'aplicar_iva' in request.POST
-        # --- CAMBIO AQUÍ: OBTENER LAS NOTAS ---
         notas = request.POST.get('notas_cliente', '')
-        # -------------------------------------
 
         with transaction.atomic():
+            # Borramos la factura/recibo anterior si existe
             Factura.objects.filter(orden=orden).delete()
+            # Borramos los usos de consumibles asociados para volver a crearlos
             UsoConsumible.objects.filter(orden=orden).delete()
 
-            # --- CAMBIO AQUÍ: GUARDAR LAS NOTAS AL CREAR ---
-            factura = Factura.objects.create(orden=orden, es_factura=es_factura, notas_cliente=notas)
-            # ---------------------------------------------
+            # --- INICIO DE LA NUEVA LÓGICA DE NÚMERO ---
+            nuevo_numero_factura = None
+            if es_factura:
+                # 1. Buscamos la última factura real (no recibo)
+                # .select_for_update() bloquea la tabla para evitar que dos personas
+                # creen el mismo número a la vez (evita "race conditions").
+                ultima_factura = Factura.objects.select_for_update().filter(
+                    numero_factura__isnull=False
+                ).order_by('-numero_factura').first()
+                
+                if ultima_factura and ultima_factura.numero_factura:
+                    # 2. Si existe, le sumamos 1
+                    nuevo_numero_factura = ultima_factura.numero_factura + 1
+                else:
+                    # 3. Si no existe ninguna, esta es la factura #1
+                    nuevo_numero_factura = 1
+            
+            # 4. Creamos la factura asignando el nuevo número (o None si es un recibo)
+            factura = Factura.objects.create(
+                orden=orden, 
+                es_factura=es_factura, 
+                notas_cliente=notas,
+                numero_factura=nuevo_numero_factura 
+            )
+            # --- FIN DE LA NUEVA LÓGICA DE NÚMERO ---
             
             subtotal = Decimal('0.00')
             repuestos_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
             gastos_otros_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Otros')
+            
             for repuesto in repuestos_qs:
                 pvp_str = request.POST.get(f'pvp_repuesto_{repuesto.id}')
                 if pvp_str:
@@ -909,6 +927,7 @@ def generar_factura(request, orden_id):
                         subtotal += pvp
                         LineaFactura.objects.create(factura=factura, tipo='Repuesto', descripcion=repuesto.descripcion, cantidad=1, precio_unitario=pvp)
                     except (ValueError, TypeError, Decimal.InvalidOperation): pass
+            
             for gasto_otro in gastos_otros_qs:
                 pvp_str = request.POST.get(f'pvp_otro_{gasto_otro.id}')
                 if pvp_str:
@@ -918,6 +937,7 @@ def generar_factura(request, orden_id):
                         subtotal += pvp
                         LineaFactura.objects.create(factura=factura, tipo='Externo', descripcion=gasto_otro.descripcion, cantidad=1, precio_unitario=pvp)
                     except (ValueError, TypeError, Decimal.InvalidOperation): pass
+            
             tipos_consumible_id = request.POST.getlist('tipo_consumible'); cantidades_consumible = request.POST.getlist('consumible_cantidad'); pvps_consumible = request.POST.getlist('consumible_pvp_total')
             for i in range(len(tipos_consumible_id)):
                 if tipos_consumible_id[i] and cantidades_consumible[i] and pvps_consumible[i]:
@@ -928,6 +948,7 @@ def generar_factura(request, orden_id):
                         LineaFactura.objects.create(factura=factura, tipo='Consumible', descripcion=tipo.nombre, cantidad=cantidad, precio_unitario=precio_unitario_calculado)
                         UsoConsumible.objects.create(orden=orden, tipo=tipo, cantidad_usada=cantidad)
                     except (TipoConsumible.DoesNotExist, ValueError, TypeError, Decimal.InvalidOperation, ZeroDivisionError): pass
+            
             descripciones_mo = request.POST.getlist('mano_obra_desc'); importes_mo = request.POST.getlist('mano_obra_importe')
             for desc, importe_str in zip(descripciones_mo, importes_mo):
                 if desc and importe_str:
@@ -943,13 +964,13 @@ def generar_factura(request, orden_id):
             total_final = subtotal_positivo + iva_calculado
             factura.subtotal = subtotal; factura.iva = iva_calculado; factura.total_final = total_final
             
-            # El .save() aquí guardará las notas y las pondrá en mayúsculas (por el método del modelo)
             factura.save() 
             
             orden.estado = 'Listo para Recoger'; orden.save()
             return redirect('detalle_orden', orden_id=orden.id)
 
     return redirect('detalle_orden', orden_id=orden.id)
+# --- FIN VISTA GENERAR FACTURA ---
 
 
 # --- VISTA VER FACTURA PDF (MODIFICADA para mostrar datos fiscales) ---
@@ -970,10 +991,9 @@ def ver_factura_pdf(request, factura_id):
     for tipo in orden_tipos: lineas_ordenadas_agrupadas.extend(lineas_agrupadas[tipo])
     lineas_ordenadas_agrupadas.extend(otros_tipos)
     
-    # --- AÑADIDO: Contexto para plantilla_factura.html (los datos fiscales ya están en 'cliente') ---
     context = { 
         'factura': factura, 
-        'cliente': cliente, # El objeto cliente ya tiene los campos fiscales
+        'cliente': cliente, 
         'vehiculo': vehiculo, 
         'lineas': lineas_ordenadas_agrupadas, 
         'abonos': abonos, 
@@ -981,7 +1001,6 @@ def ver_factura_pdf(request, factura_id):
         'STATIC_URL': settings.STATIC_URL, 
         'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') 
     }
-    # --- FIN AÑADIDO ---
     
     template_path = 'taller/plantilla_factura.html'; template = get_template(template_path); html = template.render(context)
     response = HttpResponse(content_type='application/pdf')
@@ -1059,7 +1078,6 @@ def editar_factura(request, factura_id):
 # --- INFORMES (Solo lectura, @login_required por consistencia) ---
 @login_required
 def informe_rentabilidad(request):
-    # ... (Lógica existente) ...
     periodo = request.GET.get('periodo', 'mes'); hoy = timezone.now().date()
     facturas_qs = Factura.objects.select_related('orden__vehiculo').prefetch_related('lineas', 'orden__vehiculo__gasto_set')
     ingresos_grua_qs = Ingreso.objects.filter(categoria='Grua'); otras_ganancias_qs = Ingreso.objects.filter(categoria='Otras Ganancias')
@@ -1102,7 +1120,6 @@ def informe_rentabilidad(request):
 
 @login_required
 def detalle_ganancia_orden(request, orden_id):
-    # ... (Lógica GET existente) ...
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo', 'cliente'), id=orden_id)
     try: factura = Factura.objects.prefetch_related('lineas', 'orden__ingreso_set').get(orden=orden)
     except Factura.DoesNotExist: return redirect('detalle_orden', orden_id=orden.id)
@@ -1142,7 +1159,6 @@ def detalle_ganancia_orden(request, orden_id):
 
 @login_required
 def informe_gastos(request):
-    # ... (Lógica GET existente) ...
     gastos_qs = Gasto.objects.select_related('empleado', 'vehiculo')
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
@@ -1168,7 +1184,6 @@ def informe_gastos(request):
 
 @login_required
 def informe_gastos_desglose(request, categoria, empleado_nombre=None):
-    # ... (Lógica GET existente) ...
     gastos_qs = Gasto.objects.select_related('vehiculo__cliente', 'empleado')
     categoria_map = dict(Gasto.CATEGORIA_CHOICES); categoria_interna = categoria
     if empleado_nombre:
@@ -1194,7 +1209,6 @@ def informe_gastos_desglose(request, categoria, empleado_nombre=None):
 
 @login_required
 def informe_ingresos(request):
-    # ... (Lógica GET existente) ...
     ingresos_qs = Ingreso.objects.all()
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
@@ -1216,7 +1230,6 @@ def informe_ingresos(request):
 
 @login_required
 def informe_ingresos_desglose(request, categoria):
-    # ... (Lógica GET existente) ...
     ingresos_qs = Ingreso.objects.select_related('orden__vehiculo')
     categoria_display_map = dict(Ingreso.CATEGORIA_CHOICES); categoria_interna = categoria
     titulo = f"Desglose de Ingresos: {categoria_display_map.get(categoria_interna, categoria_interna)}"; ingresos_qs = ingresos_qs.filter(categoria__iexact=categoria_interna)
@@ -1241,7 +1254,6 @@ def informe_ingresos_desglose(request, categoria):
 def contabilidad(request):
     hoy = timezone.now().date()
     
-    # --- LÓGICA DE FILTRO AÑADIDA ---
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano')
@@ -1270,8 +1282,7 @@ def contabilidad(request):
                 mes_seleccionado = None
          except (ValueError, TypeError):
             mes_seleccionado = None
-    # --- FIN LÓGICA DE FILTRO ---
-
+    
     total_ingresado = ingresos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastado = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_ganancia = total_ingresado - total_gastado
@@ -1280,13 +1291,11 @@ def contabilidad(request):
         'total_ingresado': total_ingresado, 
         'total_gastado': total_gastado, 
         'total_ganancia': total_ganancia, 
-        # --- AÑADIDO AL CONTEXTO ---
         'anos_y_meses': anos_y_meses_data, 
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 
         'mes_seleccionado': mes_sel_int, 
         'meses_del_ano': range(1, 13)
-        # --- FIN AÑADIDO ---
     }
     return render(request, 'taller/contabilidad.html', context)
 # --- FIN VISTA CONTABILIDAD ---
@@ -1294,7 +1303,6 @@ def contabilidad(request):
 
 @login_required
 def cuentas_por_cobrar(request):
-    # ... (Lógica GET existente) ...
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
     facturas_qs = Factura.objects.select_related('orden__cliente', 'orden__vehiculo').prefetch_related('orden__ingreso_set')
@@ -1324,7 +1332,6 @@ def cuentas_por_cobrar(request):
 def informe_tarjeta(request):
     hoy = timezone.now().date()
     
-    # --- LÓGICA DE FILTRO AÑADIDA ---
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano')
@@ -1353,7 +1360,6 @@ def informe_tarjeta(request):
                 mes_seleccionado = None
          except (ValueError, TypeError):
             mes_seleccionado = None
-    # --- FIN LÓGICA DE FILTRO ---
     
     total_ingresos_tpv = ingresos_tpv_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastos_tarjeta = gastos_tarjeta_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
@@ -1365,13 +1371,11 @@ def informe_tarjeta(request):
         'total_gastos_tarjeta': total_gastos_tarjeta, 
         'balance_tarjeta': balance_tarjeta, 
         'movimientos_tarjeta': movimientos_tarjeta, 
-        # --- AÑADIDO AL CONTEXTO ---
         'anos_y_meses': anos_y_meses_data, 
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 
         'mes_seleccionado': mes_sel_int, 
         'meses_del_ano': range(1, 13)
-        # --- FIN AÑADIDO ---
     }
     return render(request, 'taller/informe_tarjeta.html', context)
 # --- FIN VISTA INFORME TARJETA ---
@@ -1384,14 +1388,12 @@ def ver_presupuesto_pdf(request, presupuesto_id):
          return HttpResponseForbidden("No tienes permiso para ver presupuestos.")
 
     lineas = presupuesto.lineas.all()
-    # --- AÑADIDO: Contexto para plantilla_presupuesto.html (los datos fiscales ya están en 'cliente') ---
     context = { 
         'presupuesto': presupuesto, 
         'lineas': lineas, 
         'STATIC_URL': settings.STATIC_URL, 
         'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') 
     }
-    # --- FIN AÑADIDO ---
     
     template_path = 'taller/plantilla_presupuesto.html'; template = get_template(template_path); html = template.render(context)
     response = HttpResponse(content_type='application/pdf')
