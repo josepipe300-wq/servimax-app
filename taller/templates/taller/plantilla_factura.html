@@ -9,17 +9,15 @@
         @page { size: a4 portrait; margin: 1.5cm; }
         body { font-family: sans-serif; font-size: 11px; }
 
-        /* --- ESTRUCTURA DE CABECERA SIN LOGO --- */
         .header-container {
             position: relative;
-            /* No se necesita altura fija */
             border-bottom: 2px solid #f2f2f2;
             margin-bottom: 20px;
             overflow: auto;
         }
         .info-factura {
             text-align: right;
-            width: 100%; /* Ocupar todo el ancho */
+            width: 100%; 
         }
 
         .cliente-info { border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
@@ -28,27 +26,31 @@
         th { background-color: #f2f2f2; }
         .totales { margin-top: 20px; text-align: right; width: 250px; margin-left: auto; }
         .totales p { margin: 5px 0; }
-        
-        /* --- ESTILO AÑADIDO PARA LOS DATOS DEL CLIENTE --- */
         .cliente-info p { margin: 4px 0; line-height: 1.4; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header-container">
-             {# El div del logo ha sido completamente eliminado #}
             <div class="info-factura">
                 <h2>{% if factura.es_factura %}Factura{% else %}Recibo{% endif %}</h2>
                 <p><strong>Número:</strong> {{ factura.id }}<br><strong>Fecha:</strong> {{ factura.fecha_emision|date:"d/m/Y" }}</p>
+                
+                {# --- INICIO DE LA MODIFICACIÓN (Datos del Taller) --- #}
                 <p>
                     <strong>Taller ServiMax</strong><br>
                     <em>Honestidad y Calidad</em><br>
+                    
+                    {% if factura.es_factura %}
                     <strong>NIE:</strong> Y9305858A<br>
                     <em>JOSE EVARDID MENDIETA CORTES</em><br>
                     Carrer del Terrer 18<br>
                     43840 Salou, Tarragona<br>
+                    {% endif %}
+                    
                     <strong>Teléfono:</strong> 642 99 30 63
                 </p>
+                {# --- FIN DE LA MODIFICACIÓN --- #}
             </div>
         </div>
 
@@ -58,11 +60,13 @@
                 <strong>Nombre:</strong> {{ cliente.nombre }}<br>
                 <strong>Teléfono:</strong> {{ cliente.telefono }}<br>
                 
-                {# --- INICIO DE LA MODIFICACIÓN --- #}
+                {# --- INICIO DE LA MODIFICACIÓN (Datos del Cliente) --- #}
+                {% if factura.es_factura %}
                 <strong>{{ cliente.get_tipo_documento_display|default:'DNI' }}:</strong> {{ cliente.documento_fiscal|default:'---' }}<br>
                 <strong>Dirección:</strong> {{ cliente.direccion_fiscal|default:'---' }}<br>
                 {{ cliente.codigo_postal_fiscal|default:'' }} {{ cliente.ciudad_fiscal|default:'' }} ({{ cliente.provincia_fiscal|default:'TARRAGONA' }})
                 <hr style="border: 0; border-top: 1px dashed #ccc; margin: 8px 0;">
+                {% endif %}
                 {# --- FIN DE LA MODIFICACIÓN --- #}
                 
                 <strong>Vehículo:</strong> {{ vehiculo.marca }} {{ vehiculo.modelo }} - {{ vehiculo.matricula }}<br>
@@ -97,6 +101,7 @@
             <p style="font-size: 10px; white-space: pre-wrap; color: #333;">{{ factura.notas_cliente }}</p>
         </div>
         {% endif %}
+        
         <div class="totales" style="page-break-inside: avoid;">
             {% if factura.es_factura %}
                 <p><strong>Subtotal:</strong> {{ factura.subtotal|floatformat:2 }} €</p>
