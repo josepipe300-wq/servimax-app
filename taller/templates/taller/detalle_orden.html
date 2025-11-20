@@ -8,7 +8,53 @@
     
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-
+    <style>
+        /* Estilos para las filas de items en el formulario de facturación */
+        .item-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .item-row input, .item-row select {
+            margin-bottom: 0 !important; /* Quitar margen inferior para alinear con botón */
+        }
+        .btn-remove-line {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 30px;
+            height: 38px; /* Altura para coincidir con inputs */
+            cursor: pointer;
+            font-weight: bold;
+            flex-shrink: 0; /* Evitar que el botón se aplaste */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-remove-line:hover {
+            background-color: #c82333;
+        }
+        /* Ajustes para móviles */
+        @media (max-width: 600px) {
+            .item-row {
+                flex-wrap: wrap;
+            }
+            .item-row input[name$="desc"] { /* Descripción ocupa todo el ancho */
+                width: 100%;
+                order: 1;
+            }
+            .item-row input[type="number"], .item-row select {
+                flex-grow: 1;
+                order: 2;
+                width: auto;
+            }
+            .btn-remove-line {
+                order: 3;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -60,7 +106,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="estado">
                 <select name="nuevo_estado">
-                    {% for value, name in orden.ESTADO_CHOICES %}<option value="{{ value }}" {% if orden.estado == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
+                    {% for value, name in estados_orden %}<option value="{{ value }}" {% if orden.estado == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
                 </select>
                 <button type="submit">Actualizar Estado</button>
             </form>
@@ -92,47 +138,49 @@
         {% if factura %}
             <div class="factura-form">
                 <h2>Documento Generado</h2>
-                
-                {# --- INICIO DE LA MODIFICACIÓN (Botones) --- #}
                 <a href="{% url 'ver_factura_pdf' factura.id %}" class="btn-pdf" target="_blank">📄 Ver {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %} PDF</a>
                 <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">Modificar {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}</a>
-                {# --- FIN DE LA MODIFICACIÓN --- #}
-            
             </div>
         {% else %}
             <div class="factura-form">
                 <h2>Generar Factura o Recibo</h2>
                 <form id="factura-form" action="{% url 'generar_factura' orden.id %}" method="post">
                     {% csrf_token %}
+                    
+                    {% if repuestos %}
                     <h4>Repuestos</h4>
                     {% for repuesto in repuestos %}
                         <label>{{ repuesto.descripcion }} (Coste: {{ repuesto.importe|floatformat:2 }}€)</label>
                         <input type="number" step="0.01" name="pvp_repuesto_{{ repuesto.id }}" class="pvp-input" data-coste="{{ repuesto.importe }}" placeholder="PVP Repuesto">
                     {% endfor %}
+                    {% endif %}
 
+                    {% if gastos_otros %}
                     <h4>Trabajos Externos</h4>
                     {% for gasto in gastos_otros %}
                         <label>{{ gasto.descripcion }} (Coste: {{ gasto.importe|floatformat:2 }}€)</label>
                         <input type="number" step="0.01" name="pvp_otro_{{ gasto.id }}" class="pvp-input" data-coste="{{ gasto.importe }}" placeholder="PVP Trabajo Externo">
                     {% endfor %}
+                    {% endif %}
 
                     <h4>Consumibles</h4>
                     <div id="consumibles-container">
                     </div>
                     <button type="button" id="add-consumible-btn" class="btn-add" style="margin-bottom: 20px;">+ Añadir Consumible</button>
 
-                    
                     <h4>Mano de Obra</h4>
                     <div id="mano-de-obra-container">
-                        <div class="mano-obra-item">
-                            <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" required>
-                            <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required>
+                        <div class="item-row">
+                            <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" required style="flex-grow: 2;">
+                            <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required style="flex-grow: 1;">
+                            <button type="button" class="btn-remove-line" onclick="this.parentElement.remove()" title="Eliminar línea">X</button>
                         </div>
                     </div>
                     <button type="button" id="add-mano-obra" class="btn-add">+ Añadir línea de trabajo</button>
                     
                     <h4 style="margin-top: 20px;">Notas para el Cliente (Opcional)</h4>
                     <textarea name="notas_cliente" placeholder="Añadir observaciones, garantía, próximos mantenimientos, etc."></textarea>
+                    
                     <h4 style="margin-top: 20px;">Finalizar</h4>
                     <div class="checkbox-container">
                         <input type="checkbox" id="aplicar_iva" name="aplicar_iva">
@@ -146,29 +194,40 @@
     </div>
 
     <script>
+        // Script para añadir Mano de Obra
         document.getElementById('add-mano-obra')?.addEventListener('click', () => {
             const container = document.getElementById('mano-de-obra-container');
             const newItem = document.createElement('div');
-            newItem.classList.add('mano-obra-item');
+            newItem.classList.add('item-row'); // Usamos la clase con Flexbox
             newItem.innerHTML = `
-                <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo">
-                <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)">
+                <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" style="flex-grow: 2;">
+                <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" style="flex-grow: 1;">
+                <button type="button" class="btn-remove-line" onclick="this.parentElement.remove()" title="Eliminar línea">X</button>
             `;
             container.appendChild(newItem);
         });
 
+        // Script para añadir Consumibles
         document.getElementById('add-consumible-btn')?.addEventListener('click', () => {
             const container = document.getElementById('consumibles-container');
             const newItem = document.createElement('div');
             newItem.classList.add('consumible-item');
+            
+            let optionsHTML = '<option value="">--- Selecciona tipo ---</option>';
+            {% for tipo in tipos_consumible %}
+                optionsHTML += `<option value="{{ tipo.id }}">{{ tipo.nombre }}</option>`;
+            {% endfor %}
+
             newItem.innerHTML = `
-                <select name="tipo_consumible" required>
-                    <option value="">--- Selecciona tipo ---</option>
-                    {% for tipo in tipos_consumible %}<option value="{{ tipo.id }}">{{ tipo.nombre }}</option>{% endfor %}
-                </select>
-                <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cantidad usada (Ej: 4.5)" required>
-                <input type="number" step="0.01" name="consumible_pvp_total" placeholder="Precio Total a Cobrar (€)" required>
-                <hr style="margin-top: 0; margin-bottom: 15px;">
+                <div class="item-row">
+                    <select name="tipo_consumible" required style="flex-grow: 1;">${optionsHTML}</select>
+                    <button type="button" class="btn-remove-line" onclick="this.closest('.consumible-item').remove()" title="Eliminar consumible">X</button>
+                </div>
+                <div class="item-row">
+                    <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cant. Usada (Ej: 4.5)" required style="flex-grow: 1;">
+                    <input type="number" step="0.01" name="consumible_pvp_total" placeholder="Precio Total a Cobrar (€)" required style="flex-grow: 1;">
+                </div>
+                <hr style="margin-top: 5px; margin-bottom: 15px; border-top: 1px dashed #ccc;">
             `;
             container.appendChild(newItem);
         });
@@ -180,11 +239,15 @@
                 const pvpInputs = this.querySelectorAll('.pvp-input');
                 
                 pvpInputs.forEach(input => {
-                    const pvp = parseFloat(input.value);
-                    const coste = parseFloat(input.dataset.coste);
-                    if (pvp < coste) {
-                        preciosInvalidos = true;
-                        alert(`El PVP de "${input.previousElementSibling.textContent.split('(')[0].trim()}" no puede ser menor que su coste de ${coste.toFixed(2)}€.`);
+                    // Solo si el input tiene valor
+                    if (input.value) {
+                        const pvp = parseFloat(input.value);
+                        const coste = parseFloat(input.dataset.coste);
+                        if (pvp < coste) {
+                            preciosInvalidos = true;
+                            const labelText = input.previousElementSibling.textContent.split('(')[0].trim();
+                            alert(`El PVP de "${labelText}" no puede ser menor que su coste de ${coste.toFixed(2)}€.`);
+                        }
                     }
                 });
 
@@ -193,10 +256,11 @@
                 }
             });
 
+            // Evitar que ENTER envíe el formulario (útil al rellenar inputs)
             facturaForm.addEventListener('keydown', function(event) {
                 if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') {
                     event.preventDefault();
-                    const formElements = Array.from(this.elements).filter(el => el.offsetParent !== null);
+                    const formElements = Array.from(this.elements).filter(el => el.offsetParent !== null && !el.disabled);
                     const currentIndex = formElements.indexOf(event.target);
                     const nextElement = formElements[currentIndex + 1];
                     if (nextElement) {
