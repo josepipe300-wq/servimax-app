@@ -1,14 +1,12 @@
 # taller/models.py
 from django.db import models
-from django.utils import timezone # Importar timezone para la fecha de creación
-from decimal import Decimal # <-- Asegúrate que Decimal está importado
-from django.db.models import Sum # <-- Asegúrate que Sum está importado
+from django.utils import timezone
+from decimal import Decimal
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
     telefono = models.CharField(max_length=20, unique=True)
     
-    # --- CAMPOS AÑADIDOS ---
     TIPO_DOCUMENTO_CHOICES = [
         ('DNI', 'DNI'),
         ('NIE', 'NIE'),
@@ -16,29 +14,20 @@ class Cliente(models.Model):
     ]
     tipo_documento = models.CharField(max_length=10, choices=TIPO_DOCUMENTO_CHOICES, default='DNI', null=True, blank=True)
     documento_fiscal = models.CharField(max_length=20, null=True, blank=True, help_text="Número de DNI, NIE o NIF")
-    
-    # He dividido la dirección en campos estructurados, es mejor para las facturas
     direccion_fiscal = models.CharField(max_length=255, null=True, blank=True, help_text="Calle, Número, Piso, Puerta")
     codigo_postal_fiscal = models.CharField(max_length=10, null=True, blank=True)
     ciudad_fiscal = models.CharField(max_length=100, null=True, blank=True)
     provincia_fiscal = models.CharField(max_length=100, null=True, blank=True)
-    # --- FIN CAMPOS AÑADIDOS ---
 
     def __str__(self):
         return self.nombre
 
     def save(self, *args, **kwargs):
         self.nombre = self.nombre.upper()
-        # --- LÓGICA AÑADIDA PARA MAYÚSCULAS ---
-        if self.documento_fiscal:
-            self.documento_fiscal = self.documento_fiscal.upper()
-        if self.direccion_fiscal:
-            self.direccion_fiscal = self.direccion_fiscal.upper()
-        if self.ciudad_fiscal:
-            self.ciudad_fiscal = self.ciudad_fiscal.upper()
-        if self.provincia_fiscal:
-            self.provincia_fiscal = self.provincia_fiscal.upper()
-        # --- FIN LÓGICA AÑADIDA ---
+        if self.documento_fiscal: self.documento_fiscal = self.documento_fiscal.upper()
+        if self.direccion_fiscal: self.direccion_fiscal = self.direccion_fiscal.upper()
+        if self.ciudad_fiscal: self.ciudad_fiscal = self.ciudad_fiscal.upper()
+        if self.provincia_fiscal: self.provincia_fiscal = self.provincia_fiscal.upper()
         super(Cliente, self).save(*args, **kwargs)
 
 class Vehiculo(models.Model):
@@ -94,9 +83,7 @@ class Gasto(models.Model):
         ('Otros', 'Otros'),
         ('Compra de Consumibles', 'Compra de Consumibles'),
     ]
-    # --- CORREGIDO --- (Cambiado de auto_now_add=True a default=timezone.now)
     fecha = models.DateField(default=timezone.now)
-    # --- FIN CORRECCIÓN ---
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     descripcion = models.CharField(max_length=255, null=True, blank=True)
@@ -121,9 +108,7 @@ class Ingreso(models.Model):
         ('Otras Ganancias', 'Otras Ganancias'),
         ('Otros', 'Otros Ingresos'),
     ]
-    # --- CORREGIDO --- (Cambiado de auto_now_add=True a default=timezone.now)
     fecha = models.DateField(default=timezone.now)
-    # --- FIN CORRECCIÓN ---
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=255)
@@ -142,24 +127,17 @@ class Factura(models.Model):
     orden = models.OneToOneField(OrdenDeReparacion, on_delete=models.CASCADE)
     fecha_emision = models.DateField(auto_now_add=True)
     es_factura = models.BooleanField(default=True)
-    
-    # --- CAMPO AÑADIDO ---
     numero_factura = models.IntegerField(null=True, blank=True, unique=True, editable=False)
-    # --- FIN CAMPO AÑADIDO ---
-    
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     iva = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_final = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    
     notas_cliente = models.TextField(null=True, blank=True, help_text="Notas adicionales para el cliente")
 
     def __str__(self):
-        # --- LÓGICA MODIFICADA ---
         if self.es_factura:
             return f"Factura Nº {self.numero_factura} para Orden #{self.orden.id}"
         else:
             return f"Recibo #{self.id} para Orden #{self.orden.id}"
-        # --- FIN LÓGICA MODIFICADA ---
 
     def save(self, *args, **kwargs):
         if self.notas_cliente:
@@ -180,9 +158,7 @@ class LineaFactura(models.Model):
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     @property
     def total_linea(self):
-        cantidad = self.cantidad if self.cantidad is not None else Decimal('0.00')
-        precio = self.precio_unitario if self.precio_unitario is not None else Decimal('0.00')
-        return cantidad * precio
+        return (self.cantidad or 0) * (self.precio_unitario or 0)
     def __str__(self):
         return f"Línea de {self.tipo} para Factura #{self.factura.id}"
     def save(self, *args, **kwargs):
@@ -192,10 +168,7 @@ class LineaFactura(models.Model):
 class TipoConsumible(models.Model):
     nombre = models.CharField(max_length=100)
     unidad_medida = models.CharField(max_length=20)
-    nivel_minimo_stock = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True,
-        help_text="Nivel mínimo para alerta (ej: 5.00). Dejar vacío si no se requiere alerta."
-    )
+    nivel_minimo_stock = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     def __str__(self):
         return self.nombre
     def save(self, *args, **kwargs):
@@ -216,17 +189,15 @@ class CompraConsumible(models.Model):
              self.coste_por_unidad = Decimal('0.0000')
         super().save(*args, **kwargs)
     def __str__(self):
-        return f"Compra de {self.cantidad} {self.tipo.unidad_medida} de {self.tipo.nombre} el {self.fecha_compra}"
+        return f"Compra de {self.cantidad} {self.tipo.unidad_medida}"
 
 class UsoConsumible(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.CASCADE)
     tipo = models.ForeignKey(TipoConsumible, on_delete=models.CASCADE)
     cantidad_usada = models.DecimalField(max_digits=10, decimal_places=2)
-    # --- CORREGIDO --- (Cambiado de auto_now_add=True a default=timezone.now)
     fecha_uso = models.DateField(default=timezone.now)
-    # --- FIN CORRECCIÓN ---
     def __str__(self):
-        return f"Uso de {self.cantidad_usada} {self.tipo.unidad_medida} en Orden #{self.orden.id}"
+        return f"Uso de {self.cantidad_usada} {self.tipo.unidad_medida}"
 
 class FotoVehiculo(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, related_name='fotos', on_delete=models.CASCADE)
@@ -238,14 +209,15 @@ class FotoVehiculo(models.Model):
         self.descripcion = self.descripcion.upper()
         super(FotoVehiculo, self).save(*args, **kwargs)
 
+# --- MODELO PRESUPUESTO ACTUALIZADO ---
 class Presupuesto(models.Model):
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, help_text="Cliente al que se dirige el presupuesto.")
-    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True, help_text="Vehículo asociado (opcional, si ya existe).")
-    matricula_nueva = models.CharField(max_length=20, blank=True, null=True, help_text="Matrícula si es un vehículo nuevo.")
-    marca_nueva = models.CharField(max_length=50, blank=True, null=True, help_text="Marca si es un vehículo nuevo.")
-    modelo_nuevo = models.CharField(max_length=50, blank=True, null=True, help_text="Modelo si es un vehículo nuevo.")
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
+    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
+    matricula_nueva = models.CharField(max_length=20, blank=True, null=True)
+    marca_nueva = models.CharField(max_length=50, blank=True, null=True)
+    modelo_nuevo = models.CharField(max_length=50, blank=True, null=True)
     fecha_creacion = models.DateTimeField(default=timezone.now, editable=False)
-    problema_o_trabajo = models.TextField(help_text="Descripción del problema o trabajo a presupuestar.")
+    problema_o_trabajo = models.TextField()
     ESTADO_CHOICES = [
         ('Pendiente', 'Pendiente'),
         ('Aceptado', 'Aceptado'),
@@ -253,11 +225,16 @@ class Presupuesto(models.Model):
         ('Convertido', 'Convertido a Orden'),
     ]
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='Pendiente')
-    total_estimado = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="Cálculo total del presupuesto.")
+    
+    # --- CAMPOS PARA LÓGICA DE IVA ---
+    aplicar_iva = models.BooleanField(default=True, help_text="Si marcado, se aplica el 21% de IVA y se muestran datos fiscales.")
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    iva = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    total_estimado = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    # --------------------------------
 
     def __str__(self):
-        identificador_vehiculo = self.vehiculo.matricula if self.vehiculo else self.matricula_nueva if self.matricula_nueva else "Sin vehículo especificado"
-        return f"Presupuesto #{self.id} - {self.cliente.nombre} ({identificador_vehiculo})"
+        return f"Presupuesto #{self.id} - {self.cliente.nombre}"
 
     def save(self, *args, **kwargs):
         if self.matricula_nueva: self.matricula_nueva = self.matricula_nueva.upper()
@@ -276,9 +253,7 @@ class LineaPresupuesto(models.Model):
 
     @property
     def total_linea_estimado(self):
-        cantidad = self.cantidad if self.cantidad is not None else Decimal('0.00')
-        precio = self.precio_unitario_estimado if self.precio_unitario_estimado is not None else Decimal('0.00')
-        return cantidad * precio
+        return (self.cantidad or 0) * (self.precio_unitario_estimado or 0)
 
     def __str__(self):
         return f"Línea ({self.tipo}) para Presupuesto #{self.presupuesto.id}"
@@ -287,59 +262,31 @@ class LineaPresupuesto(models.Model):
         self.descripcion = self.descripcion.upper()
         super(LineaPresupuesto, self).save(*args, **kwargs)
 
-# --- MODELO PROXY PARA VER STOCK ---
 class TipoConsumibleStock(TipoConsumible):
     class Meta:
         proxy = True
         verbose_name = "Stock de Consumible"
         verbose_name_plural = "Stocks de Consumibles"
-
     @property
     def stock_actual(self):
-        # Sumar todas las compras
         total_comprado = CompraConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad'))['total'] or Decimal('0.00')
-        # Sumar todos los usos en órdenes
         total_usado_ordenes = UsoConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_usada'))['total'] or Decimal('0.00')
-        # --- NUEVO: Sumar todos los ajustes manuales ---
         total_ajustado = AjusteStockConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_ajustada'))['total'] or Decimal('0.00')
-
-        # --- CÁLCULO MODIFICADO ---
-        stock = total_comprado - total_usado_ordenes + total_ajustado
-        return stock.quantize(Decimal('0.01'))
-
+        return (total_comprado - total_usado_ordenes + total_ajustado).quantize(Decimal('0.01'))
     @property
     def alerta_stock(self):
-        if self.nivel_minimo_stock is not None and self.stock_actual <= self.nivel_minimo_stock:
-            return "⚠️ BAJO"
-        elif self.nivel_minimo_stock is not None:
-            return "✅ OK"
-        else:
-            return "N/A"
-# --- FIN MODELO PROXY ---
+        if self.nivel_minimo_stock is not None and self.stock_actual <= self.nivel_minimo_stock: return "⚠️ BAJO"
+        return "✅ OK" if self.nivel_minimo_stock is not None else "N/A"
 
-# --- NUEVO MODELO PARA AJUSTES MANUALES ---
 class AjusteStockConsumible(models.Model):
     tipo = models.ForeignKey(TipoConsumible, on_delete=models.CASCADE, verbose_name="Tipo de Consumible")
-    cantidad_ajustada = models.DecimalField(
-        max_digits=10, decimal_places=2,
-        help_text="Cantidad a añadir (positivo) o quitar (negativo) del stock."
-    )
-    motivo = models.CharField(
-        max_length=255,
-        help_text="Razón del ajuste (Ej: Uso interno, Inventario físico, Pérdida)"
-    )
+    cantidad_ajustada = models.DecimalField(max_digits=10, decimal_places=2)
+    motivo = models.CharField(max_length=255)
     fecha_ajuste = models.DateField(default=timezone.now, verbose_name="Fecha del Ajuste")
-
-    def __str__(self):
-        accion = "Añadido" if self.cantidad_ajustada > 0 else "Quitado"
-        return f"{accion} {abs(self.cantidad_ajustada)} {self.tipo.unidad_medida} de {self.tipo.nombre} ({self.motivo})"
-
-    def save(self, *args, **kwargs):
-        self.motivo = self.motivo.upper()
-        super().save(*args, **kwargs)
-
     class Meta:
         verbose_name = "Ajuste de Stock"
         verbose_name_plural = "Ajustes de Stock"
         ordering = ['-fecha_ajuste', '-id']
-# --- FIN NUEVO MODELO ---
+    def save(self, *args, **kwargs):
+        self.motivo = self.motivo.upper()
+        super().save(*args, **kwargs)

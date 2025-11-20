@@ -9,17 +9,15 @@
         @page { size: a4 portrait; margin: 1.5cm; }
         body { font-family: sans-serif; font-size: 11px; }
 
-        /* Estructura de cabecera sin logo */
         .header-container {
             position: relative;
-            /* No se necesita altura fija si no hay logo */
             border-bottom: 2px solid #f2f2f2;
             margin-bottom: 20px;
-            overflow: auto; /* Para clear floats si se usaran */
+            overflow: auto;
         }
         .info-documento {
             text-align: right;
-            width: 100%; /* Ocupa todo el ancho */
+            width: 100%; 
         }
 
         .cliente-info { border: 1px solid #ccc; padding: 15px; border-radius: 5px; margin-bottom: 20px;}
@@ -29,25 +27,28 @@
         .totales { margin-top: 20px; text-align: right; width: 250px; margin-left: auto; }
         .totales p { margin: 5px 0; }
         .nota { margin-top: 30px; font-size: 10px; color: #555; border-top: 1px solid #eee; padding-top: 10px;}
-        
-        /* --- ESTILO AÑADIDO PARA LOS DATOS DEL CLIENTE --- */
         .cliente-info p { margin: 4px 0; line-height: 1.4; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header-container">
-            {# El div del logo ha sido completamente eliminado #}
             <div class="info-documento">
                 <h2>Presupuesto</h2>
                 <p><strong>Número:</strong> {{ presupuesto.id }}<br><strong>Fecha:</strong> {{ presupuesto.fecha_creacion|date:"d/m/Y" }}</p>
                 <p>
                     <strong>Taller ServiMax</strong><br>
                     <em>Honestidad y Calidad</em><br>
+                    
+                    {# --- LÓGICA: Solo mostrar datos fiscales del taller si hay IVA --- #}
+                    {% if presupuesto.aplicar_iva %}
                     <strong>NIE:</strong> Y9305858A<br>
                     <em>JOSE EVARDID MENDIETA CORTES</em><br>
                     Carrer del Terrer 18<br>
                     43840 Salou, Tarragona<br>
+                    {% endif %}
+                    {# ----------------------------------------------------------- #}
+                    
                     <strong>Teléfono:</strong> 642 99 30 63
                 </p>
             </div>
@@ -59,12 +60,14 @@
                 <strong>Nombre:</strong> {{ presupuesto.cliente.nombre }}<br>
                 <strong>Teléfono:</strong> {{ presupuesto.cliente.telefono }}<br>
                 
-                {# --- INICIO DE LA MODIFICACIÓN --- #}
+                {# --- LÓGICA: Solo mostrar datos fiscales del cliente si hay IVA --- #}
+                {% if presupuesto.aplicar_iva %}
                 <strong>{{ presupuesto.cliente.get_tipo_documento_display|default:'DNI' }}:</strong> {{ presupuesto.cliente.documento_fiscal|default:'---' }}<br>
                 <strong>Dirección:</strong> {{ presupuesto.cliente.direccion_fiscal|default:'---' }}<br>
                 {{ presupuesto.cliente.codigo_postal_fiscal|default:'' }} {{ presupuesto.cliente.ciudad_fiscal|default:'' }} ({{ presupuesto.cliente.provincia_fiscal|default:'TARRAGONA' }})
                 <hr style="border: 0; border-top: 1px dashed #ccc; margin: 8px 0;">
-                {# --- FIN DE LA MODIFICACIÓN --- #}
+                {% endif %}
+                {# ------------------------------------------------------------ #}
 
                 <strong>Vehículo:</strong>
                 {% if presupuesto.vehiculo %}
@@ -106,6 +109,12 @@
         </table>
 
         <div class="totales">
+            {# --- LÓGICA: Desglose solo si hay IVA --- #}
+            {% if presupuesto.aplicar_iva %}
+                <p><strong>Subtotal:</strong> {{ presupuesto.subtotal|floatformat:2 }} €</p>
+                <p><strong>IVA (21%):</strong> {{ presupuesto.iva|floatformat:2 }} €</p>
+                <hr>
+            {% endif %}
             <h3 style="margin-bottom: 5px;"><strong>TOTAL ESTIMADO:</strong> {{ presupuesto.total_estimado|floatformat:2 }} €</h3>
         </div>
 

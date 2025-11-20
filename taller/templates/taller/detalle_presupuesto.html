@@ -6,11 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalle Presupuesto #{{ presupuesto.id }} - ServiMax</title>
     
-    {# --- INICIO MODIFICACIÓN --- #}
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    {# --- FIN MODIFICACIÓN (Style block eliminado) --- #}
-
 </head>
 <body>
     <div class="container" style="max-width: 900px;">
@@ -76,10 +73,15 @@
                 {% endfor %}
             </tbody>
         </table>
-        <div class="total-summary">
-            Total Estimado: {{ presupuesto.total_estimado|floatformat:2 }} €
-        </div>
 
+        <div class="total-summary">
+            {% if presupuesto.aplicar_iva %}
+                <p style="margin: 5px 0; font-size: 0.9em; color: #555;">Subtotal: {{ presupuesto.subtotal|floatformat:2 }} €</p>
+                <p style="margin: 5px 0; font-size: 0.9em; color: #555;">IVA (21%): {{ presupuesto.iva|floatformat:2 }} €</p>
+                <hr style="width: 200px; margin-left: auto;">
+            {% endif %}
+            <strong>Total Estimado: {{ presupuesto.total_estimado|floatformat:2 }} €</strong>
+        </div>
         {# --- BOTÓN PARA VER PDF --- #}
         <div style="margin-top: 20px;">
             <a href="{% url 'ver_presupuesto_pdf' presupuesto.id %}" target="_blank" class="btn-pdf">📄 Ver Presupuesto PDF</a>
@@ -96,14 +98,17 @@
             <div class="status-form">
                 <form action="{% url 'detalle_presupuesto' presupuesto.id %}" method="post" style="display: flex; flex-grow: 1; gap: 15px; align-items: center;">
                     {% csrf_token %}
-                    <label for="nuevo_estado" style="margin-bottom: 0;">Cambiar Estado:</label> <select name="nuevo_estado" id="nuevo_estado" style="margin-bottom: 0; flex-grow: 1;"> {# Excluir la opción 'Convertido' del selector manual #}
+                    <label for="nuevo_estado" style="margin-bottom: 0;">Cambiar Estado:</label> 
+                    <select name="nuevo_estado" id="nuevo_estado" style="margin-bottom: 0; flex-grow: 1;"> 
+                        {# Excluir la opción 'Convertido' del selector manual #}
                         {% for value, name in estados_posibles %}
                             {% if value != 'Convertido' %}
                             <option value="{{ value }}" {% if presupuesto.estado == value %}selected{% endif %}>{{ name }}</option>
                             {% endif %}
                         {% endfor %}
                     </select>
-                    <button type="submit" style="margin-top: 0;">Actualizar Estado</button> </form>
+                    <button type="submit" style="margin-top: 0;">Actualizar Estado</button> 
+                </form>
             </div>
         {% else %}
          <p style="margin-top: 20px; text-align: center; color: #17a2b8;">Este presupuesto ya ha sido convertido en una orden de reparación.</p>
