@@ -9,35 +9,45 @@
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <style>
-        /* --- ESTILOS IGUALES A EDICIÓN DE FACTURA --- */
+        /* --- ESTILOS PARA CORREGIR EL FORMULARIO DE FACTURA --- */
+        
+        /* Contenedor de la fila */
         .item-row {
             display: flex;
             gap: 10px;
             align-items: center;
             margin-bottom: 10px;
+            width: 100%;
         }
+        
+        /* Asegurar que los inputs dentro de la fila se comporten bien */
         .item-row input, .item-row select {
-            margin-bottom: 0 !important; /* Quitar margen inferior para alinear */
+            margin-bottom: 0 !important; /* Quitar margen inferior */
+            height: 38px; /* Altura fija para alinear con el botón */
         }
-        /* Botón pequeño y rojo igual al de Editar Factura */
-        .btn-remove-line {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            width: 30px;       /* Ancho fijo pequeño */
-            height: 38px;      /* Altura igual a los inputs estándar */
+
+        /* ESTILO DEL BOTÓN DE BORRAR (ROJO Y PEQUEÑO) */
+        /* Usamos !important para machacar el estilo verde global de .factura-form button */
+        .factura-form .btn-remove-line {
+            background-color: #dc3545 !important; /* Rojo */
+            color: white !important;
+            border: none !important;
+            border-radius: 4px !important;
+            width: 40px !important;       /* Ancho fijo */
+            min-width: 40px !important;   /* Evitar que se aplaste */
+            height: 38px !important;      /* Altura igual al input */
+            padding: 0 !important;
+            margin: 0 !important;
             cursor: pointer;
             font-weight: bold;
-            flex-shrink: 0;
+            font-size: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 0;        /* Quitar padding extra */
-            font-size: 14px;
         }
-        .btn-remove-line:hover {
-            background-color: #c82333;
+        
+        .factura-form .btn-remove-line:hover {
+            background-color: #c82333 !important;
         }
 
         /* Ajustes para móviles */
@@ -45,16 +55,17 @@
             .item-row {
                 flex-wrap: wrap;
             }
-            .item-row input[name$="desc"] {
-                width: 100%;
+            .item-row input[type="text"] { 
+                width: 100% !important;
                 order: 1;
+                margin-bottom: 5px !important;
             }
             .item-row input[type="number"], .item-row select {
                 flex-grow: 1;
+                width: auto !important;
                 order: 2;
-                width: auto;
             }
-            .btn-remove-line {
+            .factura-form .btn-remove-line {
                 order: 3;
             }
         }
@@ -198,35 +209,35 @@
     </div>
 
     <script>
-        // Script para añadir Mano de Obra con estilo de fila
+        // Script para añadir Mano de Obra
         document.getElementById('add-mano-obra')?.addEventListener('click', () => {
             const container = document.getElementById('mano-de-obra-container');
             const newItem = document.createElement('div');
-            newItem.classList.add('item-row'); 
+            newItem.classList.add('item-row');
             newItem.innerHTML = `
-                <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" style="flex-grow: 2;" required>
-                <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" style="flex-grow: 1;" required>
+                <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" required style="flex-grow: 2;">
+                <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required style="flex-grow: 1;">
                 <button type="button" class="btn-remove-line" onclick="this.parentElement.remove()" title="Eliminar línea">X</button>
             `;
             container.appendChild(newItem);
         });
 
-        // Script para añadir Consumibles con estilo de fila
+        // Script para añadir Consumibles
         document.getElementById('add-consumible-btn')?.addEventListener('click', () => {
             const container = document.getElementById('consumibles-container');
             const newItem = document.createElement('div');
-            newItem.classList.add('consumible-item'); // Usamos un wrapper para el borde inferior si se desea, o solo divs
-            
-            let optionsHTML = '<option value="">--- Selecciona tipo ---</option>';
-            {% for tipo in tipos_consumible %}
-                optionsHTML += `<option value="{{ tipo.id }}">{{ tipo.nombre }}</option>`;
-            {% endfor %}
-
-            // Estructura compacta similar a editar factura
+            // Aquí la estructura es un poco diferente: 2 filas
+            // Fila 1: Select + Botón borrar
+            // Fila 2: Cantidad + Precio
             newItem.innerHTML = `
                 <div class="item-row">
-                    <select name="tipo_consumible" required style="flex-grow: 1;">${optionsHTML}</select>
-                    <button type="button" class="btn-remove-line" onclick="this.closest('.consumible-item').remove()" title="Eliminar consumible">X</button>
+                    <select name="tipo_consumible" required style="flex-grow: 1;">
+                        <option value="">--- Selecciona tipo ---</option>
+                        {% for tipo in tipos_consumible %}
+                        <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="btn-remove-line" onclick="this.closest('div').remove()" title="Eliminar consumible">X</button>
                 </div>
                 <div class="item-row">
                     <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cant. Usada" required style="flex-grow: 1;">
@@ -259,17 +270,11 @@
                     event.preventDefault();
                 }
             });
-
-            // Evitar envío con Enter en inputs
+            
+            // Evitar envío con Enter
             facturaForm.addEventListener('keydown', function(event) {
                 if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') {
                     event.preventDefault();
-                    const formElements = Array.from(this.elements).filter(el => el.offsetParent !== null && !el.disabled);
-                    const currentIndex = formElements.indexOf(event.target);
-                    const nextElement = formElements[currentIndex + 1];
-                    if (nextElement) {
-                        nextElement.focus();
-                    }
                 }
             });
         }
