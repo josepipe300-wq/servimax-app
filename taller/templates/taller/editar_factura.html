@@ -85,10 +85,13 @@
             }
             
             let optionsHTML = '<option value="">--- Selecciona tipo ---</option>';
+            
+            // --- CORRECCIÓN APLICADA AQUÍ ---
+            // Se eliminó la variable 'isSelected' para evitar el error de re-declaración en el bucle
             {% for tipo in tipos_consumible %}
-                const isSelected = lineaData && lineaData.tipo_consumible_id === {{ tipo.id }};
-                optionsHTML += `<option value="{{ tipo.id }}" ${isSelected ? 'selected' : ''}>{{ tipo.nombre }}</option>`;
+                optionsHTML += `<option value="{{ tipo.id }}" ${ (lineaData && lineaData.tipo_consumible_id === {{ tipo.id }}) ? 'selected' : '' }>{{ tipo.nombre }}</option>`;
             {% endfor %}
+            // --------------------------------
             
             newItem.innerHTML = `
                 <select name="tipo_consumible" required>${optionsHTML}</select>
