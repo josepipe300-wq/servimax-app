@@ -18,6 +18,15 @@
 
         <form action="" method="post">
             {% csrf_token %}
+            
+            <label for="metodo_pago" style="color: #0056b3;">¿De dónde sale el dinero?</label>
+            <select id="metodo_pago" name="metodo_pago" style="background-color: #e8f0fe; font-weight: bold;">
+                {% for value, name in metodos_pago %}
+                    <option value="{{ value }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+            <hr>
+
             <label for="categoria">Categoría:</label>
             <select id="categoria" name="categoria" required>
                 {% for value, name in categorias_gasto %}
@@ -54,11 +63,6 @@
                         {% endfor %}
                     </select>
                 </div>
-
-                <div style="margin-bottom: 15px;">
-                    <input type="checkbox" id="pagado_con_tarjeta" name="pagado_con_tarjeta" value="true">
-                    <label for="pagado_con_tarjeta">¿Pagado con tarjeta?</label>
-                </div>
             </div>
 
             <div id="campos-consumible" style="display: none;">
@@ -75,11 +79,6 @@
                 <input type="number" step="0.01" id="cantidad" name="cantidad">
                 <label for="coste_total">Coste Total (€):</label>
                 <input type="number" step="0.01" id="coste_total" name="coste_total">
-
-                <div style="margin-bottom: 15px;">
-                    <input type="checkbox" id="pagado_con_tarjeta_consumible" name="pagado_con_tarjeta" value="true">
-                    <label for="pagado_con_tarjeta_consumible">¿Pagado con tarjeta?</label>
-                </div>
             </div>
 
             <button type="submit">Guardar Gasto</button>
@@ -92,8 +91,6 @@
         const camposConsumible = document.getElementById('campos-consumible');
         const campoVehiculo = document.getElementById('campo-vehiculo');
         const campoEmpleado = document.getElementById('campo-empleado');
-        const checkboxNormal = document.getElementById('pagado_con_tarjeta');
-        const checkboxConsumible = document.getElementById('pagado_con_tarjeta_consumible');
 
         function actualizarFormulario() {
             const selectedValue = categoriaSelect.value;
@@ -101,17 +98,11 @@
             camposConsumible.style.display = 'none';
             campoVehiculo.style.display = 'none';
             campoEmpleado.style.display = 'none';
-            checkboxNormal.parentElement.style.display = 'none'; 
-            checkboxConsumible.parentElement.style.display = 'none'; 
 
             if (selectedValue === 'Compra de Consumibles') {
                 camposConsumible.style.display = 'block';
-                checkboxConsumible.parentElement.style.display = 'block';
-                checkboxNormal.checked = false;
             } else {
                 camposGastoNormal.style.display = 'block';
-                checkboxNormal.parentElement.style.display = 'block';
-                checkboxConsumible.checked = false;
 
                 if (selectedValue === 'Repuestos' || selectedValue === 'Otros') {
                     campoVehiculo.style.display = 'block';

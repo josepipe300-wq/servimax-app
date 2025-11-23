@@ -97,19 +97,29 @@ def home(request):
     else:
         mes_actual = hoy.month
     
+    # Totales del Mes seleccionado (Globales)
     ingresos_mes = Ingreso.objects.filter(fecha__month=mes_actual, fecha__year=ano_actual)
     gastos_mes = Gasto.objects.filter(fecha__month=mes_actual, fecha__year=ano_actual)
     
     total_ingresos = ingresos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastos = gastos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
 
-    total_ingresos_efectivo_hist = Ingreso.objects.filter(es_tpv=False).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    total_gastos_efectivo_hist = Gasto.objects.filter(pagado_con_tarjeta=False).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_caja = total_ingresos_efectivo_hist - total_gastos_efectivo_hist
+    # --- NUEVA LÓGICA DE BALANCES (HISTÓRICOS) ---
+    # 1. Efectivo (Caja)
+    ing_efectivo = Ingreso.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    gas_efectivo = Gasto.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance_efectivo = ing_efectivo - gas_efectivo
     
-    total_ingresos_tpv_hist = Ingreso.objects.filter(es_tpv=True).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    total_gastos_tarjeta_hist = Gasto.objects.filter(pagado_con_tarjeta=True).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_tarjeta = total_ingresos_tpv_hist - total_gastos_tarjeta_hist
+    # 2. Cuenta Erika
+    ing_erika = Ingreso.objects.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    gas_erika = Gasto.objects.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance_erika = ing_erika - gas_erika
+
+    # 3. Cuenta Taller
+    ing_taller = Ingreso.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    gas_taller = Gasto.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance_taller = ing_taller - gas_taller
+    # ---------------------------------------------
 
     ultimos_gastos = Gasto.objects.order_by('-id')[:5]
     ultimos_ingresos = Ingreso.objects.order_by('-id')[:5]
@@ -142,11 +152,16 @@ def home(request):
     context = {
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
-        'balance_caja': balance_caja,
-        'balance_tarjeta': balance_tarjeta,
+        
+        # Nuevos Balances Separados
+        'balance_efectivo': balance_efectivo,
+        'balance_erika': balance_erika,
+        'balance_taller': balance_taller,
+
         'movimientos_recientes': movimientos_recientes,
         'alertas_stock': alertas_stock,
         'is_read_only_user': is_read_only_user,
+        
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_actual,
         'mes_seleccionado': mes_actual,
@@ -224,7 +239,6 @@ def ingresar_vehiculo(request):
                 presupuesto.estado = 'Convertido'
                 presupuesto.save()
 
-            # --- FOTOS ---
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
@@ -255,7 +269,7 @@ def ingresar_vehiculo(request):
     return render(request, 'taller/ingresar_vehiculo.html', context)
 
 
-# --- VISTA AÑADIR GASTO ---
+# --- VISTA AÑADIR GASTO (ACTUALIZADA) ---
 @login_required
 def anadir_gasto(request):
     if request.method == 'POST':
@@ -263,7 +277,12 @@ def anadir_gasto(request):
              return HttpResponseForbidden("No tienes permiso para añadir gastos o compras.")
 
         categoria = request.POST['categoria']
-        pagado_con_tarjeta = request.POST.get('pagado_con_tarjeta') == 'true'
+        # --- NUEVO: Método de pago ---
+        metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
+        
+        # Mantener compatibilidad con el booleano antiguo (si no es efectivo, es tarjeta)
+        pagado_con_tarjeta_bool = (metodo_pago != 'EFECTIVO')
+        # -----------------------------
 
         if categoria == 'Compra de Consumibles':
             if not request.user.has_perm('taller.add_compraconsumible'):
@@ -285,9 +304,16 @@ def anadir_gasto(request):
                     except ValueError: return redirect('anadir_gasto')
 
                     CompraConsumible.objects.create(tipo=tipo_consumible, fecha_compra=fecha_compra, cantidad=cantidad, coste_total=coste_total)
-                    Gasto.objects.create(fecha=fecha_compra, categoria=categoria, importe=coste_total,
-                                        descripcion=f"Compra de {cantidad} {tipo_consumible.unidad_medida} de {tipo_consumible.nombre}",
-                                        pagado_con_tarjeta=pagado_con_tarjeta)
+                    
+                    # Guardamos con el método de pago nuevo
+                    Gasto.objects.create(
+                        fecha=fecha_compra, 
+                        categoria=categoria, 
+                        importe=coste_total,
+                        descripcion=f"Compra de {cantidad} {tipo_consumible.unidad_medida} de {tipo_consumible.nombre}",
+                        pagado_con_tarjeta=pagado_con_tarjeta_bool,
+                        metodo_pago=metodo_pago # <--- NUEVO
+                    )
             except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('anadir_gasto')
         else:
             if not request.user.has_perm('taller.add_gasto'):
@@ -302,7 +328,14 @@ def anadir_gasto(request):
                 if importe is not None and importe < 0: importe = None
             except (ValueError, TypeError, Decimal.InvalidOperation): importe = None
 
-            gasto = Gasto(fecha=fecha_gasto, categoria=categoria, importe=importe, descripcion=descripcion.upper(), pagado_con_tarjeta=pagado_con_tarjeta)
+            gasto = Gasto(
+                fecha=fecha_gasto, 
+                categoria=categoria, 
+                importe=importe, 
+                descripcion=descripcion.upper(), 
+                pagado_con_tarjeta=pagado_con_tarjeta_bool,
+                metodo_pago=metodo_pago # <--- NUEVO
+            )
 
             if categoria in ['Repuestos', 'Otros']:
                 vehiculo_id = request.POST.get('vehiculo')
@@ -334,14 +367,19 @@ def anadir_gasto(request):
     empleados = Empleado.objects.all()
     tipos_consumible = TipoConsumible.objects.all()
     categorias_gasto_choices = [choice for choice in Gasto.CATEGORIA_CHOICES if choice[0] != 'Compra de Consumibles']
+    
+    # Pasamos las opciones de método de pago al template
+    metodos_pago = Gasto.METODO_PAGO_CHOICES 
+    
     context = {
         'vehiculos': vehiculos_filtrados, 'empleados': empleados, 'tipos_consumible': tipos_consumible,
         'categorias_gasto': Gasto.CATEGORIA_CHOICES, 'categorias_gasto_select': categorias_gasto_choices,
+        'metodos_pago': metodos_pago # <--- NUEVO
     }
     return render(request, 'taller/anadir_gasto.html', context)
 
 
-# --- VISTA REGISTRAR INGRESO ---
+# --- VISTA REGISTRAR INGRESO (ACTUALIZADA) ---
 @login_required
 def registrar_ingreso(request):
     if request.method == 'POST':
@@ -349,7 +387,13 @@ def registrar_ingreso(request):
             return HttpResponseForbidden("No tienes permiso para registrar ingresos.")
 
         categoria = request.POST['categoria']; importe_str = request.POST.get('importe')
-        descripcion = request.POST.get('descripcion', ''); es_tpv = request.POST.get('es_tpv') == 'true'
+        descripcion = request.POST.get('descripcion', '')
+        
+        # --- NUEVO: Método de pago ---
+        metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
+        es_tpv_bool = (metodo_pago != 'EFECTIVO')
+        # -----------------------------
+
         fecha_ingreso_str = request.POST.get('fecha_ingreso')
         try: fecha_ingreso = datetime.strptime(fecha_ingreso_str, '%Y-%m-%d').date() if fecha_ingreso_str else timezone.now().date()
         except ValueError: fecha_ingreso = timezone.now().date()
@@ -358,7 +402,14 @@ def registrar_ingreso(request):
             if importe <= 0: return redirect('registrar_ingreso')
         except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('registrar_ingreso')
 
-        ingreso = Ingreso(fecha=fecha_ingreso, categoria=categoria, importe=importe, descripcion=descripcion.upper(), es_tpv=es_tpv)
+        ingreso = Ingreso(
+            fecha=fecha_ingreso, 
+            categoria=categoria, 
+            importe=importe, 
+            descripcion=descripcion.upper(), 
+            es_tpv=es_tpv_bool,
+            metodo_pago=metodo_pago # <--- NUEVO
+        )
 
         if categoria == 'Taller':
             orden_id = request.POST.get('orden')
@@ -373,7 +424,11 @@ def registrar_ingreso(request):
 
     ordenes_filtradas = obtener_ordenes_relevantes().order_by('-fecha_entrada')
     categorias_ingreso = Ingreso.CATEGORIA_CHOICES
-    context = { 'ordenes': ordenes_filtradas, 'categorias_ingreso': categorias_ingreso }
+    
+    # Pasamos las opciones de método de pago al template
+    metodos_pago = Ingreso.METODO_PAGO_CHOICES 
+
+    context = { 'ordenes': ordenes_filtradas, 'categorias_ingreso': categorias_ingreso, 'metodos_pago': metodos_pago }
     return render(request, 'taller/registrar_ingreso.html', context)
 
 
@@ -772,7 +827,6 @@ def detalle_orden(request, orden_id):
     if request.method == 'POST':
         form_type = request.POST.get('form_type')
 
-        # --- ACCIÓN 1: CAMBIAR ESTADO ---
         if form_type == 'estado':
             if not request.user.has_perm('taller.change_ordendereparacion'):
                 return HttpResponseForbidden("No tienes permiso para modificar órdenes.")
@@ -783,7 +837,6 @@ def detalle_orden(request, orden_id):
                 orden.save()
             return redirect('detalle_orden', orden_id=orden.id)
 
-        # --- ACCIÓN 2: ACTUALIZAR KILOMETRAJE ---
         elif form_type == 'kilometraje':
             if not request.user.has_perm('taller.change_vehiculo'):
                 return HttpResponseForbidden("No tienes permiso para modificar vehículos.")
@@ -799,26 +852,25 @@ def detalle_orden(request, orden_id):
             except (ValueError, TypeError):
                 pass
             return redirect('detalle_orden', orden_id=orden.id)
-
+        
         # --- ACCIÓN 3: SUBIR FOTOS PENDIENTES (NUEVO) ---
         elif form_type == 'subir_fotos':
-            # Usamos el permiso de modificar la orden, ya que añadir fotos es parte de documentarla
             if not request.user.has_perm('taller.change_ordendereparacion'): 
                  return HttpResponseForbidden("No tienes permiso para añadir fotos a la orden.")
 
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             
-            # Procesamos las 5 posibles fotos igual que en ingresar_vehiculo
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
                 if foto_campo in request.FILES:
                     FotoVehiculo.objects.create(
                         orden=orden, 
                         imagen=request.FILES[foto_campo], 
-                        descripcion=descripciones[i-1] # Usa la descripción por defecto según la posición
+                        descripcion=descripciones[i-1]
                     )
             
             return redirect('detalle_orden', orden_id=orden.id)
+
 
     context = {
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
@@ -1008,7 +1060,7 @@ def generar_factura(request, orden_id):
     return redirect('detalle_orden', orden_id=orden.id)
 
 
-# --- VISTA VER FACTURA PDF ---
+# --- VISTA VER FACTURA PDF (MODIFICADA para mostrar datos fiscales) ---
 @login_required
 def ver_factura_pdf(request, factura_id):
     factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=factura_id)
@@ -1058,6 +1110,7 @@ def ver_factura_pdf(request, factura_id):
     pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
     if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
     return response
+# --- FIN VISTA PDF ---
 
 
 # --- VISTA EDITAR FACTURA ---
@@ -1332,7 +1385,6 @@ def contabilidad(request):
         'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/contabilidad.html', context)
-# --- FIN VISTA CONTABILIDAD ---
 
 
 @login_required
@@ -1361,7 +1413,7 @@ def cuentas_por_cobrar(request):
     return render(request, 'taller/cuentas_por_cobrar.html', context)
 
 
-# --- VISTA INFORME TARJETA (MODIFICADA) ---
+# --- VISTA INFORME TARJETA (NUEVO INFORME MULTICUENTA) ---
 @login_required
 def informe_tarjeta(request):
     hoy = timezone.now().date()
@@ -1371,15 +1423,16 @@ def informe_tarjeta(request):
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
 
-    ingresos_tpv_qs = Ingreso.objects.filter(es_tpv=True)
-    gastos_tarjeta_qs = Gasto.objects.filter(pagado_con_tarjeta=True)
+    # Filtro base por fecha
+    ingresos_qs = Ingreso.objects.all()
+    gastos_qs = Gasto.objects.all()
 
     ano_sel_int = None
     if ano_seleccionado:
         try:
             ano_sel_int = int(ano_seleccionado)
-            ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__year=ano_sel_int)
-            gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__year=ano_sel_int)
+            ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
+            gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
         except (ValueError, TypeError):
             ano_seleccionado = None
             
@@ -1388,23 +1441,49 @@ def informe_tarjeta(request):
          try:
             mes_sel_int = int(mes_seleccionado)
             if 1 <= mes_sel_int <= 12:
-                ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__month=mes_sel_int)
-                gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__month=mes_sel_int)
+                ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
+                gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
             else:
                 mes_seleccionado = None
          except (ValueError, TypeError):
             mes_seleccionado = None
     
-    total_ingresos_tpv = ingresos_tpv_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    total_gastos_tarjeta = gastos_tarjeta_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_tarjeta = total_ingresos_tpv - total_gastos_tarjeta
-    movimientos_tarjeta = sorted(list(ingresos_tpv_qs) + list(gastos_tarjeta_qs), key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), reverse=True)
+    # --- CÁLCULOS PARA CUENTA ERIKA ---
+    ingresos_erika = ingresos_qs.filter(metodo_pago='CUENTA_ERIKA')
+    gastos_erika = gastos_qs.filter(metodo_pago='CUENTA_ERIKA')
+    
+    total_ing_erika = ingresos_erika.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    total_gas_erika = gastos_erika.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance_erika = total_ing_erika - total_gas_erika
+
+    # --- CÁLCULOS PARA CUENTA TALLER ---
+    ingresos_taller = ingresos_qs.filter(metodo_pago='CUENTA_TALLER')
+    gastos_taller = gastos_qs.filter(metodo_pago='CUENTA_TALLER')
+    
+    total_ing_taller = ingresos_taller.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    total_gas_taller = gastos_taller.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance_taller = total_ing_taller - total_gas_taller
+
+    # --- LISTA UNIFICADA PARA LA TABLA ---
+    # Combinamos solo los movimientos bancarios (Erika + Taller) para la tabla de detalle
+    movimientos_bancarios = sorted(
+        list(ingresos_erika) + list(gastos_erika) + list(ingresos_taller) + list(gastos_taller),
+        key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), 
+        reverse=True
+    )
     
     context = { 
-        'total_ingresos_tpv': total_ingresos_tpv, 
-        'total_gastos_tarjeta': total_gastos_tarjeta, 
-        'balance_tarjeta': balance_tarjeta, 
-        'movimientos_tarjeta': movimientos_tarjeta, 
+        # Datos Erika
+        'total_ing_erika': total_ing_erika, 
+        'total_gas_erika': total_gas_erika, 
+        'balance_erika': balance_erika,
+        
+        # Datos Taller
+        'total_ing_taller': total_ing_taller,
+        'total_gas_taller': total_gas_taller,
+        'balance_taller': balance_taller,
+
+        'movimientos_bancarios': movimientos_bancarios, 
         'anos_y_meses': anos_y_meses_data, 
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 
@@ -1412,8 +1491,6 @@ def informe_tarjeta(request):
         'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/informe_tarjeta.html', context)
-# --- FIN VISTA INFORME TARJETA ---
-
 
 @login_required
 def ver_presupuesto_pdf(request, presupuesto_id):

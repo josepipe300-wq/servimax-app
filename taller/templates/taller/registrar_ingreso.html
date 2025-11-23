@@ -18,6 +18,15 @@
 
         <form action="" method="post">
             {% csrf_token %}
+
+            <label for="metodo_pago" style="color: #28a745;">¿Dónde entra el dinero?</label>
+            <select id="metodo_pago" name="metodo_pago" style="background-color: #e6fffa; font-weight: bold;">
+                {% for value, name in metodos_pago %}
+                    <option value="{{ value }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+            <hr>
+
             <label for="categoria">Categoría:</label>
             <select id="categoria" name="categoria" required>
                 {% for value, name in categorias_ingreso %}
@@ -41,11 +50,6 @@
                     <option value="{{ orden.id }}">{{ orden }}</option>
                 {% endfor %}
             </select>
-
-            <div style="margin-bottom: 15px;">
-                <input type="checkbox" id="es_tpv" name="es_tpv" value="true">
-                <label for="es_tpv">¿Ingreso por TPV (Tarjeta)?</label>
-            </div>
 
             <button type="submit" class="btn-submit-green">Guardar Ingreso</button>
         </form>

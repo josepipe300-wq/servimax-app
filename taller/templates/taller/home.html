@@ -6,12 +6,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - ServiMax</title>
-    
-    {# --- INICIO DE LA MODIFICACIÓN --- #}
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    {# --- FIN DE LA MODIFICACIÓN (el bloque <style> se ha eliminado) --- #}
-
 </head>
 <body>
 
@@ -68,40 +64,46 @@
     {% endif %}
 
     <div class="dashboard">
-        <div class="card">
-            <h2>Ingresos Mes ({{ mes_seleccionado }}/{{ ano_seleccionado }})</h2> <p class="amount ingresos">{{ total_ingresos|floatformat:2 }} €</p>
+        <div class="card" style="border-top: 4px solid #007bff;">
+            <h2>Total Mes (Global)</h2> 
+            <p>Ingresos: <span class="ingresos">{{ total_ingresos|floatformat:2 }} €</span></p>
+            <p>Gastos: <span class="gastos">{{ total_gastos|floatformat:2 }} €</span></p>
         </div>
-        <div class="card">
-            <h2>Gastos Mes ({{ mes_seleccionado }}/{{ ano_seleccionado }})</h2> <p class="amount gastos">{{ total_gastos|floatformat:2 }} €</p>
+
+        <div class="card" style="border-top: 4px solid #28a745;">
+            <h2>💵 Caja Efectivo (Total)</h2> 
+            <p class="amount balance-caja {% if balance_efectivo < 0 %}negativo{% endif %}">{{ balance_efectivo|floatformat:2 }} €</p>
         </div>
-        <div class="card">
-            <h2>Balance Caja (Histórico)</h2> <p class="amount balance-caja {% if balance_caja < 0 %}negativo{% endif %}">{{ balance_caja|floatformat:2 }} €</p>
+
+        <div class="card" style="border-top: 4px solid #e83e8c;">
+            <h2>💳 Cuenta Erika (Total)</h2> 
+            <p class="amount" style="color: #e83e8c;">{{ balance_erika|floatformat:2 }} €</p>
         </div>
-        <div class="card">
-            <h2>Balance Tarjeta (Histórico)</h2> <p class="amount balance-tarjeta {% if balance_caja < 0 %}negativo{% endif %}">{{ balance_tarjeta|floatformat:2 }} €</p>
+
+        <div class="card" style="border-top: 4px solid #6f42c1;">
+            <h2>🏦 Cuenta Taller (Total)</h2> 
+            <p class="amount" style="color: #6f42c1;">{{ balance_taller|floatformat:2 }} €</p>
         </div>
     </div>
     <hr>
+    
     <h2>Acciones Rápidas</h2>
     <div class="action-buttons">
-        {# --- Condición CORREGIDA para ocultar botones de acción --- #}
         {% if not is_read_only_user %}
             <a href="{% url 'ingresar_vehiculo' %}" class="btn btn-ingresar">➕ Ingresar Vehículo</a>
             <a href="{% url 'anadir_gasto' %}" class="btn btn-gasto">➖ Añadir Gasto</a>
             <a href="{% url 'registrar_ingreso' %}" class="btn btn-ingreso-dinero">💰 Registrar Ingreso</a>
             <a href="{% url 'crear_presupuesto' %}" class="btn" style="background-color: #ffc107; color: #333;">📝 Crear Presupuesto</a>
         {% endif %}
-        {# --- Fin Condición --- #}
 
-        {# --- Botones siempre visibles --- #}
         <a href="{% url 'lista_ordenes' %}" class="btn" style="background-color: #6c757d;">📋 Órdenes Activas</a>
         <a href="{% url 'historial_ordenes' %}" class="btn" style="background-color: #343a40;">🗂️ Historial Trabajos</a>
         <a href="{% url 'contabilidad' %}" class="btn" style="background-color: #fd7e14;">📊 Contabilidad</a>
         <a href="{% url 'cuentas_por_cobrar' %}" class="btn" style="background-color: #dc3545;">🚨 Cuentas por Cobrar</a>
-        <a href="{% url 'informe_tarjeta' %}" class="btn" style="background-color: #6f42c1;">💳 Informe Tarjeta</a>
+        <a href="{% url 'informe_tarjeta' %}" class="btn" style="background-color: #6f42c1;">💳 Bancos / TPV</a>
         <a href="{% url 'lista_presupuestos' %}" class="btn" style="background-color: #ffc107; color: #333;">📋 Ver Presupuestos</a>
-        {# --- Fin Botones siempre visibles --- #}
     </div>
+    
     <div style="margin-top: 40px;">
         <h2>Últimos Movimientos</h2>
         <table class="history-table">
@@ -110,6 +112,7 @@
                     <th>Fecha</th>
                     <th>Tipo</th>
                     <th>Descripción</th>
+                    <th>Método</th>
                     <th style="text-align: right;">Importe</th>
                 </tr>
             </thead>
@@ -119,12 +122,14 @@
                     <tr class="{% if es_gasto %}gasto-row{% else %}ingreso-row{% endif %}">
                         <td>{{ movimiento.fecha|date:"d/m/Y" }}</td>
                         <td>{{ movimiento.get_categoria_display }}</td>
+                        <td>{{ movimiento.descripcion }}</td>
                         <td>
-                            {{ movimiento.descripcion }}
-                            {% if not es_gasto and movimiento.es_tpv %}
-                                <span class="movimiento-metodo">[TPV]</span>
-                            {% elif es_gasto and movimiento.pagado_con_tarjeta %}
-                                <span class="movimiento-metodo">[TARJETA]</span>
+                            {% if movimiento.metodo_pago == 'CUENTA_ERIKA' %}
+                                <span style="background-color: #e83e8c; color: white; padding: 2px 5px; border-radius: 3px; font-size: 0.8em;">ERIKA</span>
+                            {% elif movimiento.metodo_pago == 'CUENTA_TALLER' %}
+                                <span style="background-color: #6f42c1; color: white; padding: 2px 5px; border-radius: 3px; font-size: 0.8em;">TALLER</span>
+                            {% else %}
+                                <span style="background-color: #28a745; color: white; padding: 2px 5px; border-radius: 3px; font-size: 0.8em;">EFECTIVO</span>
                             {% endif %}
                         </td>
                         <td style="text-align: right;">
@@ -135,7 +140,7 @@
                     {% endwith %}
                 {% empty %}
                     <tr>
-                        <td colspan="4" style="text-align: center; padding: 20px;">No hay movimientos recientes.</td>
+                        <td colspan="5" style="text-align: center; padding: 20px;">No hay movimientos recientes.</td>
                     </tr>
                 {% endfor %}
             </tbody>

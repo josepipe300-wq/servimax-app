@@ -5,14 +5,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Informe de Tarjeta/TPV - ServiMax</title>
+    <title>Informe Bancario - ServiMax</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Informe de Movimientos de Tarjeta/TPV</h1>
+            <h1>Informe de Cuentas Bancarias</h1>
             <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
         </div>
 
@@ -41,42 +41,49 @@
         </form>
         <hr>
 
-        <div class="summary-grid">
-            <div class="card">
-                <h2>Ingresos TPV</h2>
-                <p class="amount ingresos">{{ total_ingresos_tpv|floatformat:2 }} €</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+            <div style="background-color: #fff0f6; padding: 20px; border-radius: 8px; border: 2px solid #e83e8c;">
+                <h2 style="color: #e83e8c; margin-top: 0;">💳 Cuenta Erika</h2>
+                <p>Ingresos: <span class="ingresos">{{ total_ing_erika|floatformat:2 }} €</span></p>
+                <p>Gastos: <span class="gastos">{{ total_gas_erika|floatformat:2 }} €</span></p>
+                <hr style="border-color: #e83e8c;">
+                <h3 style="text-align: right;">Balance: {{ balance_erika|floatformat:2 }} €</h3>
             </div>
-            <div class="card">
-                <h2>Gastos Tarjeta</h2>
-                <p class="amount gastos">{{ total_gastos_tarjeta|floatformat:2 }} €</p>
-            </div>
-            <div class="card">
-                <h2>Balance Neto</h2>
-                <p class="amount balance {% if balance_tarjeta < 0 %}gastos{% endif %}">{{ balance_tarjeta|floatformat:2 }} €</p>
+
+            <div style="background-color: #f3f0ff; padding: 20px; border-radius: 8px; border: 2px solid #6f42c1;">
+                <h2 style="color: #6f42c1; margin-top: 0;">🏦 Cuenta Taller (Nueva)</h2>
+                <p>Ingresos: <span class="ingresos">{{ total_ing_taller|floatformat:2 }} €</span></p>
+                <p>Gastos: <span class="gastos">{{ total_gas_taller|floatformat:2 }} €</span></p>
+                <hr style="border-color: #6f42c1;">
+                <h3 style="text-align: right;">Balance: {{ balance_taller|floatformat:2 }} €</h3>
             </div>
         </div>
 
-        <h2>Detalle de Movimientos</h2>
+        <h2>Detalle de Movimientos Bancarios (Ambas cuentas)</h2>
         <table class="history-table">
             <thead>
                 <tr>
                     <th>Fecha</th>
+                    <th>Cuenta</th>
                     <th>Tipo</th>
                     <th>Descripción</th>
                     <th style="text-align: right;">Importe</th>
                 </tr>
             </thead>
             <tbody>
-                {% for movimiento in movimientos_tarjeta %}
+                {% for movimiento in movimientos_bancarios %}
                     {% with es_gasto=movimiento|get_class_name|is_gasto %}
                     <tr class="{% if es_gasto %}gasto-row{% else %}ingreso-row{% endif %}">
                         <td>{{ movimiento.fecha|date:"d/m/Y" }}</td>
                         <td>
-                            {% if es_gasto %}
-                                Gasto Tarjeta ({{ movimiento.get_categoria_display }})
+                            {% if movimiento.metodo_pago == 'CUENTA_ERIKA' %}
+                                <span style="background-color: #e83e8c; color: white; padding: 2px 5px; border-radius: 3px; font-size: 0.8em;">ERIKA</span>
                             {% else %}
-                                Ingreso TPV ({{ movimiento.get_categoria_display }})
+                                <span style="background-color: #6f42c1; color: white; padding: 2px 5px; border-radius: 3px; font-size: 0.8em;">TALLER</span>
                             {% endif %}
+                        </td>
+                        <td>
+                            {{ movimiento.get_categoria_display }}
                         </td>
                         <td>{{ movimiento.descripcion }}</td>
                         <td style="text-align: right;">
@@ -86,7 +93,7 @@
                     </tr>
                     {% endwith %}
                 {% empty %}
-                    <tr><td colspan="4" style="text-align: center; padding: 20px;">No hay movimientos de tarjeta en este periodo.</td></tr>
+                    <tr><td colspan="5" style="text-align: center; padding: 20px;">No hay movimientos bancarios en este periodo.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
