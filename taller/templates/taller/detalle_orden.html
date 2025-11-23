@@ -27,7 +27,6 @@
         }
 
         /* ESTILO DEL BOTÓN DE BORRAR (ROJO Y PEQUEÑO) */
-        /* Usamos !important para machacar el estilo verde global de .factura-form button */
         .factura-form .btn-remove-line {
             background-color: #dc3545 !important; /* Rojo */
             color: white !important;
@@ -69,6 +68,37 @@
                 order: 3;
             }
         }
+        
+        /* Estilo simple para el formulario de fotos ocultable */
+        .upload-photo-form {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #fff;
+            border: 1px dashed #ccc;
+            border-radius: 5px;
+        }
+        .upload-photo-form label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .upload-photo-form input[type="file"] {
+            margin-bottom: 10px;
+            width: 100%;
+            padding: 10px; 
+            background-color: #f8f9fa;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+        }
+
+        /* --- ESTILO NUEVO: CHECK DE CONFIRMACIÓN --- */
+        .upload-status {
+            font-weight: bold;
+            color: #28a745; /* Verde */
+            margin-left: 10px;
+            display: none; /* Oculto por defecto */
+        }
     </style>
 </head>
 <body>
@@ -103,18 +133,64 @@
         <div class="info-item" style="margin-top: 20px;"><strong>Problema Reportado:</strong><p>{{ orden.problema|linebreaks }}</p></div>
         
         <div class="info-item" style="margin-top: 20px;">
-            <strong>Fotos de la Entrada</strong>
+            <strong>Fotos del Vehículo</strong>
+            
             <div class="photo-gallery">
                 {% for foto in orden.fotos.all %}
                     <a href="{{ foto.imagen.url }}" target="_blank">
                         <img src="{{ foto.imagen.url }}" alt="{{ foto.descripcion }}">
                     </a>
                 {% empty %}
-                    <p>No se subieron fotos para esta orden.</p>
+                    <p style="color: #666; font-style: italic;">No hay fotos registradas actualmente.</p>
                 {% endfor %}
             </div>
-        </div>
 
+            <button type="button" id="btn-toggle-upload" style="margin-top: 15px; background-color: #6c757d; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+                📷 Añadir / Subir Fotos Pendientes
+            </button>
+
+            <div id="upload-photos-container" class="upload-photo-form" style="display: none;">
+                <form action="{% url 'detalle_orden' orden.id %}" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="subir_fotos">
+                    
+                    <p style="font-size: 0.9em; color: #555; margin-bottom: 10px;">Sube las fotos que faltaron al crear la orden. Puedes subir una o varias a la vez.</p>
+
+                    <div>
+                        <label for="foto1">
+                            Foto Frontal: <span id="check-foto1" class="upload-status">✅ Lista</span>
+                        </label>
+                        <input type="file" id="foto1" name="foto1" accept="image/*" capture="environment">
+                    </div>
+                    <div>
+                        <label for="foto2">
+                            Foto Trasera: <span id="check-foto2" class="upload-status">✅ Lista</span>
+                        </label>
+                        <input type="file" id="foto2" name="foto2" accept="image/*" capture="environment">
+                    </div>
+                    <div>
+                        <label for="foto3">
+                            Lateral Izquierdo: <span id="check-foto3" class="upload-status">✅ Lista</span>
+                        </label>
+                        <input type="file" id="foto3" name="foto3" accept="image/*" capture="environment">
+                    </div>
+                    <div>
+                        <label for="foto4">
+                            Lateral Derecho: <span id="check-foto4" class="upload-status">✅ Lista</span>
+                        </label>
+                        <input type="file" id="foto4" name="foto4" accept="image/*" capture="environment">
+                    </div>
+                    <div>
+                        <label for="foto5">
+                            Cuadro / Km: <span id="check-foto5" class="upload-status">✅ Lista</span>
+                        </label>
+                        <input type="file" id="foto5" name="foto5" accept="image/*" capture="environment">
+                    </div>
+
+                    <button type="submit" style="background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 10px;">Subir Fotos Seleccionadas</button>
+                </form>
+            </div>
+        </div>
         <div class="status-form">
             <h2>Actualizar Estado</h2>
             <form action="{% url 'detalle_orden' orden.id %}" method="post">
@@ -209,6 +285,49 @@
     </div>
 
     <script>
+        // --- Script para mostrar/ocultar formulario de fotos ---
+        const btnToggleUpload = document.getElementById('btn-toggle-upload');
+        const uploadContainer = document.getElementById('upload-photos-container');
+        
+        if (btnToggleUpload && uploadContainer) {
+            btnToggleUpload.addEventListener('click', function() {
+                if (uploadContainer.style.display === 'none') {
+                    uploadContainer.style.display = 'block';
+                    btnToggleUpload.textContent = 'Ocultar formulario de fotos';
+                } else {
+                    uploadContainer.style.display = 'none';
+                    btnToggleUpload.textContent = '📷 Añadir / Subir Fotos Pendientes';
+                }
+            });
+        }
+
+        // --- NUEVO SCRIPT VISUAL: CHECKS DE FOTOS ---
+        function updateUploadStatus(inputId, statusId) {
+            const input = document.getElementById(inputId);
+            const statusSpan = document.getElementById(statusId);
+            
+            if (input && statusSpan) {
+                input.addEventListener('change', function() {
+                    if (this.files && this.files.length > 0) {
+                        statusSpan.style.display = 'inline'; // Mostrar el Check
+                        this.style.borderColor = '#28a745'; // Borde verde
+                    } else {
+                        statusSpan.style.display = 'none'; // Ocultar si se borra
+                        this.style.borderColor = '#ced4da'; // Borde normal
+                    }
+                });
+            }
+        }
+
+        // Activar la función para los 5 inputs
+        updateUploadStatus('foto1', 'check-foto1');
+        updateUploadStatus('foto2', 'check-foto2');
+        updateUploadStatus('foto3', 'check-foto3');
+        updateUploadStatus('foto4', 'check-foto4');
+        updateUploadStatus('foto5', 'check-foto5');
+
+
+        // --- Scripts existentes de facturación ---
         // Script para añadir Mano de Obra
         document.getElementById('add-mano-obra')?.addEventListener('click', () => {
             const container = document.getElementById('mano-de-obra-container');
@@ -226,9 +345,6 @@
         document.getElementById('add-consumible-btn')?.addEventListener('click', () => {
             const container = document.getElementById('consumibles-container');
             const newItem = document.createElement('div');
-            // Aquí la estructura es un poco diferente: 2 filas
-            // Fila 1: Select + Botón borrar
-            // Fila 2: Cantidad + Precio
             newItem.innerHTML = `
                 <div class="item-row">
                     <select name="tipo_consumible" required style="flex-grow: 1;">

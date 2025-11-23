@@ -224,12 +224,11 @@ def ingresar_vehiculo(request):
                 presupuesto.estado = 'Convertido'
                 presupuesto.save()
 
-            # --- CORRECCIÓN FOTOS: SIN TRY/EXCEPT ---
+            # --- FOTOS ---
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
                 if foto_campo in request.FILES:
-                    # Si falla (ej: timeout o tamaño), la transacción se revierte y ves el error
                     FotoVehiculo.objects.create(
                         orden=nueva_orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1]
                     )
@@ -773,6 +772,7 @@ def detalle_orden(request, orden_id):
     if request.method == 'POST':
         form_type = request.POST.get('form_type')
 
+        # --- ACCIÓN 1: CAMBIAR ESTADO ---
         if form_type == 'estado':
             if not request.user.has_perm('taller.change_ordendereparacion'):
                 return HttpResponseForbidden("No tienes permiso para modificar órdenes.")
@@ -783,6 +783,7 @@ def detalle_orden(request, orden_id):
                 orden.save()
             return redirect('detalle_orden', orden_id=orden.id)
 
+        # --- ACCIÓN 2: ACTUALIZAR KILOMETRAJE ---
         elif form_type == 'kilometraje':
             if not request.user.has_perm('taller.change_vehiculo'):
                 return HttpResponseForbidden("No tienes permiso para modificar vehículos.")
@@ -797,6 +798,26 @@ def detalle_orden(request, orden_id):
                     vehiculo.save()
             except (ValueError, TypeError):
                 pass
+            return redirect('detalle_orden', orden_id=orden.id)
+
+        # --- ACCIÓN 3: SUBIR FOTOS PENDIENTES (NUEVO) ---
+        elif form_type == 'subir_fotos':
+            # Usamos el permiso de modificar la orden, ya que añadir fotos es parte de documentarla
+            if not request.user.has_perm('taller.change_ordendereparacion'): 
+                 return HttpResponseForbidden("No tienes permiso para añadir fotos a la orden.")
+
+            descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
+            
+            # Procesamos las 5 posibles fotos igual que en ingresar_vehiculo
+            for i in range(1, 6):
+                foto_campo = f'foto{i}'
+                if foto_campo in request.FILES:
+                    FotoVehiculo.objects.create(
+                        orden=orden, 
+                        imagen=request.FILES[foto_campo], 
+                        descripcion=descripciones[i-1] # Usa la descripción por defecto según la posición
+                    )
+            
             return redirect('detalle_orden', orden_id=orden.id)
 
     context = {
