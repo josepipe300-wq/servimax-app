@@ -3,48 +3,51 @@
 from pathlib import Path
 import os
 import dj_database_url
-from dotenv import load_dotenv # <-- Importar dotenv
+from dotenv import load_dotenv 
 
-load_dotenv() # <-- Cargar variables del archivo .env
+load_dotenv() 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-p_%woq5*pl+-#ad=^=2_#i1vsyf9&a*-p6$xob*eak%3$cyp44')
 
-# DEBUG debe ser False en producción (Render lo configura automáticamente a False si no lo pones)
-# Para pruebas, puedes leerlo de una variable de entorno, pero asegúrate que en Render sea False.
-# DEBUG = True # <-- Descomentar esta línea para pruebas locales si da problemas ALLOWED_HOSTS
-DEBUG = True
+# --- CONFIGURACIÓN SEGURA PARA PRODUCCIÓN (RENDER) Y LOCAL ---
+
+# DEBUG: Será False en Render (si existe la variable RENDER) y True en tu PC.
+DEBUG = 'RENDER' not in os.environ
 
 ALLOWED_HOSTS = []
+
+# 1. Si estamos en Render, añadir su dominio automáticamente
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
-# Añadir host local si DEBUG es True
+
+# 2. Si estamos en modo DEBUG (Local), permitir todo para que funcione el móvil
 if DEBUG:
-    ALLOWED_HOSTS.append('127.0.0.1')
-    ALLOWED_HOSTS.append('localhost')
+    ALLOWED_HOSTS.extend(['127.0.0.1', 'localhost', '*'])
+
+# -------------------------------------------------------------
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    'taller.apps.TallerConfig', # <-- Mejor usar la configuración explícita de la app
+    'taller.apps.TallerConfig',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'whitenoise.runserver_nostatic', # Necesario para runserver si usas whitenoise
+    'whitenoise.runserver_nostatic',
     'django.contrib.staticfiles',
-    'cloudinary', # App de Cloudinary
-    'cloudinary_storage', # App para integración con Django Storages
-    # 'django_storages', # django-storages ya no es necesaria si solo usas cloudinary_storage
+    'cloudinary', 
+    'cloudinary_storage', 
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # Whitenoise primero después de Security
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -58,9 +61,7 @@ ROOT_URLCONF = 'servimax_app.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        # --- AÑADIR DIRECTORIO PARA PLANTILLAS DE AUTENTICACIÓN ---
-        'DIRS': [BASE_DIR / 'templates'], # Busca plantillas en una carpeta 'templates' en la raíz
-        # --- FIN AÑADIDO ---
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -78,7 +79,6 @@ WSGI_APPLICATION = 'servimax_app.wsgi.application'
 # Database
 DATABASES = {
     'default': dj_database_url.config(
-        # Usa DATABASE_URL de Render, o sqlite local como fallback
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600
     )
@@ -102,39 +102,53 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'taller/static'),]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-# Asegurar que Whitenoise esté configurado para estáticos
+
 STORAGES = {
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
-    # --- MOVER LA CONFIGURACIÓN DE 'default' AQUÍ DENTRO ---
-    "default": {}, # Dejar vacío por ahora, se llenará abajo
+    "default": {}, 
 }
 
-# --- CONFIGURACIÓN DE ALMACENAMIENTO DE MEDIOS (Cloudinary o Local) ---
+# --- CONFIGURACIÓN DE ALMACENAMIENTO Y OPTIMIZACIÓN CLOUDINARY ---
 
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
 CLOUDINARY_MEDIA_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 if CLOUDINARY_URL:
-    # --- Configuración para Cloudinary (Producción/Render) ---
-    # DEFAULT_FILE_STORAGE ya no se usa directamente, se configura en STORAGES
-    STORAGES["default"]["BACKEND"] = CLOUDINARY_MEDIA_BACKEND # Configurar backend default
-    MEDIA_URL = '/media/' # Cloudinary genera la URL final
-    MEDIA_ROOT = '' # No usado por Cloudinary
-
+    STORAGES["default"]["BACKEND"] = CLOUDINARY_MEDIA_BACKEND
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = '' 
+    
+    # Configuración para reducir tamaño AUTOMÁTICAMENTE al subir
+    CLOUDINARY_STORAGE = {
+        # Intentamos obtener el CLOUD_NAME de la URL, si falla usa el valor por defecto de la librería
+        'CLOUD_NAME': CLOUDINARY_URL.split('@')[1] if '@' in CLOUDINARY_URL else None,
+        
+        'HAVE_IMAGE_TRANSFORMATION': True,
+        'IMAGE_TRANSFORMATION': {
+            'quality': 'auto',      # Compresión inteligente
+            'fetch_format': 'auto', # Formato eficiente (WebP/AVIF)
+            'width': 1920,          # Reducir a Full HD
+            'crop': 'limit'         # No estirar si es pequeña
+        }
+    }
 else:
-    # --- Configuración Local (Desarrollo) ---
+    # Configuración local si no hay Cloudinary (para desarrollo offline)
     MEDIA_URL = '/media/'
     MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-    STORAGES["default"]["BACKEND"] = 'django.core.files.storage.FileSystemStorage' # Configurar backend default
+    STORAGES["default"]["BACKEND"] = 'django.core.files.storage.FileSystemStorage' 
 
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # --- CONFIGURACIÓN DE AUTENTICACIÓN ---
-LOGIN_REDIRECT_URL = '/'  # Redirigir a la página principal (home) después del login
-LOGOUT_REDIRECT_URL = '/' # Redirigir a la página principal (home) después del logout
-LOGIN_URL = '/accounts/login/' # La URL donde estará la página de login
-# --- FIN CONFIGURACIÓN ---
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
+LOGIN_URL = '/accounts/login/'
+
+# --- LÍMITES DE SUBIDA AMPLIADOS ---
+# 100MB para permitir la subida inicial de fotos grandes (luego Cloudinary las reduce)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600
+FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600

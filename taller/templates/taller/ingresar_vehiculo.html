@@ -7,6 +7,23 @@
     <title>Ingresar Vehículo - ServiMax</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <style>
+        /* Estilo para el check de confirmación */
+        .upload-status {
+            font-weight: bold;
+            color: #28a745; /* Verde */
+            margin-left: 10px;
+            display: none; /* Oculto por defecto */
+        }
+        /* Hacer los inputs de archivo más grandes para facilitar el toque en el móvil */
+        input[type="file"] {
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            width: 100%;
+        }
+    </style>
 </head>
 <body>
     <div class="form-container">
@@ -108,36 +125,47 @@
                 <textarea id="problema" name="problema" required></textarea>
 
                 <h3>Fotos del Vehículo (hasta 5)</h3>
+                
                 <div class="photo-grid">
                     <div>
-                        <label for="foto1">Foto 1 (Frontal):</label>
+                        <label for="foto1">
+                            Foto 1 (Frontal): <span id="check-foto1" class="upload-status">✅ Lista</span>
+                        </label>
                         <input type="file" id="foto1" name="foto1" accept="image/*" capture="environment">
                     </div>
                     <div>
-                        <label for="foto2">Foto 2 (Trasera):</label>
+                        <label for="foto2">
+                            Foto 2 (Trasera): <span id="check-foto2" class="upload-status">✅ Lista</span>
+                        </label>
                         <input type="file" id="foto2" name="foto2" accept="image/*" capture="environment">
                     </div>
                     <div>
-                        <label for="foto3">Foto 3 (Lateral Izquierdo):</label>
+                        <label for="foto3">
+                            Foto 3 (Lateral Izquierdo): <span id="check-foto3" class="upload-status">✅ Lista</span>
+                        </label>
                         <input type="file" id="foto3" name="foto3" accept="image/*" capture="environment">
                     </div>
                     <div>
-                        <label for="foto4">Foto 4 (Lateral Derecho):</label>
+                        <label for="foto4">
+                            Foto 4 (Lateral Derecho): <span id="check-foto4" class="upload-status">✅ Lista</span>
+                        </label>
                         <input type="file" id="foto4" name="foto4" accept="image/*" capture="environment">
                     </div>
                     <div>
-                        <label for="foto5">Foto 5 (Cuadro/Km):</label>
+                        <label for="foto5">
+                            Foto 5 (Cuadro/Km): <span id="check-foto5" class="upload-status">✅ Lista</span>
+                        </label>
                         <input type="file" id="foto5" name="foto5" accept="image/*" capture="environment">
                     </div>
                 </div>
             </div>
 
-            <button type="submit">Crear Orden de Reparación</button>
+            <button type="submit" class="btn-submit-green">Crear Orden de Reparación</button>
         </form>
     </div>
 
     <script>
-        // --- SCRIPT PARA CARGAR DATOS DESDE PRESUPUESTO (SIN CAMBIOS) ---
+        // --- SCRIPT PRESUPUESTO (Lógica Original) ---
         const presupuestoSelect = document.getElementById('presupuesto_select');
         const nombreClienteInput = document.getElementById('cliente_nombre');
         const telefonoClienteInput = document.getElementById('cliente_telefono');
@@ -185,8 +213,29 @@
             }
         });
         
-        // --- SCRIPT CHECKMARK FOTOS (ELIMINADO) ---
-        // Se ha borrado todo el script de 'updateUploadStatus' y 'visibilitychange'
+        // --- NUEVO SCRIPT VISUAL: CHECKS DE FOTOS ---
+        function updateUploadStatus(inputId, statusId) {
+            const input = document.getElementById(inputId);
+            const statusSpan = document.getElementById(statusId);
+            
+            input.addEventListener('change', function() {
+                if (this.files && this.files.length > 0) {
+                    statusSpan.style.display = 'inline'; // Mostrar el Check
+                    // Opcional: Cambiar el borde del input a verde
+                    this.style.borderColor = '#28a745';
+                } else {
+                    statusSpan.style.display = 'none'; // Ocultar si se borra
+                    this.style.borderColor = '#ced4da';
+                }
+            });
+        }
+
+        // Activar la función para los 5 inputs
+        updateUploadStatus('foto1', 'check-foto1');
+        updateUploadStatus('foto2', 'check-foto2');
+        updateUploadStatus('foto3', 'check-foto3');
+        updateUploadStatus('foto4', 'check-foto4');
+        updateUploadStatus('foto5', 'check-foto5');
         
     </script>
 
