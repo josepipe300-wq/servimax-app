@@ -83,18 +83,29 @@ class Gasto(models.Model):
         ('Otros', 'Otros'),
         ('Compra de Consumibles', 'Compra de Consumibles'),
     ]
+    
+    # --- NUEVO CAMPO PARA CUENTAS ---
+    METODO_PAGO_CHOICES = [
+        ('EFECTIVO', 'Efectivo (Caja)'),
+        ('CUENTA_ERIKA', 'Cuenta Erika (Compartida)'),
+        ('CUENTA_TALLER', 'Cuenta Taller (Nueva)'),
+    ]
+    metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
+    # --------------------------------
+    
     fecha = models.DateField(default=timezone.now)
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     descripcion = models.CharField(max_length=255, null=True, blank=True)
     vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
     empleado = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Mantenemos este campo por seguridad histórica
     pagado_con_tarjeta = models.BooleanField(default=False)
 
     def __str__(self):
         display_importe = self.importe if self.importe is not None else 0
-        pago = " [TARJETA]" if self.pagado_con_tarjeta else ""
-        return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€{pago}"
+        return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€ [{self.get_metodo_pago_display()}]"
 
     def save(self, *args, **kwargs):
         if self.descripcion:
@@ -108,16 +119,27 @@ class Ingreso(models.Model):
         ('Otras Ganancias', 'Otras Ganancias'),
         ('Otros', 'Otros Ingresos'),
     ]
+    
+    # --- NUEVO CAMPO PARA CUENTAS ---
+    METODO_PAGO_CHOICES = [
+        ('EFECTIVO', 'Efectivo (Caja)'),
+        ('CUENTA_ERIKA', 'Cuenta Erika (Compartida)'),
+        ('CUENTA_TALLER', 'Cuenta Taller (Nueva)'),
+    ]
+    metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
+    # --------------------------------
+
     fecha = models.DateField(default=timezone.now)
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=255)
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Mantenemos este campo por seguridad histórica
     es_tpv = models.BooleanField(default=False)
 
     def __str__(self):
-        metodo = " [TPV]" if self.es_tpv else ""
-        return f"{self.fecha} - {self.get_categoria_display()} - {self.importe}€{metodo}"
+        return f"{self.fecha} - {self.get_categoria_display()} - {self.importe}€ [{self.get_metodo_pago_display()}]"
 
     def save(self, *args, **kwargs):
         self.descripcion = self.descripcion.upper()
@@ -209,7 +231,6 @@ class FotoVehiculo(models.Model):
         self.descripcion = self.descripcion.upper()
         super(FotoVehiculo, self).save(*args, **kwargs)
 
-# --- MODELO PRESUPUESTO ACTUALIZADO ---
 class Presupuesto(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
@@ -225,13 +246,10 @@ class Presupuesto(models.Model):
         ('Convertido', 'Convertido a Orden'),
     ]
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='Pendiente')
-    
-    # --- CAMPOS PARA LÓGICA DE IVA ---
     aplicar_iva = models.BooleanField(default=True, help_text="Si marcado, se aplica el 21% de IVA y se muestran datos fiscales.")
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     iva = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_estimado = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    # --------------------------------
 
     def __str__(self):
         return f"Presupuesto #{self.id} - {self.cliente.nombre}"
