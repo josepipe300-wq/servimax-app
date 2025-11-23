@@ -155,7 +155,7 @@ def home(request):
     return render(request, 'taller/home.html', context)
 
 
-# --- VISTA INGRESAR VEHÍCULO (MODIFICADA) ---
+# --- VISTA INGRESAR VEHÍCULO ---
 @login_required
 def ingresar_vehiculo(request):
     if request.method == 'POST':
@@ -224,17 +224,15 @@ def ingresar_vehiculo(request):
                 presupuesto.estado = 'Convertido'
                 presupuesto.save()
 
-            # --- MODIFICACIÓN PARA FOTOS: Dentro de la transacción y SIN try/except ---
+            # --- CORRECCIÓN FOTOS: SIN TRY/EXCEPT ---
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
                 if foto_campo in request.FILES:
+                    # Si falla (ej: timeout o tamaño), la transacción se revierte y ves el error
                     FotoVehiculo.objects.create(
-                        orden=nueva_orden, 
-                        imagen=request.FILES[foto_campo], 
-                        descripcion=descripciones[i-1]
+                        orden=nueva_orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1]
                     )
-            # ------------------------------------------------------------------------
 
         return redirect('detalle_orden', orden_id=nueva_orden.id)
 
@@ -864,7 +862,7 @@ def editar_movimiento(request, tipo, movimiento_id):
         return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
 
 
-# --- VISTA GENERAR FACTURA ---
+# --- VISTA GENERAR FACTURA (CORREGIDA PARA NO PERDER CONSECUTIVOS) ---
 @login_required
 def generar_factura(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo'), id=orden_id)
@@ -882,27 +880,55 @@ def generar_factura(request, orden_id):
         notas = request.POST.get('notas_cliente', '')
 
         with transaction.atomic():
+            # 1. PRESERVAR DATOS: Comprobamos si ya existe una factura para esta orden
+            factura_anterior = Factura.objects.filter(orden=orden).first()
+            numero_a_conservar = None
+            fecha_a_conservar = None
+            
+            if factura_anterior:
+                # Si ya era una factura oficial con número, lo guardamos
+                if factura_anterior.es_factura and factura_anterior.numero_factura:
+                    numero_a_conservar = factura_anterior.numero_factura
+                
+                # Guardamos SIEMPRE la fecha original para no saltar en el tiempo al regenerar
+                fecha_a_conservar = factura_anterior.fecha_emision
+
+            # 2. BORRAR: Ahora es seguro borrar, porque tenemos los datos clave guardados
             Factura.objects.filter(orden=orden).delete()
             UsoConsumible.objects.filter(orden=orden).delete()
 
+            # 3. ASIGNAR NÚMERO
             nuevo_numero_factura = None
-            if es_factura:
-                ultima_factura = Factura.objects.select_for_update().filter(
-                    numero_factura__isnull=False
-                ).order_by('-numero_factura').first()
-                
-                if ultima_factura and ultima_factura.numero_factura:
-                    nuevo_numero_factura = ultima_factura.numero_factura + 1
-                else:
-                    nuevo_numero_factura = 1
             
+            if es_factura:
+                if numero_a_conservar:
+                    # CASO A: Estamos regenerando una factura existente -> MANTENER EL NÚMERO
+                    nuevo_numero_factura = numero_a_conservar
+                else:
+                    # CASO B: Es una factura totalmente nueva -> CALCULAR SIGUIENTE
+                    ultima_factura = Factura.objects.select_for_update().filter(
+                        numero_factura__isnull=False
+                    ).order_by('-numero_factura').first()
+                    
+                    if ultima_factura and ultima_factura.numero_factura:
+                        nuevo_numero_factura = ultima_factura.numero_factura + 1
+                    else:
+                        nuevo_numero_factura = 1
+            
+            # 4. CREAR
             factura = Factura.objects.create(
                 orden=orden, 
                 es_factura=es_factura, 
                 notas_cliente=notas,
                 numero_factura=nuevo_numero_factura 
             )
+
+            # 5. RESTAURAR FECHA ANTIGUA (Si existía)
+            if fecha_a_conservar:
+                Factura.objects.filter(id=factura.id).update(fecha_emision=fecha_a_conservar)
+                factura.fecha_emision = fecha_a_conservar
             
+            # ... (El resto de la lógica de líneas sigue igual) ...
             subtotal = Decimal('0.00')
             repuestos_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
             gastos_otros_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Otros')
@@ -1040,6 +1066,7 @@ def editar_factura(request, factura_id):
              return redirect('detalle_orden', orden_id=orden.id)
 
 
+    # --- Lógica GET ---
     repuestos_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
     gastos_otros_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Otros')
     tipos_consumible = TipoConsumible.objects.all()
@@ -1061,7 +1088,7 @@ def editar_factura(request, factura_id):
     return render(request, 'taller/editar_factura.html', context)
 
 
-# --- INFORMES ---
+# --- INFORMES (Solo lectura, @login_required por consistencia) ---
 @login_required
 def informe_rentabilidad(request):
     periodo = request.GET.get('periodo', 'mes'); hoy = timezone.now().date()
@@ -1235,7 +1262,7 @@ def informe_ingresos_desglose(request, categoria):
     return render(request, 'taller/informe_ingresos_desglose.html', context)
 
 
-# --- VISTA CONTABILIDAD ---
+# --- VISTA CONTABILIDAD (MODIFICADA) ---
 @login_required
 def contabilidad(request):
     hoy = timezone.now().date()
@@ -1284,6 +1311,7 @@ def contabilidad(request):
         'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/contabilidad.html', context)
+# --- FIN VISTA CONTABILIDAD ---
 
 
 @login_required
@@ -1312,7 +1340,7 @@ def cuentas_por_cobrar(request):
     return render(request, 'taller/cuentas_por_cobrar.html', context)
 
 
-# --- VISTA INFORME TARJETA ---
+# --- VISTA INFORME TARJETA (MODIFICADA) ---
 @login_required
 def informe_tarjeta(request):
     hoy = timezone.now().date()
@@ -1363,6 +1391,8 @@ def informe_tarjeta(request):
         'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/informe_tarjeta.html', context)
+# --- FIN VISTA INFORME TARJETA ---
+
 
 @login_required
 def ver_presupuesto_pdf(request, presupuesto_id):
