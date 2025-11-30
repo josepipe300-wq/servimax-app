@@ -44,14 +44,17 @@
                 <label for="descripcion">Descripción:</label>
                 <textarea id="descripcion" name="descripcion"></textarea>
 
-                <div id="campo-vehiculo" style="display: none;">
-                    <label for="vehiculo">Asociar a Vehículo:</label>
-                    <select id="vehiculo" name="vehiculo">
-                        <option value="">--- Ninguno ---</option>
-                        {% for vehiculo in vehiculos %}
-                            <option value="{{ vehiculo.id }}">{{ vehiculo }}</option>
+                <div id="campo-orden" style="display: none;">
+                    <label for="orden">Asociar a Orden Activa (Vehículo):</label>
+                    <select id="orden" name="orden">
+                        <option value="">--- Selecciona el Vehículo/Orden ---</option>
+                        {% for orden in ordenes_activas %}
+                            <option value="{{ orden.id }}">
+                                {{ orden.vehiculo.matricula }} - {{ orden.vehiculo.modelo }} ({{ orden.cliente.nombre }})
+                            </option>
                         {% endfor %}
                     </select>
+                    <p style="font-size: 0.8em; color: #666;">Solo aparecen vehículos con órdenes abiertas (No entregados).</p>
                 </div>
 
                 <div id="campo-empleado" style="display: none;">
@@ -89,14 +92,14 @@
         const categoriaSelect = document.getElementById('categoria');
         const camposGastoNormal = document.getElementById('campos-gasto-normal');
         const camposConsumible = document.getElementById('campos-consumible');
-        const campoVehiculo = document.getElementById('campo-vehiculo');
+        const campoOrden = document.getElementById('campo-orden'); // Cambiado ID
         const campoEmpleado = document.getElementById('campo-empleado');
 
         function actualizarFormulario() {
             const selectedValue = categoriaSelect.value;
             camposGastoNormal.style.display = 'none';
             camposConsumible.style.display = 'none';
-            campoVehiculo.style.display = 'none';
+            campoOrden.style.display = 'none';
             campoEmpleado.style.display = 'none';
 
             if (selectedValue === 'Compra de Consumibles') {
@@ -105,7 +108,7 @@
                 camposGastoNormal.style.display = 'block';
 
                 if (selectedValue === 'Repuestos' || selectedValue === 'Otros') {
-                    campoVehiculo.style.display = 'block';
+                    campoOrden.style.display = 'block'; // Mostramos el select de órdenes
                 } else if (selectedValue === 'Sueldos') {
                     campoEmpleado.style.display = 'block';
                 }

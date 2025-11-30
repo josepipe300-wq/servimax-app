@@ -104,7 +104,7 @@ def home(request):
     total_ingresos = ingresos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastos = gastos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
 
-    # --- NUEVA LÓGICA DE BALANCES (HISTÓRICOS) ---
+    # --- NUEVA LÓGICA DE BALANCES (HISTÓRICOS MULTICUENTA) ---
     # 1. Efectivo (Caja)
     ing_efectivo = Ingreso.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_efectivo = Gasto.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
@@ -119,7 +119,7 @@ def home(request):
     ing_taller = Ingreso.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_taller = Gasto.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_taller = ing_taller - gas_taller
-    # ---------------------------------------------
+    # ---------------------------------------------------------
 
     ultimos_gastos = Gasto.objects.order_by('-id')[:5]
     ultimos_ingresos = Ingreso.objects.order_by('-id')[:5]
@@ -239,6 +239,7 @@ def ingresar_vehiculo(request):
                 presupuesto.estado = 'Convertido'
                 presupuesto.save()
 
+            # --- GUARDAR FOTOS (Optimizado para S24 Ultra) ---
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
@@ -269,7 +270,7 @@ def ingresar_vehiculo(request):
     return render(request, 'taller/ingresar_vehiculo.html', context)
 
 
-# --- VISTA AÑADIR GASTO (ACTUALIZADA) ---
+# --- VISTA AÑADIR GASTO (ACTUALIZADA: Multicuenta + Orden) ---
 @login_required
 def anadir_gasto(request):
     if request.method == 'POST':
@@ -277,12 +278,8 @@ def anadir_gasto(request):
              return HttpResponseForbidden("No tienes permiso para añadir gastos o compras.")
 
         categoria = request.POST['categoria']
-        # --- NUEVO: Método de pago ---
         metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
-        
-        # Mantener compatibilidad con el booleano antiguo (si no es efectivo, es tarjeta)
         pagado_con_tarjeta_bool = (metodo_pago != 'EFECTIVO')
-        # -----------------------------
 
         if categoria == 'Compra de Consumibles':
             if not request.user.has_perm('taller.add_compraconsumible'):
@@ -305,14 +302,13 @@ def anadir_gasto(request):
 
                     CompraConsumible.objects.create(tipo=tipo_consumible, fecha_compra=fecha_compra, cantidad=cantidad, coste_total=coste_total)
                     
-                    # Guardamos con el método de pago nuevo
                     Gasto.objects.create(
                         fecha=fecha_compra, 
                         categoria=categoria, 
                         importe=coste_total,
                         descripcion=f"Compra de {cantidad} {tipo_consumible.unidad_medida} de {tipo_consumible.nombre}",
                         pagado_con_tarjeta=pagado_con_tarjeta_bool,
-                        metodo_pago=metodo_pago # <--- NUEVO
+                        metodo_pago=metodo_pago
                     )
             except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('anadir_gasto')
         else:
@@ -334,17 +330,23 @@ def anadir_gasto(request):
                 importe=importe, 
                 descripcion=descripcion.upper(), 
                 pagado_con_tarjeta=pagado_con_tarjeta_bool,
-                metodo_pago=metodo_pago # <--- NUEVO
+                metodo_pago=metodo_pago
             )
 
+            # --- CAMBIO CLAVE: Asociar a ORDEN, no a Vehículo ---
             if categoria in ['Repuestos', 'Otros']:
-                vehiculo_id = request.POST.get('vehiculo')
-                if vehiculo_id:
+                orden_id = request.POST.get('orden') # Recibimos el ID de la orden desde el form
+                if orden_id:
                     try:
-                        vehiculo = Vehiculo.objects.get(id=vehiculo_id)
-                        ordenes_relevantes = obtener_ordenes_relevantes()
-                        if ordenes_relevantes.filter(vehiculo=vehiculo).exists(): gasto.vehiculo = vehiculo
-                    except Vehiculo.DoesNotExist: pass
+                        orden = OrdenDeReparacion.objects.get(id=orden_id)
+                        gasto.orden = orden # Guardamos la relación con la orden
+                        
+                        # Si la orden estaba recién recibida, pasamos a 'En Reparación'
+                        if orden.estado in ['Recibido', 'En Diagnostico']:
+                            orden.estado = 'En Reparacion'
+                            orden.save()
+                    except OrdenDeReparacion.DoesNotExist: pass
+
             if categoria == 'Sueldos':
                 empleado_id = request.POST.get('empleado')
                 if empleado_id:
@@ -352,29 +354,21 @@ def anadir_gasto(request):
                      except Empleado.DoesNotExist: pass
             gasto.save()
 
-            if gasto.vehiculo and categoria in ['Repuestos', 'Otros']:
-                try:
-                    orden_a_actualizar = OrdenDeReparacion.objects.filter(vehiculo=gasto.vehiculo, estado__in=['Recibido', 'En Diagnostico']).latest('fecha_entrada')
-                    orden_a_actualizar.estado = 'En Reparacion'
-                    orden_a_actualizar.save()
-                except OrdenDeReparacion.DoesNotExist: pass
-
         return redirect('home')
 
-    ordenes_relevantes = obtener_ordenes_relevantes()
-    vehiculos_ids_relevantes = ordenes_relevantes.values_list('vehiculo_id', flat=True).distinct()
-    vehiculos_filtrados = Vehiculo.objects.filter(id__in=vehiculos_ids_relevantes).select_related('cliente')
+    # Filtramos solo las órdenes activas para el selector
+    ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente').order_by('-id')
+    
     empleados = Empleado.objects.all()
     tipos_consumible = TipoConsumible.objects.all()
     categorias_gasto_choices = [choice for choice in Gasto.CATEGORIA_CHOICES if choice[0] != 'Compra de Consumibles']
-    
-    # Pasamos las opciones de método de pago al template
     metodos_pago = Gasto.METODO_PAGO_CHOICES 
     
     context = {
-        'vehiculos': vehiculos_filtrados, 'empleados': empleados, 'tipos_consumible': tipos_consumible,
+        'ordenes_activas': ordenes_activas, 
+        'empleados': empleados, 'tipos_consumible': tipos_consumible,
         'categorias_gasto': Gasto.CATEGORIA_CHOICES, 'categorias_gasto_select': categorias_gasto_choices,
-        'metodos_pago': metodos_pago # <--- NUEVO
+        'metodos_pago': metodos_pago
     }
     return render(request, 'taller/anadir_gasto.html', context)
 
@@ -389,10 +383,9 @@ def registrar_ingreso(request):
         categoria = request.POST['categoria']; importe_str = request.POST.get('importe')
         descripcion = request.POST.get('descripcion', '')
         
-        # --- NUEVO: Método de pago ---
+        # --- Multicuenta ---
         metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
         es_tpv_bool = (metodo_pago != 'EFECTIVO')
-        # -----------------------------
 
         fecha_ingreso_str = request.POST.get('fecha_ingreso')
         try: fecha_ingreso = datetime.strptime(fecha_ingreso_str, '%Y-%m-%d').date() if fecha_ingreso_str else timezone.now().date()
@@ -408,7 +401,7 @@ def registrar_ingreso(request):
             importe=importe, 
             descripcion=descripcion.upper(), 
             es_tpv=es_tpv_bool,
-            metodo_pago=metodo_pago # <--- NUEVO
+            metodo_pago=metodo_pago
         )
 
         if categoria == 'Taller':
@@ -424,8 +417,6 @@ def registrar_ingreso(request):
 
     ordenes_filtradas = obtener_ordenes_relevantes().order_by('-fecha_entrada')
     categorias_ingreso = Ingreso.CATEGORIA_CHOICES
-    
-    # Pasamos las opciones de método de pago al template
     metodos_pago = Ingreso.METODO_PAGO_CHOICES 
 
     context = { 'ordenes': ordenes_filtradas, 'categorias_ingreso': categorias_ingreso, 'metodos_pago': metodos_pago }
@@ -811,13 +802,16 @@ def lista_ordenes(request):
     return render(request, 'taller/lista_ordenes.html', context)
 
 
-# --- VISTA DETALLE ORDEN ---
+# --- VISTA DETALLE ORDEN (ACTUALIZADA) ---
 @login_required
 @login_required
 def detalle_orden(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura'), id=orden_id)
-    repuestos = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
-    gastos_otros = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Otros')
+    
+    # CAMBIO: Filtrar gastos por ORDEN, no por vehículo
+    repuestos = Gasto.objects.filter(orden=orden, categoria='Repuestos')
+    gastos_otros = Gasto.objects.filter(orden=orden, categoria='Otros')
+    
     abonos = sum(ing.importe for ing in orden.ingreso_set.all()) if hasattr(orden, 'ingreso_set') and orden.ingreso_set.exists() else Decimal('0.00')
     tipos_consumible = TipoConsumible.objects.all()
     factura = None; pendiente_pago = Decimal('0.00')
@@ -853,7 +847,7 @@ def detalle_orden(request, orden_id):
                 pass
             return redirect('detalle_orden', orden_id=orden.id)
         
-        # --- ACCIÓN 3: SUBIR FOTOS PENDIENTES (NUEVO) ---
+        # --- NUEVO: SUBIR FOTOS PENDIENTES ---
         elif form_type == 'subir_fotos':
             if not request.user.has_perm('taller.change_ordendereparacion'): 
                  return HttpResponseForbidden("No tienes permiso para añadir fotos a la orden.")
@@ -868,9 +862,7 @@ def detalle_orden(request, orden_id):
                         imagen=request.FILES[foto_campo], 
                         descripcion=descripciones[i-1]
                     )
-            
             return redirect('detalle_orden', orden_id=orden.id)
-
 
     context = {
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
@@ -935,7 +927,7 @@ def editar_movimiento(request, tipo, movimiento_id):
         return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
 
 
-# --- VISTA GENERAR FACTURA (CORREGIDA PARA NO PERDER CONSECUTIVOS) ---
+# --- VISTA GENERAR FACTURA (ACTUALIZADA: Multicuenta + Orden) ---
 @login_required
 def generar_factura(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo'), id=orden_id)
@@ -953,32 +945,26 @@ def generar_factura(request, orden_id):
         notas = request.POST.get('notas_cliente', '')
 
         with transaction.atomic():
-            # 1. PRESERVAR DATOS: Comprobamos si ya existe una factura para esta orden
+            # 1. PRESERVAR DATOS
             factura_anterior = Factura.objects.filter(orden=orden).first()
             numero_a_conservar = None
             fecha_a_conservar = None
             
             if factura_anterior:
-                # Si ya era una factura oficial con número, lo guardamos
                 if factura_anterior.es_factura and factura_anterior.numero_factura:
                     numero_a_conservar = factura_anterior.numero_factura
-                
-                # Guardamos SIEMPRE la fecha original para no saltar en el tiempo al regenerar
                 fecha_a_conservar = factura_anterior.fecha_emision
 
-            # 2. BORRAR: Ahora es seguro borrar, porque tenemos los datos clave guardados
+            # 2. BORRAR
             Factura.objects.filter(orden=orden).delete()
             UsoConsumible.objects.filter(orden=orden).delete()
 
             # 3. ASIGNAR NÚMERO
             nuevo_numero_factura = None
-            
             if es_factura:
                 if numero_a_conservar:
-                    # CASO A: Estamos regenerando una factura existente -> MANTENER EL NÚMERO
                     nuevo_numero_factura = numero_a_conservar
                 else:
-                    # CASO B: Es una factura totalmente nueva -> CALCULAR SIGUIENTE
                     ultima_factura = Factura.objects.select_for_update().filter(
                         numero_factura__isnull=False
                     ).order_by('-numero_factura').first()
@@ -995,16 +981,17 @@ def generar_factura(request, orden_id):
                 notas_cliente=notas,
                 numero_factura=nuevo_numero_factura 
             )
-
-            # 5. RESTAURAR FECHA ANTIGUA (Si existía)
+            
+            # 5. RESTAURAR FECHA
             if fecha_a_conservar:
                 Factura.objects.filter(id=factura.id).update(fecha_emision=fecha_a_conservar)
                 factura.fecha_emision = fecha_a_conservar
             
-            # ... (El resto de la lógica de líneas sigue igual) ...
             subtotal = Decimal('0.00')
-            repuestos_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
-            gastos_otros_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Otros')
+            
+            # CAMBIO: Filtrar gastos por ORDEN, no por vehículo
+            repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
+            gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
             
             for repuesto in repuestos_qs:
                 pvp_str = request.POST.get(f'pvp_repuesto_{repuesto.id}')
@@ -1060,7 +1047,7 @@ def generar_factura(request, orden_id):
     return redirect('detalle_orden', orden_id=orden.id)
 
 
-# --- VISTA VER FACTURA PDF (MODIFICADA para mostrar datos fiscales) ---
+# --- VISTA VER FACTURA PDF ---
 @login_required
 def ver_factura_pdf(request, factura_id):
     factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=factura_id)
@@ -1110,7 +1097,6 @@ def ver_factura_pdf(request, factura_id):
     pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
     if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
     return response
-# --- FIN VISTA PDF ---
 
 
 # --- VISTA EDITAR FACTURA ---
@@ -1211,12 +1197,16 @@ def detalle_ganancia_orden(request, orden_id):
     try: factura = Factura.objects.prefetch_related('lineas', 'orden__ingreso_set').get(orden=orden)
     except Factura.DoesNotExist: return redirect('detalle_orden', orden_id=orden.id)
     desglose_agrupado = {}; gastos_usados_ids = set()
-    gastos_asociados = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria__in=['Repuestos', 'Otros']).order_by('id')
+    
+    # CAMBIO: Filtrar gastos por ORDEN, no por vehículo (y asegurarnos de no duplicar)
+    gastos_asociados = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros']).order_by('id')
+    
     compras_consumibles = CompraConsumible.objects.filter(fecha_compra__lte=factura.fecha_emision).order_by('tipo_id', '-fecha_compra')
     ultimas_compras_por_tipo = {};
     for compra in compras_consumibles:
         if compra.tipo_id not in ultimas_compras_por_tipo: ultimas_compras_por_tipo[compra.tipo_id] = compra
     tipos_consumible_dict = {tipo.nombre.upper(): tipo for tipo in TipoConsumible.objects.all()}
+    
     for linea in factura.lineas.all():
         pvp_linea = linea.total_linea; coste_linea = Decimal('0.00'); descripcion_limpia = linea.descripcion.strip().upper(); key = (linea.tipo, descripcion_limpia)
         desglose_agrupado.setdefault(key, {'descripcion': f"{linea.get_tipo_display()}: {linea.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
@@ -1230,11 +1220,13 @@ def detalle_ganancia_orden(request, orden_id):
              tipo_obj = tipos_consumible_dict.get(descripcion_limpia)
              if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo: coste_unitario = ultimas_compras_por_tipo[tipo_obj.id].coste_por_unidad or Decimal('0.00'); coste_linea = coste_unitario * linea.cantidad
         desglose_agrupado[key]['coste'] += coste_linea
+        
     for gasto in gastos_asociados:
         if gasto.id not in gastos_usados_ids:
              descripcion_limpia = gasto.descripcion.strip().upper(); tipo_gasto_map = {'Repuestos': 'Repuesto', 'Otros': 'Externo'}; tipo_para_key = tipo_gasto_map.get(gasto.categoria, 'Externo'); key = (tipo_para_key, descripcion_limpia)
              desglose_agrupado.setdefault(key, {'descripcion': f"{gasto.get_categoria_display()}: {gasto.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
              desglose_agrupado[key]['coste'] += gasto.importe or Decimal('0.00')
+             
     desglose_final_list = []; ganancia_total_calculada = Decimal('0.00')
     for item_agrupado in desglose_agrupado.values():
         ganancia = item_agrupado['pvp'] - item_agrupado['coste']; item_agrupado['ganancia'] = ganancia; desglose_final_list.append(item_agrupado); ganancia_total_calculada += ganancia
@@ -1413,7 +1405,7 @@ def cuentas_por_cobrar(request):
     return render(request, 'taller/cuentas_por_cobrar.html', context)
 
 
-# --- VISTA INFORME TARJETA (NUEVO INFORME MULTICUENTA) ---
+# --- VISTA INFORME TARJETA (MODIFICADA) ---
 @login_required
 def informe_tarjeta(request):
     hoy = timezone.now().date()
@@ -1423,7 +1415,6 @@ def informe_tarjeta(request):
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
 
-    # Filtro base por fecha
     ingresos_qs = Ingreso.objects.all()
     gastos_qs = Gasto.objects.all()
 

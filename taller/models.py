@@ -84,23 +84,24 @@ class Gasto(models.Model):
         ('Compra de Consumibles', 'Compra de Consumibles'),
     ]
     
-    # --- NUEVO CAMPO PARA CUENTAS ---
     METODO_PAGO_CHOICES = [
         ('EFECTIVO', 'Efectivo (Caja)'),
         ('CUENTA_ERIKA', 'Cuenta Erika (Compartida)'),
         ('CUENTA_TALLER', 'Cuenta Taller (Nueva)'),
     ]
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
-    # --------------------------------
     
     fecha = models.DateField(default=timezone.now)
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     descripcion = models.CharField(max_length=255, null=True, blank=True)
-    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
-    empleado = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True)
     
-    # Mantenemos este campo por seguridad histórica
+    # --- VINCULACIÓN: Ahora se permite vincular a Orden (Preferido) o Vehículo (Histórico) ---
+    orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True, related_name='gastos')
+    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
+    # ---------------------------------------------------------------------------------------
+
+    empleado = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True)
     pagado_con_tarjeta = models.BooleanField(default=False)
 
     def __str__(self):
@@ -120,22 +121,18 @@ class Ingreso(models.Model):
         ('Otros', 'Otros Ingresos'),
     ]
     
-    # --- NUEVO CAMPO PARA CUENTAS ---
     METODO_PAGO_CHOICES = [
         ('EFECTIVO', 'Efectivo (Caja)'),
         ('CUENTA_ERIKA', 'Cuenta Erika (Compartida)'),
         ('CUENTA_TALLER', 'Cuenta Taller (Nueva)'),
     ]
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
-    # --------------------------------
 
     fecha = models.DateField(default=timezone.now)
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=255)
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True)
-    
-    # Mantenemos este campo por seguridad histórica
     es_tpv = models.BooleanField(default=False)
 
     def __str__(self):
