@@ -239,7 +239,7 @@ def ingresar_vehiculo(request):
                 presupuesto.estado = 'Convertido'
                 presupuesto.save()
 
-            # --- GUARDAR FOTOS (Optimizado para S24 Ultra) ---
+            # --- GUARDAR FOTOS ---
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
@@ -333,15 +333,15 @@ def anadir_gasto(request):
                 metodo_pago=metodo_pago
             )
 
-            # --- CAMBIO CLAVE: Asociar a ORDEN, no a Vehículo ---
+            # --- Asociar a ORDEN ---
             if categoria in ['Repuestos', 'Otros']:
-                orden_id = request.POST.get('orden') # Recibimos el ID de la orden desde el form
+                orden_id = request.POST.get('orden') # ID de la orden desde el form
                 if orden_id:
                     try:
                         orden = OrdenDeReparacion.objects.get(id=orden_id)
-                        gasto.orden = orden # Guardamos la relación con la orden
+                        gasto.orden = orden 
                         
-                        # Si la orden estaba recién recibida, pasamos a 'En Reparación'
+                        # Actualizar estado si es necesario
                         if orden.estado in ['Recibido', 'En Diagnostico']:
                             orden.estado = 'En Reparacion'
                             orden.save()
@@ -802,13 +802,13 @@ def lista_ordenes(request):
     return render(request, 'taller/lista_ordenes.html', context)
 
 
-# --- VISTA DETALLE ORDEN (ACTUALIZADA) ---
+# --- VISTA DETALLE ORDEN ---
 @login_required
 @login_required
 def detalle_orden(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura'), id=orden_id)
     
-    # CAMBIO: Filtrar gastos por ORDEN, no por vehículo
+    # --- Filtrar gastos por ORDEN ---
     repuestos = Gasto.objects.filter(orden=orden, categoria='Repuestos')
     gastos_otros = Gasto.objects.filter(orden=orden, categoria='Otros')
     
@@ -847,7 +847,7 @@ def detalle_orden(request, orden_id):
                 pass
             return redirect('detalle_orden', orden_id=orden.id)
         
-        # --- NUEVO: SUBIR FOTOS PENDIENTES ---
+        # --- SUBIR FOTOS PENDIENTES ---
         elif form_type == 'subir_fotos':
             if not request.user.has_perm('taller.change_ordendereparacion'): 
                  return HttpResponseForbidden("No tienes permiso para añadir fotos a la orden.")
@@ -927,7 +927,7 @@ def editar_movimiento(request, tipo, movimiento_id):
         return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
 
 
-# --- VISTA GENERAR FACTURA (ACTUALIZADA: Multicuenta + Orden) ---
+# --- VISTA GENERAR FACTURA (CORREGIDA: Consecutivos + Fechas + Filtro por Orden) ---
 @login_required
 def generar_factura(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo'), id=orden_id)
@@ -989,7 +989,7 @@ def generar_factura(request, orden_id):
             
             subtotal = Decimal('0.00')
             
-            # CAMBIO: Filtrar gastos por ORDEN, no por vehículo
+            # --- CORRECCIÓN: Filtrar gastos por ORDEN ---
             repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
             gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
             
@@ -1127,8 +1127,8 @@ def editar_factura(request, factura_id):
 
 
     # --- Lógica GET ---
-    repuestos_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Repuestos')
-    gastos_otros_qs = Gasto.objects.filter(vehiculo=orden.vehiculo, categoria='Otros')
+    repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
+    gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
     tipos_consumible = TipoConsumible.objects.all()
     lineas_existentes_list = []
     for linea in factura.lineas.all():
@@ -1148,7 +1148,7 @@ def editar_factura(request, factura_id):
     return render(request, 'taller/editar_factura.html', context)
 
 
-# --- INFORMES (Solo lectura, @login_required por consistencia) ---
+# --- INFORMES (CORREGIDO: Rentabilidad por ORDEN) ---
 @login_required
 def informe_rentabilidad(request):
     periodo = request.GET.get('periodo', 'mes'); hoy = timezone.now().date()
@@ -1165,10 +1165,15 @@ def informe_rentabilidad(request):
     for compra in compras_consumibles:
         if compra.tipo_id not in ultimas_compras_por_tipo: ultimas_compras_por_tipo[compra.tipo_id] = compra
     tipos_consumible_dict = {tipo.nombre.upper(): tipo for tipo in TipoConsumible.objects.all()}
+    
     for factura in facturas:
         orden = factura.orden;
-        if not orden or not orden.vehiculo: continue
-        gastos_orden_qs = orden.vehiculo.gasto_set.filter(categoria__in=['Repuestos', 'Otros']) if hasattr(orden.vehiculo, 'gasto_set') else Gasto.objects.none()
+        if not orden: continue 
+        
+        # --- CORRECCIÓN: Filtrar por ORDEN, no por vehículo ---
+        gastos_orden_qs = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros'])
+        # ----------------------------------------------------
+
         coste_piezas_externos_factura = gastos_orden_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
         total_cobrado_piezas_externos = Decimal('0.00'); ganancia_servicios = Decimal('0.00'); coste_consumibles_factura = Decimal('0.00')
         for linea in factura.lineas.all():
@@ -1185,6 +1190,7 @@ def informe_rentabilidad(request):
         coste_total_directo = coste_piezas_externos_factura + coste_consumibles_factura
         base_cobrada = factura.subtotal if factura.es_factura else factura.total_final; ganancia_total_orden = base_cobrada - coste_total_directo
         ganancia_trabajos += ganancia_total_orden; reporte.append({'orden': orden, 'factura': factura, 'ganancia_total': ganancia_total_orden})
+    
     ganancia_grua_total = ingresos_grua.aggregate(total=Sum('importe'))['total'] or Decimal('0.00'); ganancia_otras_total = otras_ganancias.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_ganancia_general = ganancia_trabajos + ganancia_grua_total + ganancia_otras_total
     ganancias_directas_desglose = sorted(list(ingresos_grua) + list(otras_ganancias), key=lambda x: x.fecha, reverse=True)
@@ -1198,7 +1204,7 @@ def detalle_ganancia_orden(request, orden_id):
     except Factura.DoesNotExist: return redirect('detalle_orden', orden_id=orden.id)
     desglose_agrupado = {}; gastos_usados_ids = set()
     
-    # CAMBIO: Filtrar gastos por ORDEN, no por vehículo (y asegurarnos de no duplicar)
+    # --- CORRECCIÓN: Filtrar por ORDEN ---
     gastos_asociados = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros']).order_by('id')
     
     compras_consumibles = CompraConsumible.objects.filter(fecha_compra__lte=factura.fecha_emision).order_by('tipo_id', '-fecha_compra')
@@ -1206,7 +1212,6 @@ def detalle_ganancia_orden(request, orden_id):
     for compra in compras_consumibles:
         if compra.tipo_id not in ultimas_compras_por_tipo: ultimas_compras_por_tipo[compra.tipo_id] = compra
     tipos_consumible_dict = {tipo.nombre.upper(): tipo for tipo in TipoConsumible.objects.all()}
-    
     for linea in factura.lineas.all():
         pvp_linea = linea.total_linea; coste_linea = Decimal('0.00'); descripcion_limpia = linea.descripcion.strip().upper(); key = (linea.tipo, descripcion_limpia)
         desglose_agrupado.setdefault(key, {'descripcion': f"{linea.get_tipo_display()}: {linea.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
@@ -1220,13 +1225,11 @@ def detalle_ganancia_orden(request, orden_id):
              tipo_obj = tipos_consumible_dict.get(descripcion_limpia)
              if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo: coste_unitario = ultimas_compras_por_tipo[tipo_obj.id].coste_por_unidad or Decimal('0.00'); coste_linea = coste_unitario * linea.cantidad
         desglose_agrupado[key]['coste'] += coste_linea
-        
     for gasto in gastos_asociados:
         if gasto.id not in gastos_usados_ids:
              descripcion_limpia = gasto.descripcion.strip().upper(); tipo_gasto_map = {'Repuestos': 'Repuesto', 'Otros': 'Externo'}; tipo_para_key = tipo_gasto_map.get(gasto.categoria, 'Externo'); key = (tipo_para_key, descripcion_limpia)
              desglose_agrupado.setdefault(key, {'descripcion': f"{gasto.get_categoria_display()}: {gasto.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
              desglose_agrupado[key]['coste'] += gasto.importe or Decimal('0.00')
-             
     desglose_final_list = []; ganancia_total_calculada = Decimal('0.00')
     for item_agrupado in desglose_agrupado.values():
         ganancia = item_agrupado['pvp'] - item_agrupado['coste']; item_agrupado['ganancia'] = ganancia; desglose_final_list.append(item_agrupado); ganancia_total_calculada += ganancia
@@ -1405,7 +1408,7 @@ def cuentas_por_cobrar(request):
     return render(request, 'taller/cuentas_por_cobrar.html', context)
 
 
-# --- VISTA INFORME TARJETA (MODIFICADA) ---
+# --- VISTA INFORME TARJETA ---
 @login_required
 def informe_tarjeta(request):
     hoy = timezone.now().date()
@@ -1415,15 +1418,15 @@ def informe_tarjeta(request):
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
 
-    ingresos_qs = Ingreso.objects.all()
-    gastos_qs = Gasto.objects.all()
+    ingresos_tpv_qs = Ingreso.objects.filter(es_tpv=True)
+    gastos_tarjeta_qs = Gasto.objects.filter(pagado_con_tarjeta=True)
 
     ano_sel_int = None
     if ano_seleccionado:
         try:
             ano_sel_int = int(ano_seleccionado)
-            ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
-            gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
+            ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__year=ano_sel_int)
+            gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__year=ano_sel_int)
         except (ValueError, TypeError):
             ano_seleccionado = None
             
@@ -1432,49 +1435,23 @@ def informe_tarjeta(request):
          try:
             mes_sel_int = int(mes_seleccionado)
             if 1 <= mes_sel_int <= 12:
-                ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
-                gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
+                ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__month=mes_sel_int)
+                gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__month=mes_sel_int)
             else:
                 mes_seleccionado = None
          except (ValueError, TypeError):
             mes_seleccionado = None
     
-    # --- CÁLCULOS PARA CUENTA ERIKA ---
-    ingresos_erika = ingresos_qs.filter(metodo_pago='CUENTA_ERIKA')
-    gastos_erika = gastos_qs.filter(metodo_pago='CUENTA_ERIKA')
-    
-    total_ing_erika = ingresos_erika.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    total_gas_erika = gastos_erika.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_erika = total_ing_erika - total_gas_erika
-
-    # --- CÁLCULOS PARA CUENTA TALLER ---
-    ingresos_taller = ingresos_qs.filter(metodo_pago='CUENTA_TALLER')
-    gastos_taller = gastos_qs.filter(metodo_pago='CUENTA_TALLER')
-    
-    total_ing_taller = ingresos_taller.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    total_gas_taller = gastos_taller.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_taller = total_ing_taller - total_gas_taller
-
-    # --- LISTA UNIFICADA PARA LA TABLA ---
-    # Combinamos solo los movimientos bancarios (Erika + Taller) para la tabla de detalle
-    movimientos_bancarios = sorted(
-        list(ingresos_erika) + list(gastos_erika) + list(ingresos_taller) + list(gastos_taller),
-        key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), 
-        reverse=True
-    )
+    total_ingresos_tpv = ingresos_tpv_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    total_gastos_tarjeta = gastos_tarjeta_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance_tarjeta = total_ingresos_tpv - total_gastos_tarjeta
+    movimientos_tarjeta = sorted(list(ingresos_tpv_qs) + list(gastos_tarjeta_qs), key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), reverse=True)
     
     context = { 
-        # Datos Erika
-        'total_ing_erika': total_ing_erika, 
-        'total_gas_erika': total_gas_erika, 
-        'balance_erika': balance_erika,
-        
-        # Datos Taller
-        'total_ing_taller': total_ing_taller,
-        'total_gas_taller': total_gas_taller,
-        'balance_taller': balance_taller,
-
-        'movimientos_bancarios': movimientos_bancarios, 
+        'total_ingresos_tpv': total_ingresos_tpv, 
+        'total_gastos_tarjeta': total_gastos_tarjeta, 
+        'balance_tarjeta': balance_tarjeta, 
+        'movimientos_tarjeta': movimientos_tarjeta, 
         'anos_y_meses': anos_y_meses_data, 
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 
