@@ -1408,7 +1408,7 @@ def cuentas_por_cobrar(request):
     return render(request, 'taller/cuentas_por_cobrar.html', context)
 
 
-# --- VISTA INFORME TARJETA (CORREGIDA: Ahora muestra balances de ERIKA y TALLER) ---
+# --- VISTA INFORME TARJETA ---
 @login_required
 def informe_tarjeta(request):
     hoy = timezone.now().date()
@@ -1472,7 +1472,7 @@ def informe_tarjeta(request):
         'total_gas_taller': gas_taller,
         'balance_taller': balance_taller,
 
-        # Lista combinada (importante: cambiar nombre a movimientos_bancarios como pide el HTML)
+        # Lista combinada
         'movimientos_bancarios': movimientos_bancarios, 
         
         # Filtros
@@ -1520,3 +1520,83 @@ def ver_presupuesto_pdf(request, presupuesto_id):
     pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
     if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
     return response
+
+# --- NUEVA VISTA PARA EL HISTORIAL DETALLADO POR CUENTA ---
+@login_required
+def historial_cuenta(request, cuenta_nombre):
+    # 1. Configuración según la cuenta seleccionada
+    if cuenta_nombre == 'erika':
+        metodo_pago_db = 'CUENTA_ERIKA'
+        titulo_cuenta = "Cuenta Erika"
+        color_tema = "#e83e8c" # Rosa
+        bg_color = "#fff0f6"
+    elif cuenta_nombre == 'taller':
+        metodo_pago_db = 'CUENTA_TALLER'
+        titulo_cuenta = "Cuenta Taller"
+        color_tema = "#6f42c1" # Morado
+        bg_color = "#f3f0ff"
+    else:
+        return redirect('informe_tarjeta') # Si ponen un nombre raro, volver al inicio
+
+    # 2. Preparar Filtros de Fecha
+    hoy = timezone.now().date()
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+
+    # 3. Filtrar QuerySets
+    ingresos_qs = Ingreso.objects.filter(metodo_pago=metodo_pago_db)
+    gastos_qs = Gasto.objects.filter(metodo_pago=metodo_pago_db)
+
+    ano_sel_int = None
+    if ano_seleccionado:
+        try:
+            ano_sel_int = int(ano_seleccionado)
+            ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
+            gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
+        except (ValueError, TypeError):
+            ano_seleccionado = None
+            
+    mes_sel_int = None
+    if mes_seleccionado:
+         try:
+            mes_sel_int = int(mes_seleccionado)
+            if 1 <= mes_sel_int <= 12:
+                ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
+                gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
+            else:
+                mes_seleccionado = None
+         except (ValueError, TypeError):
+            mes_seleccionado = None
+
+    # 4. Calcular Totales
+    total_ingresos = ingresos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    total_gastos = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance = total_ingresos - total_gastos
+
+    # 5. Lista de Movimientos
+    movimientos = sorted(
+        list(ingresos_qs) + list(gastos_qs), 
+        key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), 
+        reverse=True
+    )
+
+    context = {
+        'cuenta_nombre': cuenta_nombre, # 'erika' o 'taller' para la URL
+        'titulo_cuenta': titulo_cuenta,
+        'color_tema': color_tema,
+        'bg_color': bg_color,
+        
+        'total_ingresos': total_ingresos,
+        'total_gastos': total_gastos,
+        'balance': balance,
+        'movimientos': movimientos,
+
+        # Datos para el filtro
+        'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int,
+        'mes_seleccionado': mes_sel_int,
+        'meses_del_ano': range(1, 13)
+    }
+    return render(request, 'taller/historial_cuenta.html', context)

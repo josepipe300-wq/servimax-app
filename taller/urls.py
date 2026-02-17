@@ -15,10 +15,8 @@ urlpatterns = [
     path('presupuesto/crear/', views.crear_presupuesto, name='crear_presupuesto'),
     path('presupuestos/', views.lista_presupuestos, name='lista_presupuestos'),
     path('presupuesto/<int:presupuesto_id>/', views.detalle_presupuesto, name='detalle_presupuesto'),
-    # --- AÑADIR ESTA LÍNEA ---
     path('presupuesto/<int:presupuesto_id>/pdf/', views.ver_presupuesto_pdf, name='ver_presupuesto_pdf'),
     path('presupuesto/<int:presupuesto_id>/editar/', views.editar_presupuesto, name='editar_presupuesto'),
-    # -------------------------
 
     # --- ÓRDENES ---
     path('ordenes/', views.lista_ordenes, name='lista_ordenes'),
@@ -44,7 +42,11 @@ urlpatterns = [
     path('informe-gastos/desglose/sueldos/<str:empleado_nombre>/', views.informe_gastos_desglose, {'categoria': 'Sueldos'}, name='desglose_sueldos_empleado'),
     path('informe-gastos/desglose/<path:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
     path('informe-ingresos/desglose/<path:categoria>/', views.informe_ingresos_desglose, name='informe_ingresos_desglose'),
+    
+    # --- TARJETA / CUENTAS BANCARIAS ---
     path('informe-tarjeta/', views.informe_tarjeta, name='informe_tarjeta'),
+    # Nueva línea añadida:
+    path('informe-tarjeta/historial/<str:cuenta_nombre>/', views.historial_cuenta, name='historial_cuenta'),
 ]
 
 if settings.DEBUG:
