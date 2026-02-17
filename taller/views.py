@@ -1408,7 +1408,7 @@ def cuentas_por_cobrar(request):
     return render(request, 'taller/cuentas_por_cobrar.html', context)
 
 
-# --- VISTA INFORME TARJETA ---
+# --- VISTA INFORME TARJETA (CORREGIDA: Ahora muestra balances de ERIKA y TALLER) ---
 @login_required
 def informe_tarjeta(request):
     hoy = timezone.now().date()
@@ -1418,15 +1418,17 @@ def informe_tarjeta(request):
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
 
-    ingresos_tpv_qs = Ingreso.objects.filter(es_tpv=True)
-    gastos_tarjeta_qs = Gasto.objects.filter(pagado_con_tarjeta=True)
+    # 1. Filtramos todo lo que NO sea Efectivo (es decir, cuentas bancarias)
+    ingresos_qs = Ingreso.objects.exclude(metodo_pago='EFECTIVO')
+    gastos_qs = Gasto.objects.exclude(metodo_pago='EFECTIVO')
 
+    # 2. Aplicar filtros de Fecha
     ano_sel_int = None
     if ano_seleccionado:
         try:
             ano_sel_int = int(ano_seleccionado)
-            ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__year=ano_sel_int)
-            gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__year=ano_sel_int)
+            ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
+            gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
         except (ValueError, TypeError):
             ano_seleccionado = None
             
@@ -1435,23 +1437,45 @@ def informe_tarjeta(request):
          try:
             mes_sel_int = int(mes_seleccionado)
             if 1 <= mes_sel_int <= 12:
-                ingresos_tpv_qs = ingresos_tpv_qs.filter(fecha__month=mes_sel_int)
-                gastos_tarjeta_qs = gastos_tarjeta_qs.filter(fecha__month=mes_sel_int)
+                ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
+                gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
             else:
                 mes_seleccionado = None
          except (ValueError, TypeError):
             mes_seleccionado = None
     
-    total_ingresos_tpv = ingresos_tpv_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    total_gastos_tarjeta = gastos_tarjeta_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_tarjeta = total_ingresos_tpv - total_gastos_tarjeta
-    movimientos_tarjeta = sorted(list(ingresos_tpv_qs) + list(gastos_tarjeta_qs), key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), reverse=True)
+    # 3. Calcular Balances para CUENTA ERIKA
+    ing_erika = ingresos_qs.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    gas_erika = gastos_qs.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance_erika = ing_erika - gas_erika
+
+    # 4. Calcular Balances para CUENTA TALLER
+    ing_taller = ingresos_qs.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    gas_taller = gastos_qs.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    balance_taller = ing_taller - gas_taller
+
+    # 5. Combinar movimientos para la lista inferior
+    movimientos_bancarios = sorted(
+        list(ingresos_qs) + list(gastos_qs), 
+        key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), 
+        reverse=True
+    )
     
     context = { 
-        'total_ingresos_tpv': total_ingresos_tpv, 
-        'total_gastos_tarjeta': total_gastos_tarjeta, 
-        'balance_tarjeta': balance_tarjeta, 
-        'movimientos_tarjeta': movimientos_tarjeta, 
+        # Variables para Erika
+        'total_ing_erika': ing_erika,
+        'total_gas_erika': gas_erika,
+        'balance_erika': balance_erika,
+
+        # Variables para Taller
+        'total_ing_taller': ing_taller,
+        'total_gas_taller': gas_taller,
+        'balance_taller': balance_taller,
+
+        # Lista combinada (importante: cambiar nombre a movimientos_bancarios como pide el HTML)
+        'movimientos_bancarios': movimientos_bancarios, 
+        
+        # Filtros
         'anos_y_meses': anos_y_meses_data, 
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 
