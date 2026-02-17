@@ -7,80 +7,173 @@
     <title>Informe de Rentabilidad - ServiMax</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <style>
+        /* Estilos inline para asegurar consistencia si faltan en el CSS global */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+            border: 1px solid #e0e0e0;
+        }
+        .card h3 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: #666;
+        }
+        .card .amount {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin: 10px 0 0 0;
+        }
+        .total-card {
+            background-color: #f0fff4; /* Verde muy suave */
+            border: 2px solid #28a745;
+        }
+        .ingresos { color: #28a745; }
+        .clickable-row { cursor: pointer; transition: background 0.1s; }
+        .clickable-row:hover { background-color: #f9f9f9; }
+    </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Informe de Rentabilidad</h1>
-            <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
+            <a href="{% url 'home' %}" class="back-btn">← Volver al Inicio</a>
         </div>
-        
-        <div class="filters">
-            <a href="?periodo=semana" class="{% if periodo_seleccionado == 'semana' %}active{% endif %}">Esta Semana</a>
-            <a href="?periodo=mes" class="{% if periodo_seleccionado == 'mes' %}active{% endif %}">Este Mes</a>
-            <a href="?periodo=todo" class="{% if periodo_seleccionado == 'todo' %}active{% endif %}">Ver Todo</a>
-        </div>
+
+        <form method="get" action="{% url 'informe_rentabilidad' %}">
+            <div class="filters">
+                <div>
+                    <label for="ano">Año:</label>
+                    <select name="ano" id="ano">
+                        <option value="">Todos</option>
+                        {% for ano in anos_disponibles %}
+                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="mes">Mes:</label>
+                    <select name="mes" id="mes">
+                        <option value="">Todo el Año</option>
+                        {% for i in meses_del_ano %}
+                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit">Filtrar</button>
+            </div>
+        </form>
         <hr>
 
-        <h2>Ganancia por Trabajos del Taller</h2>
-        <table class="report-table">
-            <thead>
-                <tr>
-                    <th># Orden</th>
-                    <th>Vehículo</th>
-                    <th>Fecha Factura</th>
-                    <th style="text-align: right;">Ganancia TOTAL</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in reporte %}
-                    <tr class="clickable" onclick="window.location='{% url 'detalle_ganancia_orden' item.orden.id %}';">
-                        <td>{{ item.orden.id }}</td>
-                        <td>{{ item.orden.vehiculo }}</td>
-                        <td>{{ item.factura.fecha_emision|date:"d/m/Y" }}</td>
-                        <td style="text-align: right; font-weight: bold;">{{ item.ganancia_total|floatformat:2 }} €</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="4" style="text-align: center; padding: 20px;">No hay trabajos facturados en este periodo.</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <h2>Resumen de Ganancias</h2>
+        <div class="summary-grid">
+            <div class="card">
+                <h3>Ganancia Neta (Taller)</h3>
+                <p class="amount ingresos">{{ ganancia_trabajos|floatformat:2 }} €</p>
+                <small style="color: #888;">Facturado - (Piezas + Gastos)</small>
+            </div>
 
-        <h2 style="margin-top: 30px;">Otras Ganancias (Servicios de Grúa, etc.)</h2>
-        <table class="report-table">
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Categoría</th>
-                    <th>Descripción</th>
-                    <th style="text-align: right;">Importe (Ganancia)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ingreso in ganancias_directas_desglose %}
-                <tr>
-                    <td>{{ ingreso.fecha|date:"d/m/Y" }}</td>
-                    <td>{{ ingreso.get_categoria_display }}</td>
-                    <td>{{ ingreso.descripcion }}</td>
-                    <td style="text-align: right;">{{ ingreso.importe|floatformat:2 }} €</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="4" style="text-align: center; padding: 20px;">No hay otras ganancias en este periodo.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+            <div class="card">
+                <h3>Servicios Directos (Grúa/Otros)</h3>
+                <p class="amount" style="color: #17a2b8;">
+                    {{ ganancia_grua|add:ganancia_otras|floatformat:2 }} €
+                </p>
+                <small style="color: #888;">Ingresos sin coste directo</small>
+            </div>
 
-        <div class="total-summary">
-            <p>Total Ganancia por Trabajos: {{ ganancia_trabajos|floatformat:2 }} €</p>
-            <p>Total Ganancia por Grúa: {{ ganancia_grua|floatformat:2 }} €</p>
-            <p>Total Otras Ganancias: {{ ganancia_otras|floatformat:2 }} €</p>
-            <hr>
-            <p>Ganancia Total del Periodo: <strong>{{ total_ganancia_general|floatformat:2 }} €</strong></p>
+            <div class="card total-card">
+                <h3 style="color: #28a745;">Rentabilidad Total</h3>
+                <p class="amount ingresos" style="font-size: 2.2em;">
+                    {{ total_ganancia_general|floatformat:2 }} €
+                </p>
+            </div>
         </div>
+
+        <h2 style="margin-top: 40px;">Desglose por Órdenes de Reparación</h2>
+        <div class="table-responsive">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Nº Factura</th>
+                        <th>Vehículo</th>
+                        <th>Cliente</th>
+                        <th style="text-align: right;">Total Factura</th>
+                        <th style="text-align: right;">Ganancia Real</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in reporte %}
+                    <tr class="clickable-row" onclick="window.location.href='{% url 'detalle_ganancia_orden' item.orden.id %}'">
+                        <td>{{ item.factura.fecha_emision|date:"d/m/Y" }}</td>
+                        <td>
+                            {% if item.factura.numero_factura %}
+                                {{ item.factura.numero_factura }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ item.orden.vehiculo.marca }} {{ item.orden.vehiculo.modelo }}
+                            <br><small style="color: #666;">{{ item.orden.vehiculo.matricula }}</small>
+                        </td>
+                        <td>{{ item.orden.cliente.nombre }}</td>
+                        <td style="text-align: right;">
+                            {% if item.factura.es_factura %}
+                                {{ item.factura.subtotal }} € <small>(Base)</small>
+                            {% else %}
+                                {{ item.factura.total_final }} €
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right; font-weight: bold; color: #28a745; background-color: #f9fff9;">
+                            {{ item.ganancia_total|floatformat:2 }} €
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 20px;">No hay facturas registradas en este periodo.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if ganancias_directas_desglose %}
+        <h2 style="margin-top: 40px;">Otros Ingresos Directos</h2>
+        <div class="table-responsive">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Categoría</th>
+                        <th>Descripción</th>
+                        <th style="text-align: right;">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ingreso in ganancias_directas_desglose %}
+                    <tr>
+                        <td>{{ ingreso.fecha|date:"d/m/Y" }}</td>
+                        <td>{{ ingreso.categoria }}</td>
+                        <td>{{ ingreso.descripcion }}</td>
+                        <td style="text-align: right; font-weight: bold; color: #17a2b8;">
+                            +{{ ingreso.importe|floatformat:2 }} €
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
     </div>
 </body>
 </html>

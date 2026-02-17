@@ -1148,53 +1148,112 @@ def editar_factura(request, factura_id):
     return render(request, 'taller/editar_factura.html', context)
 
 
-# --- INFORMES (CORREGIDO: Rentabilidad por ORDEN) ---
+# --- INFORMES (CORREGIDO: Rentabilidad por ORDEN con Filtros de Fecha) ---
 @login_required
 def informe_rentabilidad(request):
-    periodo = request.GET.get('periodo', 'mes'); hoy = timezone.now().date()
+    hoy = timezone.now().date()
+    
+    # 1. Configuración de Filtros de Fecha
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+
+    # 2. QuerySets base
     facturas_qs = Factura.objects.select_related('orden__vehiculo').prefetch_related('lineas', 'orden__vehiculo__gasto_set')
-    ingresos_grua_qs = Ingreso.objects.filter(categoria='Grua'); otras_ganancias_qs = Ingreso.objects.filter(categoria='Otras Ganancias')
-    if periodo == 'semana':
-        inicio_semana = hoy - timedelta(days=hoy.weekday())
-        facturas_qs = facturas_qs.filter(fecha_emision__gte=inicio_semana); ingresos_grua_qs = ingresos_grua_qs.filter(fecha__gte=inicio_semana); otras_ganancias_qs = otras_ganancias_qs.filter(fecha__gte=inicio_semana)
-    elif periodo == 'mes':
-        facturas_qs = facturas_qs.filter(fecha_emision__month=hoy.month, fecha_emision__year=hoy.year); ingresos_grua_qs = ingresos_grua_qs.filter(fecha__month=hoy.month, fecha__year=hoy.year); otras_ganancias_qs = otras_ganancias_qs.filter(fecha__month=hoy.month, fecha__year=hoy.year)
-    facturas = facturas_qs.order_by('-fecha_emision'); ingresos_grua = ingresos_grua_qs.order_by('-fecha'); otras_ganancias = otras_ganancias_qs.order_by('-fecha')
-    ganancia_trabajos = Decimal('0.00'); reporte = []
-    compras_consumibles = CompraConsumible.objects.order_by('tipo_id', '-fecha_compra'); ultimas_compras_por_tipo = {};
+    ingresos_grua_qs = Ingreso.objects.filter(categoria='Grua')
+    otras_ganancias_qs = Ingreso.objects.filter(categoria='Otras Ganancias')
+
+    # 3. Aplicar Filtros
+    ano_sel_int = None
+    if ano_seleccionado:
+        try:
+            ano_sel_int = int(ano_seleccionado)
+            facturas_qs = facturas_qs.filter(fecha_emision__year=ano_sel_int)
+            ingresos_grua_qs = ingresos_grua_qs.filter(fecha__year=ano_sel_int)
+            otras_ganancias_qs = otras_ganancias_qs.filter(fecha__year=ano_sel_int)
+        except (ValueError, TypeError):
+            ano_seleccionado = None
+            
+    mes_sel_int = None
+    if mes_seleccionado:
+         try:
+            mes_sel_int = int(mes_seleccionado)
+            if 1 <= mes_sel_int <= 12:
+                facturas_qs = facturas_qs.filter(fecha_emision__month=mes_sel_int)
+                ingresos_grua_qs = ingresos_grua_qs.filter(fecha__month=mes_sel_int)
+                otras_ganancias_qs = otras_ganancias_qs.filter(fecha__month=mes_sel_int)
+            else:
+                mes_seleccionado = None
+         except (ValueError, TypeError):
+            mes_seleccionado = None
+
+    # 4. Procesamiento de Datos (Lógica de Rentabilidad)
+    facturas = facturas_qs.order_by('-fecha_emision')
+    ingresos_grua = ingresos_grua_qs.order_by('-fecha')
+    otras_ganancias = otras_ganancias_qs.order_by('-fecha')
+    
+    ganancia_trabajos = Decimal('0.00')
+    reporte = []
+    
+    # Optimizacion de compras
+    compras_consumibles = CompraConsumible.objects.order_by('tipo_id', '-fecha_compra')
+    ultimas_compras_por_tipo = {}
     for compra in compras_consumibles:
-        if compra.tipo_id not in ultimas_compras_por_tipo: ultimas_compras_por_tipo[compra.tipo_id] = compra
+        if compra.tipo_id not in ultimas_compras_por_tipo:
+            ultimas_compras_por_tipo[compra.tipo_id] = compra
     tipos_consumible_dict = {tipo.nombre.upper(): tipo for tipo in TipoConsumible.objects.all()}
     
     for factura in facturas:
-        orden = factura.orden;
+        orden = factura.orden
         if not orden: continue 
         
-        # --- CORRECCIÓN: Filtrar por ORDEN, no por vehículo ---
         gastos_orden_qs = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros'])
-        # ----------------------------------------------------
 
         coste_piezas_externos_factura = gastos_orden_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-        total_cobrado_piezas_externos = Decimal('0.00'); ganancia_servicios = Decimal('0.00'); coste_consumibles_factura = Decimal('0.00')
+        coste_consumibles_factura = Decimal('0.00')
+        
         for linea in factura.lineas.all():
-            if linea.tipo in ['Repuesto', 'Externo']: total_cobrado_piezas_externos += linea.total_linea
-            elif linea.tipo in ['Mano de Obra', 'Consumible']:
-                coste_linea = Decimal('0.00')
-                if linea.tipo == 'Consumible':
-                    tipo_obj = tipos_consumible_dict.get(linea.descripcion.upper())
-                    if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo:
-                         compra_relevante = ultimas_compras_por_tipo[tipo_obj.id]
-                         if compra_relevante.fecha_compra <= factura.fecha_emision:
-                             coste_linea = (compra_relevante.coste_por_unidad or Decimal('0.00')) * linea.cantidad; coste_consumibles_factura += coste_linea
-                ganancia_servicios += (linea.total_linea - coste_linea)
+            if linea.tipo == 'Consumible':
+                tipo_obj = tipos_consumible_dict.get(linea.descripcion.upper())
+                if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo:
+                        compra_relevante = ultimas_compras_por_tipo[tipo_obj.id]
+                        if compra_relevante.fecha_compra <= factura.fecha_emision:
+                            coste_linea = (compra_relevante.coste_por_unidad or Decimal('0.00')) * linea.cantidad
+                            coste_consumibles_factura += coste_linea
+        
         coste_total_directo = coste_piezas_externos_factura + coste_consumibles_factura
-        base_cobrada = factura.subtotal if factura.es_factura else factura.total_final; ganancia_total_orden = base_cobrada - coste_total_directo
-        ganancia_trabajos += ganancia_total_orden; reporte.append({'orden': orden, 'factura': factura, 'ganancia_total': ganancia_total_orden})
+        base_cobrada = factura.subtotal if factura.es_factura else factura.total_final
+        ganancia_total_orden = base_cobrada - coste_total_directo
+        
+        ganancia_trabajos += ganancia_total_orden
+        reporte.append({
+            'orden': orden, 
+            'factura': factura, 
+            'ganancia_total': ganancia_total_orden
+        })
     
-    ganancia_grua_total = ingresos_grua.aggregate(total=Sum('importe'))['total'] or Decimal('0.00'); ganancia_otras_total = otras_ganancias.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    ganancia_grua_total = ingresos_grua.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    ganancia_otras_total = otras_ganancias.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    
     total_ganancia_general = ganancia_trabajos + ganancia_grua_total + ganancia_otras_total
     ganancias_directas_desglose = sorted(list(ingresos_grua) + list(otras_ganancias), key=lambda x: x.fecha, reverse=True)
-    context = { 'reporte': reporte, 'ganancia_trabajos': ganancia_trabajos, 'ganancia_grua': ganancia_grua_total, 'ganancia_otras': ganancia_otras_total, 'ganancias_directas_desglose': ganancias_directas_desglose, 'total_ganancia_general': total_ganancia_general, 'periodo_seleccionado': periodo }
+    
+    context = { 
+        'reporte': reporte, 
+        'ganancia_trabajos': ganancia_trabajos, 
+        'ganancia_grua': ganancia_grua_total, 
+        'ganancia_otras': ganancia_otras_total, 
+        'ganancias_directas_desglose': ganancias_directas_desglose, 
+        'total_ganancia_general': total_ganancia_general,
+        
+        # Filtros para el Template
+        'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 
+        'mes_seleccionado': mes_sel_int, 
+        'meses_del_ano': range(1, 13)
+    }
     return render(request, 'taller/informe_rentabilidad.html', context)
 
 @login_required
