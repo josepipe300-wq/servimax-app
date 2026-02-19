@@ -888,7 +888,7 @@ def detalle_orden(request, orden_id):
         factura = orden.factura
         pendiente_pago = factura.total_final - abonos
         
-        # --- GENERAR LINK SEGURO DE WHATSAPP ---
+       # --- GENERAR LINK SEGURO DE WHATSAPP ---
         if orden.cliente.telefono:
             signer = Signer()
             signed_id = signer.sign(factura.id) # Firmamos el ID
@@ -901,8 +901,11 @@ def detalle_orden(request, orden_id):
             if not telefono_limpio.startswith('34') and len(telefono_limpio) == 9:
                 telefono_limpio = '34' + telefono_limpio
             
-            # Preparamos el mensaje
-            mensaje = f"Hola {orden.cliente.nombre}, aquí tienes el enlace para descargar tu factura del taller:\n\n{public_url}\n\n¡Gracias por confiar en ServiMax!"
+            # --- NUEVA LÓGICA: Determinar si es Factura o Recibo ---
+            tipo_doc = "factura" if factura.es_factura else "recibo"
+            
+            # Preparamos el mensaje dinámico
+            mensaje = f"Hola {orden.cliente.nombre}, aquí tienes el enlace para descargar tu {tipo_doc} del taller:\n\n{public_url}\n\n¡Gracias por confiar en ServiMax!"
             mensaje_encoded = quote(mensaje)
             
             whatsapp_url = f"https://wa.me/{telefono_limpio}?text={mensaje_encoded}"
