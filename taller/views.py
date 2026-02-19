@@ -837,6 +837,12 @@ def lista_ordenes(request):
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
+    
+    # --- NUEVO: Búsqueda por Matrícula ---
+    matricula_buscada = request.GET.get('matricula', '').strip()
+    if matricula_buscada:
+        # icontains busca coincidencias (ej: si buscas "1234", salen las "1234ABC")
+        ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
 
     if ano_seleccionado:
         try:
@@ -863,7 +869,8 @@ def lista_ordenes(request):
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 
         'mes_seleccionado': mes_sel_int, 
-        'meses_del_ano': range(1, 13)
+        'meses_del_ano': range(1, 13),
+        'matricula_buscada': matricula_buscada # Enviamos esto a la plantilla
     }
     return render(request, 'taller/lista_ordenes.html', context)
 
@@ -888,7 +895,7 @@ def detalle_orden(request, orden_id):
         factura = orden.factura
         pendiente_pago = factura.total_final - abonos
         
-       # --- GENERAR LINK SEGURO DE WHATSAPP ---
+    # --- GENERAR LINK SEGURO DE WHATSAPP ---
         if orden.cliente.telefono:
             signer = Signer()
             signed_id = signer.sign(factura.id) # Firmamos el ID
@@ -972,8 +979,16 @@ def detalle_orden(request, orden_id):
 @login_required
 def historial_ordenes(request):
     ordenes_qs = OrdenDeReparacion.objects.filter(estado='Entregado').select_related('cliente', 'vehiculo', 'factura')
-    anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
-    ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+    
+    # --- NUEVO: Búsqueda por Matrícula ---
+    matricula_buscada = request.GET.get('matricula', '').strip()
+    if matricula_buscada:
+        ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
+
     if ano_seleccionado:
         try: ano_int = int(ano_seleccionado); ordenes_qs = ordenes_qs.filter(factura__fecha_emision__year=ano_int)
         except (ValueError, TypeError): ano_seleccionado = None
@@ -983,11 +998,15 @@ def historial_ordenes(request):
             if 1 <= mes_int <= 12: ordenes_qs = ordenes_qs.filter(factura__fecha_emision__month=mes_int)
             else: mes_seleccionado = None
          except (ValueError, TypeError): mes_seleccionado = None
+         
     ordenes = ordenes_qs.order_by('-factura__fecha_emision', '-id')
-    ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None; mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
+    ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None
+    mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
+    
     context = {
         'ordenes': ordenes, 'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13)
+        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13),
+        'matricula_buscada': matricula_buscada # Enviamos esto a la plantilla
     }
     return render(request, 'taller/historial_ordenes.html', context)
 

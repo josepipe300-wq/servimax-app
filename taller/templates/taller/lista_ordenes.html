@@ -6,10 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Órdenes Activas - ServiMax</title>
     
-    {# --- INICIO MODIFICACIÓN --- #}
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    {# --- FIN MODIFICACIÓN (Style block eliminado) --- #}
 
 </head>
 <body>
@@ -20,11 +18,16 @@
         </div>
         <hr>
 
-        <form method="get" action="">
-            <div class="filters">
+        <form method="get" action="{% url 'lista_ordenes' %}">
+            <div class="filters" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; margin-bottom: 20px;">
                 <div>
-                    <label for="ano">Año:</label>
-                    <select name="ano" id="ano">
+                    <label for="matricula" style="display: block; margin-bottom: 5px; font-weight: bold;">Matrícula:</label>
+                    <input type="text" name="matricula" id="matricula" value="{{ matricula_buscada }}" placeholder="Ej: 1234ABC" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 160px;">
+                </div>
+
+                <div>
+                    <label for="ano" style="display: block; margin-bottom: 5px; font-weight: bold;">Año:</label>
+                    <select name="ano" id="ano" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
                         <option value="">Todos</option>
                         {% for ano in anos_disponibles %}
                             <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
@@ -32,17 +35,29 @@
                     </select>
                 </div>
                 <div>
-                    <label for="mes">Mes:</label>
-                    <select name="mes" id="mes">
+                    <label for="mes" style="display: block; margin-bottom: 5px; font-weight: bold;">Mes:</label>
+                    <select name="mes" id="mes" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
                         <option value="">Todos</option>
                         {% for i in meses_del_ano %}
                             <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <button type="submit">Filtrar</button>
+                
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" style="padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Filtrar</button>
+                    
+                    {% if matricula_buscada or ano_seleccionado or mes_seleccionado %}
+                        <a href="{% url 'lista_ordenes' %}" style="padding: 8px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Limpiar</a>
+                    {% endif %}
+                </div>
             </div>
         </form>
+
+        {% if matricula_buscada %}
+            <p style="margin-bottom: 15px; color: #555;">Resultados para la matrícula: <strong style="color: #000;">"{{ matricula_buscada }}"</strong></p>
+        {% endif %}
+
         <table class="order-table">
             <thead>
                 <tr>
@@ -66,7 +81,8 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="6" style="text-align: center; padding: 20px;">¡No hay trabajos pendientes que coincidan con los filtros!</td> </tr>
+                        <td colspan="6" style="text-align: center; padding: 20px;">¡No hay trabajos pendientes que coincidan con los filtros!</td> 
+                    </tr>
                 {% endfor %}
             </tbody>
         </table>
