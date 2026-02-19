@@ -20,6 +20,10 @@ import json
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 
+# --- NUEVOS IMPORTS PARA WHATSAPP Y SEGURIDAD ---
+from django.core.signing import Signer, BadSignature
+from urllib.parse import quote
+
 # --- FUNCIÓN AUXILIAR PARA LOS FILTROS DE FECHA ---
 def get_anos_y_meses_con_datos():
     fechas_gastos = Gasto.objects.values_list('fecha', flat=True)
@@ -70,6 +74,70 @@ def obtener_ordenes_relevantes():
 
     ids_relevantes = list(ordenes_no_entregadas.values_list('id', flat=True)) + ordenes_entregadas_con_saldo
     return OrdenDeReparacion.objects.filter(id__in=list(set(ids_relevantes))).select_related('vehiculo', 'cliente')
+
+# --- FUNCIÓN AUXILIAR PARA GENERAR PDF DE FACTURA ---
+def generar_pdf_response(factura):
+    cliente = factura.orden.cliente
+    vehiculo = factura.orden.vehiculo
+    abonos = factura.orden.ingreso_set.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    pendiente = factura.total_final - abonos
+    lineas = factura.lineas.all()
+    
+    orden_tipos = ['Mano de Obra', 'Repuesto', 'Consumible', 'Externo']
+    lineas_agrupadas = {tipo: [] for tipo in orden_tipos}
+    otros_tipos = []
+    
+    for linea in lineas:
+        if linea.tipo in lineas_agrupadas:
+            lineas_agrupadas[linea.tipo].append(linea)
+        else:
+            otros_tipos.append(linea)
+            
+    lineas_ordenadas_agrupadas = []
+    for tipo in orden_tipos:
+        lineas_ordenadas_agrupadas.extend(lineas_agrupadas[tipo])
+    lineas_ordenadas_agrupadas.extend(otros_tipos)
+    
+    context = { 
+        'factura': factura, 
+        'cliente': cliente, 
+        'vehiculo': vehiculo, 
+        'lineas': lineas_ordenadas_agrupadas, 
+        'abonos': abonos, 
+        'pendiente': pendiente, 
+        'STATIC_URL': settings.STATIC_URL, 
+        'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') 
+    }
+    
+    template_path = 'taller/plantilla_factura.html'
+    template = get_template(template_path)
+    html = template.render(context)
+    
+    response = HttpResponse(content_type='application/pdf')
+    matricula_filename = factura.orden.vehiculo.matricula if factura.orden.vehiculo else 'SIN_MATRICULA'
+    response['Content-Disposition'] = f'inline; filename="fact_{matricula_filename}_{factura.id}.pdf"'
+    
+    def link_callback(uri, rel):
+        logo_uri_abs = context.get('logo_path')
+        if logo_uri_abs: logo_uri_abs = logo_uri_abs.replace("\\", "/")
+        if uri == logo_uri_abs: return logo_uri_abs
+        if uri.startswith(settings.STATIC_URL):
+            path = uri.replace(settings.STATIC_URL, "", 1)
+            for static_dir in settings.STATICFILES_DIRS:
+                file_path = os.path.join(static_dir, path)
+                if os.path.exists(file_path): return file_path
+            if hasattr(settings, 'STATIC_ROOT') and settings.STATIC_ROOT:
+                 file_path = os.path.join(settings.STATIC_ROOT, path)
+                 if os.path.exists(file_path): return file_path
+        if uri.startswith("http://") or uri.startswith("https://"): return uri
+        print(f"WARN: Could not resolve URI '{uri}' in PDF generation.")
+        return None
+
+    pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
+    if pisa_status.err:
+        return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
+    return response
+
 
 # --- VISTA HOME ---
 @login_required
@@ -270,7 +338,7 @@ def ingresar_vehiculo(request):
     return render(request, 'taller/ingresar_vehiculo.html', context)
 
 
-# --- VISTA AÑADIR GASTO (ACTUALIZADA: Multicuenta + Orden) ---
+# --- VISTA AÑADIR GASTO ---
 @login_required
 def anadir_gasto(request):
     if request.method == 'POST':
@@ -335,7 +403,7 @@ def anadir_gasto(request):
 
             # --- Asociar a ORDEN ---
             if categoria in ['Repuestos', 'Otros']:
-                orden_id = request.POST.get('orden') # ID de la orden desde el form
+                orden_id = request.POST.get('orden')
                 if orden_id:
                     try:
                         orden = OrdenDeReparacion.objects.get(id=orden_id)
@@ -356,7 +424,6 @@ def anadir_gasto(request):
 
         return redirect('home')
 
-    # Filtramos solo las órdenes activas para el selector
     ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente').order_by('-id')
     
     empleados = Empleado.objects.all()
@@ -373,7 +440,7 @@ def anadir_gasto(request):
     return render(request, 'taller/anadir_gasto.html', context)
 
 
-# --- VISTA REGISTRAR INGRESO (ACTUALIZADA) ---
+# --- VISTA REGISTRAR INGRESO ---
 @login_required
 def registrar_ingreso(request):
     if request.method == 'POST':
@@ -383,7 +450,6 @@ def registrar_ingreso(request):
         categoria = request.POST['categoria']; importe_str = request.POST.get('importe')
         descripcion = request.POST.get('descripcion', '')
         
-        # --- Multicuenta ---
         metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
         es_tpv_bool = (metodo_pago != 'EFECTIVO')
 
@@ -802,8 +868,7 @@ def lista_ordenes(request):
     return render(request, 'taller/lista_ordenes.html', context)
 
 
-# --- VISTA DETALLE ORDEN ---
-@login_required
+# --- VISTA DETALLE ORDEN (CON WHATSAPP DIRECTO) ---
 @login_required
 def detalle_orden(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura'), id=orden_id)
@@ -814,9 +879,36 @@ def detalle_orden(request, orden_id):
     
     abonos = sum(ing.importe for ing in orden.ingreso_set.all()) if hasattr(orden, 'ingreso_set') and orden.ingreso_set.exists() else Decimal('0.00')
     tipos_consumible = TipoConsumible.objects.all()
-    factura = None; pendiente_pago = Decimal('0.00')
-    try: factura = orden.factura; pendiente_pago = factura.total_final - abonos
-    except Factura.DoesNotExist: pass
+    
+    factura = None
+    pendiente_pago = Decimal('0.00')
+    whatsapp_url = None # Variable para el enlace seguro
+    
+    try: 
+        factura = orden.factura
+        pendiente_pago = factura.total_final - abonos
+        
+        # --- GENERAR LINK SEGURO DE WHATSAPP ---
+        if orden.cliente.telefono:
+            signer = Signer()
+            signed_id = signer.sign(factura.id) # Firmamos el ID
+            
+            # Construimos la URL completa pública
+            public_url = request.build_absolute_uri(reverse('ver_factura_publica', args=[signed_id]))
+            
+            # Limpiamos el teléfono
+            telefono_limpio = "".join(filter(str.isdigit, orden.cliente.telefono))
+            if not telefono_limpio.startswith('34') and len(telefono_limpio) == 9:
+                telefono_limpio = '34' + telefono_limpio
+            
+            # Preparamos el mensaje
+            mensaje = f"Hola {orden.cliente.nombre}, aquí tienes el enlace para descargar tu factura del taller:\n\n{public_url}\n\n¡Gracias por confiar en ServiMax!"
+            mensaje_encoded = quote(mensaje)
+            
+            whatsapp_url = f"https://wa.me/{telefono_limpio}?text={mensaje_encoded}"
+        # --------------------------------
+    except Factura.DoesNotExist: 
+        pass
 
     if request.method == 'POST':
         form_type = request.POST.get('form_type')
@@ -868,6 +960,7 @@ def detalle_orden(request, orden_id):
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
         'abonos': abonos, 'pendiente_pago': pendiente_pago, 'tipos_consumible': tipos_consumible,
         'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES,
+        'whatsapp_url': whatsapp_url, # Añadimos el enlace al contexto
     }
     return render(request, 'taller/detalle_orden.html', context)
 
@@ -927,7 +1020,7 @@ def editar_movimiento(request, tipo, movimiento_id):
         return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
 
 
-# --- VISTA GENERAR FACTURA (CORREGIDA: Consecutivos + Fechas + Filtro por Orden) ---
+# --- VISTA GENERAR FACTURA ---
 @login_required
 def generar_factura(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo'), id=orden_id)
@@ -989,7 +1082,6 @@ def generar_factura(request, orden_id):
             
             subtotal = Decimal('0.00')
             
-            # --- CORRECCIÓN: Filtrar gastos por ORDEN ---
             repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
             gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
             
@@ -1047,56 +1139,24 @@ def generar_factura(request, orden_id):
     return redirect('detalle_orden', orden_id=orden.id)
 
 
-# --- VISTA VER FACTURA PDF ---
+# --- VISTAS PARA VER PDF (USANDO LA FUNCIÓN AUXILIAR) ---
 @login_required
 def ver_factura_pdf(request, factura_id):
     factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=factura_id)
     if not request.user.has_perm('taller.view_factura'):
          return HttpResponseForbidden("No tienes permiso para ver facturas.")
+    return generar_pdf_response(factura)
 
-    cliente = factura.orden.cliente; vehiculo = factura.orden.vehiculo
-    abonos = factura.orden.ingreso_set.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    pendiente = factura.total_final - abonos; lineas = factura.lineas.all()
-    orden_tipos = ['Mano de Obra', 'Repuesto', 'Consumible', 'Externo']; lineas_agrupadas = {tipo: [] for tipo in orden_tipos}; otros_tipos = []
-    for linea in lineas:
-        if linea.tipo in lineas_agrupadas: lineas_agrupadas[linea.tipo].append(linea)
-        else: otros_tipos.append(linea)
-    lineas_ordenadas_agrupadas = []
-    for tipo in orden_tipos: lineas_ordenadas_agrupadas.extend(lineas_agrupadas[tipo])
-    lineas_ordenadas_agrupadas.extend(otros_tipos)
-    
-    context = { 
-        'factura': factura, 
-        'cliente': cliente, 
-        'vehiculo': vehiculo, 
-        'lineas': lineas_ordenadas_agrupadas, 
-        'abonos': abonos, 
-        'pendiente': pendiente, 
-        'STATIC_URL': settings.STATIC_URL, 
-        'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') 
-    }
-    
-    template_path = 'taller/plantilla_factura.html'; template = get_template(template_path); html = template.render(context)
-    response = HttpResponse(content_type='application/pdf')
-    matricula_filename = factura.orden.vehiculo.matricula if factura.orden.vehiculo else 'SIN_MATRICULA'
-    response['Content-Disposition'] = f'inline; filename="fact_{matricula_filename}_{factura.id}.pdf"'
-    def link_callback(uri, rel):
-        logo_uri_abs = context.get('logo_path');
-        if logo_uri_abs: logo_uri_abs = logo_uri_abs.replace("\\", "/")
-        if uri == logo_uri_abs: return logo_uri_abs
-        if uri.startswith(settings.STATIC_URL):
-            path = uri.replace(settings.STATIC_URL, "", 1)
-            for static_dir in settings.STATICFILES_DIRS:
-                file_path = os.path.join(static_dir, path)
-                if os.path.exists(file_path): return file_path
-            if hasattr(settings, 'STATIC_ROOT') and settings.STATIC_ROOT:
-                 file_path = os.path.join(settings.STATIC_ROOT, path)
-                 if os.path.exists(file_path): return file_path
-        if uri.startswith("http://") or uri.startswith("https://"): return uri
-        print(f"WARN: Could not resolve URI '{uri}' in PDF generation."); return None
-    pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
-    if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
-    return response
+def ver_factura_publica(request, signed_id):
+    """ Vista pública segura para acceder desde WhatsApp sin login """
+    signer = Signer()
+    try:
+        # Desencripta el ID. Fallará si alguien modifica la URL.
+        original_id = signer.unsign(signed_id)
+        factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=original_id)
+        return generar_pdf_response(factura)
+    except BadSignature:
+        return HttpResponseForbidden("El enlace de la factura es inválido o ha sido modificado.")
 
 
 # --- VISTA EDITAR FACTURA ---
@@ -1125,7 +1185,6 @@ def editar_factura(request, factura_id):
              print(f"Error al llamar a generar_factura desde editar_factura: {e}")
              return redirect('detalle_orden', orden_id=orden.id)
 
-
     # --- Lógica GET ---
     repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
     gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
@@ -1148,7 +1207,7 @@ def editar_factura(request, factura_id):
     return render(request, 'taller/editar_factura.html', context)
 
 
-# --- INFORMES (CORREGIDO: Rentabilidad por ORDEN con Filtros de Fecha) ---
+# --- INFORMES ---
 @login_required
 def informe_rentabilidad(request):
     hoy = timezone.now().date()
@@ -1263,7 +1322,6 @@ def detalle_ganancia_orden(request, orden_id):
     except Factura.DoesNotExist: return redirect('detalle_orden', orden_id=orden.id)
     desglose_agrupado = {}; gastos_usados_ids = set()
     
-    # --- CORRECCIÓN: Filtrar por ORDEN ---
     gastos_asociados = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros']).order_by('id')
     
     compras_consumibles = CompraConsumible.objects.filter(fecha_compra__lte=factura.fecha_emision).order_by('tipo_id', '-fecha_compra')
@@ -1390,7 +1448,7 @@ def informe_ingresos_desglose(request, categoria):
     return render(request, 'taller/informe_ingresos_desglose.html', context)
 
 
-# --- VISTA CONTABILIDAD (MODIFICADA) ---
+# --- VISTA CONTABILIDAD ---
 @login_required
 def contabilidad(request):
     hoy = timezone.now().date()
@@ -1580,7 +1638,7 @@ def ver_presupuesto_pdf(request, presupuesto_id):
     if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
     return response
 
-# --- NUEVA VISTA PARA EL HISTORIAL DETALLADO POR CUENTA ---
+# --- VISTA PARA EL HISTORIAL DETALLADO POR CUENTA ---
 @login_required
 def historial_cuenta(request, cuenta_nombre):
     # 1. Configuración según la cuenta seleccionada

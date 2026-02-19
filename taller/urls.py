@@ -26,6 +26,10 @@ urlpatterns = [
     # --- FACTURACIÓN ---
     path('orden/<int:orden_id>/facturar/', views.generar_factura, name='generar_factura'),
     path('factura/<int:factura_id>/pdf/', views.ver_factura_pdf, name='ver_factura_pdf'),
+    
+    # NUEVA RUTA: Enlace público y seguro para enviar por WhatsApp
+    path('factura/publica/<str:signed_id>/', views.ver_factura_publica, name='ver_factura_publica'),
+    
     path('factura/<int:factura_id>/editar/', views.editar_factura, name='editar_factura'),
 
     # --- MOVIMIENTOS ---
@@ -45,7 +49,6 @@ urlpatterns = [
     
     # --- TARJETA / CUENTAS BANCARIAS ---
     path('informe-tarjeta/', views.informe_tarjeta, name='informe_tarjeta'),
-    # Nueva línea añadida:
     path('informe-tarjeta/historial/<str:cuenta_nombre>/', views.historial_cuenta, name='historial_cuenta'),
 ]
 

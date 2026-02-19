@@ -230,7 +230,15 @@
             <div class="factura-form">
                 <h2>Documento Generado</h2>
                 <a href="{% url 'ver_factura_pdf' factura.id %}" class="btn-pdf" target="_blank">📄 Ver {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %} PDF</a>
-                <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">Modificar {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}</a>
+                <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">✏️ Modificar {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}</a>
+                
+                {% if whatsapp_url %}
+                    <a href="{{ whatsapp_url }}" target="_blank" class="btn-pdf" style="background-color: #25D366; color: white; margin-top: 10px; font-weight: bold; border: none;">
+                        📱 Enviar por WhatsApp
+                    </a>
+                {% else %}
+                    <p style="margin-top: 10px; text-align: center; color: #999; font-size: 0.9em; font-style: italic;">(El cliente no tiene un teléfono registrado para WhatsApp)</p>
+                {% endif %}
             </div>
         {% else %}
             <div class="factura-form">
