@@ -20,10 +20,22 @@ from django.utils import timezone
 import json
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+from functools import wraps # <-- IMPORTANTE PARA EL CANDADO DE SEGURIDAD
 
 # --- NUEVOS IMPORTS PARA WHATSAPP Y SEGURIDAD ---
 from django.core.signing import Signer, BadSignature
 from urllib.parse import quote
+
+# ==============================================================
+# --- NUEVO CANDADO DE SEGURIDAD PARA EL MODO LECTURA (PADRE) ---
+# ==============================================================
+def bloquear_lectura(view_func):
+    @wraps(view_func)
+    def _wrapped_view(request, *args, **kwargs):
+        if request.user.groups.filter(name='Solo Ver').exists():
+            return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'. No tienes permiso para añadir o modificar datos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+        return view_func(request, *args, **kwargs)
+    return _wrapped_view
 
 # --- FUNCIÓN AUXILIAR PARA LOS FILTROS DE FECHA ---
 def get_anos_y_meses_con_datos():
@@ -246,6 +258,7 @@ def home(request):
 
 # --- NUEVA VISTA: REGISTRAR PAGO Y AJUSTAR INTERESES ---
 @login_required
+@bloquear_lectura # CANDADO
 def registrar_pago_tarjeta(request):
     """
     Registra el pago mensual de la tarjeta (ej. 150€), sacando dinero de la Cuenta Taller
@@ -306,6 +319,7 @@ def registrar_pago_tarjeta(request):
 
 # --- NUEVA VISTA: ELIMINAR CIERRE DE TARJETA (DESHACER) ---
 @login_required
+@bloquear_lectura # CANDADO
 def eliminar_cierre_tarjeta(request, cierre_id):
     if request.method == 'POST':
         cierre = get_object_or_404(CierreTarjeta, id=cierre_id)
@@ -344,6 +358,7 @@ def eliminar_cierre_tarjeta(request, cierre_id):
 
 # --- VISTA INGRESAR VEHÍCULO ---
 @login_required
+@bloquear_lectura # CANDADO
 def ingresar_vehiculo(request):
     if request.method == 'POST':
         if not request.user.has_perm('taller.add_ordendereparacion'):
@@ -444,6 +459,7 @@ def ingresar_vehiculo(request):
 
 # --- VISTA AÑADIR GASTO ---
 @login_required
+@bloquear_lectura # CANDADO
 def anadir_gasto(request):
     if request.method == 'POST':
         if not (request.user.has_perm('taller.add_gasto') or request.user.has_perm('taller.add_compraconsumible')):
@@ -543,6 +559,7 @@ def anadir_gasto(request):
 
 # --- VISTA REGISTRAR INGRESO ---
 @login_required
+@bloquear_lectura # CANDADO
 def registrar_ingreso(request):
     if request.method == 'POST':
         if not request.user.has_perm('taller.add_ingreso'):
@@ -591,6 +608,7 @@ def registrar_ingreso(request):
 
 # --- VISTA STOCK INICIAL ---
 @login_required
+@bloquear_lectura # CANDADO
 def stock_inicial_consumible(request):
     if not request.user.has_perm('taller.add_compraconsumible'):
          return HttpResponseForbidden("No tienes permiso para registrar compras.")
@@ -612,6 +630,7 @@ def stock_inicial_consumible(request):
 
 # --- VISTA CREAR PRESUPUESTO ---
 @login_required
+@bloquear_lectura # CANDADO
 def crear_presupuesto(request):
     if request.method == 'POST':
         if not request.user.has_perm('taller.add_presupuesto'):
@@ -778,6 +797,10 @@ def detalle_presupuesto(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo__cliente').prefetch_related('lineas'), id=presupuesto_id)
 
     if request.method == 'POST' and 'nuevo_estado' in request.POST:
+        # BLOQUEO INTERNO PARA EL PADRE EN POST
+        if request.user.groups.filter(name='Solo Ver').exists():
+            return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'. No tienes permiso para modificar datos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+
         if not request.user.has_perm('taller.change_presupuesto'):
             return HttpResponseForbidden("No tienes permiso para modificar presupuestos.")
 
@@ -794,6 +817,7 @@ def detalle_presupuesto(request, presupuesto_id):
 
 # --- VISTA EDITAR PRESUPUESTO ---
 @login_required
+@bloquear_lectura # CANDADO
 def editar_presupuesto(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
     if presupuesto.estado == 'Convertido': return redirect('detalle_presupuesto', presupuesto_id=presupuesto.id)
@@ -1011,6 +1035,10 @@ def detalle_orden(request, orden_id):
         pass
 
     if request.method == 'POST':
+        # BLOQUEO INTERNO PARA EL PADRE EN POST
+        if request.user.groups.filter(name='Solo Ver').exists():
+            return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'. No tienes permiso para modificar datos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+
         form_type = request.POST.get('form_type')
 
         if form_type == 'estado':
@@ -1117,6 +1145,7 @@ def historial_movimientos(request):
 
 # --- VISTA EDITAR MOVIMIENTO ---
 @login_required
+@bloquear_lectura # CANDADO
 def editar_movimiento(request, tipo, movimiento_id):
     permiso_necesario = f'taller.change_{tipo}'
     if not request.user.has_perm(permiso_necesario):
@@ -1132,6 +1161,7 @@ def editar_movimiento(request, tipo, movimiento_id):
 
 # --- VISTA GENERAR FACTURA ---
 @login_required
+@bloquear_lectura # CANDADO
 def generar_factura(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo'), id=orden_id)
 
@@ -1270,6 +1300,7 @@ def ver_factura_publica(request, signed_id):
 
 # --- VISTA EDITAR FACTURA ---
 @login_required
+@bloquear_lectura # CANDADO
 def editar_factura(request, factura_id):
     factura = get_object_or_404(Factura.objects.prefetch_related('lineas'), id=factura_id)
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo__cliente'), id=factura.orden_id)
@@ -1315,7 +1346,7 @@ def editar_factura(request, factura_id):
     return render(request, 'taller/editar_factura.html', context)
 
 
-# --- INFORMES ---
+# --- INFORMES Y VISUALIZACIONES ---
 @login_required
 def informe_rentabilidad(request):
     hoy = timezone.now().date()
@@ -1543,7 +1574,6 @@ def informe_ingresos_desglose(request, categoria):
     return render(request, 'taller/informe_ingresos_desglose.html', context)
 
 
-# --- VISTA CONTABILIDAD ---
 @login_required
 def contabilidad(request):
     hoy = timezone.now().date()
@@ -1612,7 +1642,7 @@ def cuentas_por_cobrar(request):
     context = { 'facturas_pendientes': facturas_pendientes, 'total_pendiente': total_pendiente, 'anos_disponibles': anos_disponibles, 'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13) }
     return render(request, 'taller/cuentas_por_cobrar.html', context)
 
-# --- VISTA INFORME TARJETA ---
+
 @login_required
 def informe_tarjeta(request):
     hoy = timezone.now().date()
@@ -1642,7 +1672,6 @@ def informe_tarjeta(request):
             else: mes_seleccionado = None
          except (ValueError, TypeError): mes_seleccionado = None
     
-    # Cálculos Tarjetas
     def calcular_tarjeta(tag, limite):
         gastos = gastos_qs.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
         abonos = ingresos_qs.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
@@ -1661,15 +1690,9 @@ def informe_tarjeta(request):
     cierres = CierreTarjeta.objects.order_by('-fecha_cierre')
     
     context = { 
-        'tarjeta_1': tarjeta_1,
-        'tarjeta_2': tarjeta_2,
-        'movimientos_bancarios': movimientos_bancarios, 
-        'cierres': cierres,
-        'anos_y_meses': anos_y_meses_data, 
-        'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 
-        'mes_seleccionado': mes_sel_int, 
-        'meses_del_ano': range(1, 13)
+        'tarjeta_1': tarjeta_1, 'tarjeta_2': tarjeta_2, 'movimientos_bancarios': movimientos_bancarios, 
+        'cierres': cierres, 'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/informe_tarjeta.html', context)
 
@@ -1715,11 +1738,9 @@ def ver_presupuesto_pdf(request, presupuesto_id):
 # --- VISTA PARA EL HISTORIAL DETALLADO POR CUENTA ---
 @login_required
 def historial_cuenta(request, cuenta_nombre):
-    # Solo los jefes pueden ver esto
     if not request.user.is_superuser:
         return redirect('home')
 
-    # Diccionario para traducir la URL al método de pago real de la base de datos
     mapeo_cuentas = {
         'efectivo': ('EFECTIVO', 'Caja (Efectivo)'),
         'banco': ('CUENTA_TALLER', 'Cuenta Taller (Banco)'),
@@ -1728,21 +1749,17 @@ def historial_cuenta(request, cuenta_nombre):
         'erika': ('CUENTA_ERIKA', 'Cuenta Erika (Antigua)'),
     }
 
-    if cuenta_nombre not in mapeo_cuentas:
-        return redirect('home')
-
+    if cuenta_nombre not in mapeo_cuentas: return redirect('home')
     metodo_db, nombre_legible = mapeo_cuentas[cuenta_nombre]
 
-    # --- FILTROS ---
     hoy = timezone.now()
     mes_seleccionado = request.GET.get('mes', str(hoy.month))
     ano_seleccionado = request.GET.get('ano', str(hoy.year))
-    concepto_buscado = request.GET.get('concepto', '').upper() # Lo pasamos a mayúsculas porque así guardamos en BD
+    concepto_buscado = request.GET.get('concepto', '').upper() 
 
     ingresos = Ingreso.objects.filter(metodo_pago=metodo_db)
     gastos = Gasto.objects.filter(metodo_pago=metodo_db)
 
-    # Filtros de fecha (Si es "Todos" no filtramos)
     if mes_seleccionado != 'Todos':
         ingresos = ingresos.filter(fecha__month=int(mes_seleccionado))
         gastos = gastos.filter(fecha__month=int(mes_seleccionado))
@@ -1750,50 +1767,24 @@ def historial_cuenta(request, cuenta_nombre):
         ingresos = ingresos.filter(fecha__year=int(ano_seleccionado))
         gastos = gastos.filter(fecha__year=int(ano_seleccionado))
 
-    # Filtro por concepto
     if concepto_buscado:
         ingresos = ingresos.filter(descripcion__icontains=concepto_buscado)
         gastos = gastos.filter(descripcion__icontains=concepto_buscado)
 
-    # Unificar y dar formato a la lista
     lista_movimientos = []
-    for i in ingresos:
-        lista_movimientos.append({
-            'fecha': i.fecha,
-            'descripcion': i.descripcion,
-            'importe': i.importe,
-            'tipo': 'Ingreso',
-            'categoria': i.get_categoria_display(),
-        })
+    for i in ingresos: lista_movimientos.append({'fecha': i.fecha, 'descripcion': i.descripcion, 'importe': i.importe, 'tipo': 'Ingreso', 'categoria': i.get_categoria_display()})
+    for g in gastos: lista_movimientos.append({'fecha': g.fecha, 'descripcion': g.descripcion, 'importe': -g.importe, 'tipo': 'Gasto', 'categoria': g.get_categoria_display()})
 
-    for g in gastos:
-        lista_movimientos.append({
-            'fecha': g.fecha,
-            'descripcion': g.descripcion,
-            'importe': -g.importe, # Importe negativo para restar
-            'tipo': 'Gasto',
-            'categoria': g.get_categoria_display(),
-        })
-
-    # Ordenar por fecha (los más recientes primero)
     movimientos_ordenados = sorted(lista_movimientos, key=lambda x: x['fecha'], reverse=True)
 
-    # Calcular totales del periodo
     total_ingresos = sum(m['importe'] for m in movimientos_ordenados if m['tipo'] == 'Ingreso')
     total_gastos = sum(abs(m['importe']) for m in movimientos_ordenados if m['tipo'] == 'Gasto')
     balance_periodo = total_ingresos - total_gastos
 
     context = {
-        'nombre_legible': nombre_legible,
-        'cuenta_nombre': cuenta_nombre,
-        'movimientos': movimientos_ordenados,
-        'mes_seleccionado': mes_seleccionado,
-        'ano_seleccionado': ano_seleccionado,
-        'concepto': request.GET.get('concepto', ''), # Lo devolvemos tal cual lo escribió
-        'total_ingresos': total_ingresos,
-        'total_gastos': total_gastos,
-        'balance_periodo': balance_periodo,
-        'meses_del_ano': range(1, 13),
-        'anos_disponibles': range(hoy.year - 2, hoy.year + 2),
+        'nombre_legible': nombre_legible, 'cuenta_nombre': cuenta_nombre, 'movimientos': movimientos_ordenados,
+        'mes_seleccionado': mes_seleccionado, 'ano_seleccionado': ano_seleccionado, 'concepto': request.GET.get('concepto', ''), 
+        'total_ingresos': total_ingresos, 'total_gastos': total_gastos, 'balance_periodo': balance_periodo,
+        'meses_del_ano': range(1, 13), 'anos_disponibles': range(hoy.year - 2, hoy.year + 2),
     }
     return render(request, 'taller/historial_cuenta.html', context)

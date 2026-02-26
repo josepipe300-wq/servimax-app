@@ -39,7 +39,8 @@
             <h1>🏠 Panel Principal - ServiMax</h1>
             <div style="display: flex; align-items: center; gap: 15px;">
                 <span style="background: #e9ecef; padding: 8px 15px; border-radius: 20px; font-weight: bold;">
-                    👤 {{ request.user.username|title }}
+                    👤 {{ request.user.username|title }} 
+                    {% if is_read_only_user %}<span style="color: #dc3545; font-size: 0.85em; margin-left: 5px;">(👁️ Modo Lectura)</span>{% endif %}
                 </span>
                 <form method="post" action="{% url 'logout' %}" style="margin: 0;">
                     {% csrf_token %}
@@ -54,8 +55,10 @@
                 
                 <p style="margin-top: 0; color: #495057; font-size: 0.95em; font-weight: bold; text-transform: uppercase; margin-bottom: 10px;">🚗 Recepción y Presupuestos</p>
                 <div class="nav-buttons">
+                    {% if not is_read_only_user %}
                     <a href="{% url 'ingresar_vehiculo' %}" class="nav-btn" style="background: #007bff;">➕ Ingresar Vehículo</a>
                     <a href="{% url 'crear_presupuesto' %}" class="nav-btn" style="background: #fd7e14;">📝 Crear Presupuesto</a>
+                    {% endif %}
                     <a href="{% url 'lista_presupuestos' %}" class="nav-btn" style="background: #ffdb58; color:#333;">📋 Ver Presupuestos</a>
                 </div>
 
@@ -67,8 +70,10 @@
 
                 <p style="margin-top: 15px; color: #495057; font-size: 0.95em; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; border-top: 1px solid #dee2e6; padding-top: 15px;">💸 Gestión Financiera</p>
                 <div class="nav-buttons" style="margin-bottom: 0;">
+                    {% if not is_read_only_user %}
                     <a href="{% url 'registrar_ingreso' %}" class="nav-btn" style="background: #28a745;">💰 Registrar Ingreso</a>
                     <a href="{% url 'anadir_gasto' %}" class="nav-btn" style="background: #ffc107; color: #333;">➖ Añadir Gasto</a>
+                    {% endif %}
                     <a href="{% url 'contabilidad' %}" class="nav-btn" style="background: #20c997;">📊 Contabilidad</a>
                     <a href="{% url 'cuentas_por_cobrar' %}" class="nav-btn" style="background: #dc3545;">🚨 Cuentas por Cobrar</a>
                     <a href="{% url 'informe_tarjeta' %}" class="nav-btn" style="background: #6f42c1;">💳 Bancos / TPV</a>
@@ -76,11 +81,13 @@
 
             </div>
 
-            {% now "d" as dia_actual %}
-            {% if dia_actual <= "10" %}
-            <div style="background-color: #ffeeba; border-left: 5px solid #ffc107; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-                <strong style="color: #856404;">⚠️ RECORDATORIO DE PRINCIPIOS DE MES:</strong> No olvides ir a <a href="{% url 'informe_tarjeta' %}" style="color: #007bff; font-weight: bold;">💳 Bancos / TPV</a> para registrar el pago de la Tarjeta 1 y revisar si hay cargo de la Tarjeta 2.
-            </div>
+            {% if not is_read_only_user %}
+                {% now "d" as dia_actual %}
+                {% if dia_actual <= "10" %}
+                <div style="background-color: #ffeeba; border-left: 5px solid #ffc107; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                    <strong style="color: #856404;">⚠️ RECORDATORIO DE PRINCIPIOS DE MES:</strong> No olvides ir a <a href="{% url 'informe_tarjeta' %}" style="color: #007bff; font-weight: bold;">💳 Bancos / TPV</a> para registrar el pago de la Tarjeta 1 y revisar si hay cargo de la Tarjeta 2.
+                </div>
+                {% endif %}
             {% endif %}
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; margin-top: 10px;">
