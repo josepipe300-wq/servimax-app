@@ -304,7 +304,7 @@ def registrar_pago_tarjeta(request):
     
     return render(request, 'taller/registrar_pago_tarjeta.html')
 
-    # --- NUEVA VISTA: ELIMINAR CIERRE DE TARJETA (DESHACER) ---
+# --- NUEVA VISTA: ELIMINAR CIERRE DE TARJETA (DESHACER) ---
 @login_required
 def eliminar_cierre_tarjeta(request, cierre_id):
     if request.method == 'POST':
@@ -1715,78 +1715,85 @@ def ver_presupuesto_pdf(request, presupuesto_id):
 # --- VISTA PARA EL HISTORIAL DETALLADO POR CUENTA ---
 @login_required
 def historial_cuenta(request, cuenta_nombre):
-    if cuenta_nombre == 'erika':
-        metodo_pago_db = 'CUENTA_ERIKA'
-        titulo_cuenta = "Cuenta Erika"
-        color_tema = "#e83e8c" 
-        bg_color = "#fff0f6"
-    elif cuenta_nombre == 'taller':
-        metodo_pago_db = 'CUENTA_TALLER'
-        titulo_cuenta = "Cuenta Taller"
-        color_tema = "#6f42c1" 
-        bg_color = "#f3f0ff"
-    elif cuenta_nombre == 'tarjeta1':
-        metodo_pago_db = 'TARJETA_1'
-        titulo_cuenta = "Tarjeta 1 (Límite 2000€)"
-        color_tema = "#dc3545" 
-        bg_color = "#f8d7da"
-    elif cuenta_nombre == 'tarjeta2':
-        metodo_pago_db = 'TARJETA_2'
-        titulo_cuenta = "Tarjeta 2 (Límite 1000€)"
-        color_tema = "#ffc107" 
-        bg_color = "#fff3cd"
-    else:
-        return redirect('informe_tarjeta') 
+    # Solo los jefes pueden ver esto
+    if not request.user.is_superuser:
+        return redirect('home')
 
-    hoy = timezone.now().date()
-    anos_y_meses_data = get_anos_y_meses_con_datos()
-    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
-    ano_seleccionado = request.GET.get('ano')
-    mes_seleccionado = request.GET.get('mes')
+    # Diccionario para traducir la URL al método de pago real de la base de datos
+    mapeo_cuentas = {
+        'efectivo': ('EFECTIVO', 'Caja (Efectivo)'),
+        'banco': ('CUENTA_TALLER', 'Cuenta Taller (Banco)'),
+        'tarjeta1': ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
+        'tarjeta2': ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'),
+        'erika': ('CUENTA_ERIKA', 'Cuenta Erika (Antigua)'),
+    }
 
-    ingresos_qs = Ingreso.objects.filter(metodo_pago=metodo_pago_db)
-    gastos_qs = Gasto.objects.filter(metodo_pago=metodo_pago_db)
+    if cuenta_nombre not in mapeo_cuentas:
+        return redirect('home')
 
-    ano_sel_int = None
-    if ano_seleccionado:
-        try:
-            ano_sel_int = int(ano_seleccionado)
-            ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
-            gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
-        except (ValueError, TypeError): ano_seleccionado = None
-            
-    mes_sel_int = None
-    if mes_seleccionado:
-         try:
-            mes_sel_int = int(mes_seleccionado)
-            if 1 <= mes_sel_int <= 12:
-                ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
-                gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
-            else: mes_seleccionado = None
-         except (ValueError, TypeError): mes_seleccionado = None
+    metodo_db, nombre_legible = mapeo_cuentas[cuenta_nombre]
 
-    total_ingresos = ingresos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    total_gastos = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance = total_ingresos - total_gastos
+    # --- FILTROS ---
+    hoy = timezone.now()
+    mes_seleccionado = request.GET.get('mes', str(hoy.month))
+    ano_seleccionado = request.GET.get('ano', str(hoy.year))
+    concepto_buscado = request.GET.get('concepto', '').upper() # Lo pasamos a mayúsculas porque así guardamos en BD
 
-    movimientos = sorted(
-        list(ingresos_qs) + list(gastos_qs), 
-        key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), 
-        reverse=True
-    )
+    ingresos = Ingreso.objects.filter(metodo_pago=metodo_db)
+    gastos = Gasto.objects.filter(metodo_pago=metodo_db)
+
+    # Filtros de fecha (Si es "Todos" no filtramos)
+    if mes_seleccionado != 'Todos':
+        ingresos = ingresos.filter(fecha__month=int(mes_seleccionado))
+        gastos = gastos.filter(fecha__month=int(mes_seleccionado))
+    if ano_seleccionado != 'Todos':
+        ingresos = ingresos.filter(fecha__year=int(ano_seleccionado))
+        gastos = gastos.filter(fecha__year=int(ano_seleccionado))
+
+    # Filtro por concepto
+    if concepto_buscado:
+        ingresos = ingresos.filter(descripcion__icontains=concepto_buscado)
+        gastos = gastos.filter(descripcion__icontains=concepto_buscado)
+
+    # Unificar y dar formato a la lista
+    lista_movimientos = []
+    for i in ingresos:
+        lista_movimientos.append({
+            'fecha': i.fecha,
+            'descripcion': i.descripcion,
+            'importe': i.importe,
+            'tipo': 'Ingreso',
+            'categoria': i.get_categoria_display(),
+        })
+
+    for g in gastos:
+        lista_movimientos.append({
+            'fecha': g.fecha,
+            'descripcion': g.descripcion,
+            'importe': -g.importe, # Importe negativo para restar
+            'tipo': 'Gasto',
+            'categoria': g.get_categoria_display(),
+        })
+
+    # Ordenar por fecha (los más recientes primero)
+    movimientos_ordenados = sorted(lista_movimientos, key=lambda x: x['fecha'], reverse=True)
+
+    # Calcular totales del periodo
+    total_ingresos = sum(m['importe'] for m in movimientos_ordenados if m['tipo'] == 'Ingreso')
+    total_gastos = sum(abs(m['importe']) for m in movimientos_ordenados if m['tipo'] == 'Gasto')
+    balance_periodo = total_ingresos - total_gastos
 
     context = {
-        'cuenta_nombre': cuenta_nombre, 
-        'titulo_cuenta': titulo_cuenta,
-        'color_tema': color_tema,
-        'bg_color': bg_color,
+        'nombre_legible': nombre_legible,
+        'cuenta_nombre': cuenta_nombre,
+        'movimientos': movimientos_ordenados,
+        'mes_seleccionado': mes_seleccionado,
+        'ano_seleccionado': ano_seleccionado,
+        'concepto': request.GET.get('concepto', ''), # Lo devolvemos tal cual lo escribió
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
-        'balance': balance,
-        'movimientos': movimientos,
-        'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int,
-        'mes_seleccionado': mes_sel_int,
-        'meses_del_ano': range(1, 13)
+        'balance_periodo': balance_periodo,
+        'meses_del_ano': range(1, 13),
+        'anos_disponibles': range(hoy.year - 2, hoy.year + 2),
     }
     return render(request, 'taller/historial_cuenta.html', context)

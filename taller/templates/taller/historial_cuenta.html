@@ -1,82 +1,111 @@
 <!DOCTYPE html>
 {% load static %}
-{% load taller_extras %}
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historial {{ titulo_cuenta }} - ServiMax</title>
+    <title>Historial - {{ nombre_legible }}</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <style>
+        .filter-bar { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #dee2e6; display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group label { font-size: 0.9em; font-weight: bold; color: #495057; }
+        .form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 1em; }
+        .btn-filter { background: #343a40; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; height: fit-content; }
+        
+        .summary-cards { display: flex; gap: 20px; margin-bottom: 30px; }
+        .summary-card { flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
+        .summary-card h3 { margin: 0 0 10px 0; color: #6c757d; font-size: 1em; text-transform: uppercase; }
+        .summary-card .val { font-size: 1.8em; font-weight: bold; }
+        
+        .mov-table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        .mov-table th, .mov-table td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
+        .mov-table th { background: #343a40; color: white; font-weight: bold; }
+        .mov-table tr:hover { background-color: #f8f9fa; }
+    </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1 style="color: {{ color_tema }};">Historial: {{ titulo_cuenta }}</h1>
-            <a href="{% url 'informe_tarjeta' %}" class="back-btn">← Volver al Resumen Bancario</a>
+        <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>💳 Historial: <span style="color: #007bff;">{{ nombre_legible }}</span></h1>
+            <a href="{% url 'home' %}" class="back-btn" style="background: #6c757d; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-weight: bold;">← Volver al Panel</a>
         </div>
-
-        <form method="get" action="{% url 'historial_cuenta' cuenta_nombre %}">
-            <div class="filters">
-                <div>
-                    <label for="ano">Año:</label>
-                    <select name="ano" id="ano">
-                        <option value="">Todos</option>
-                        {% for ano in anos_disponibles %}
-                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label for="mes">Mes:</label>
-                    <select name="mes" id="mes">
-                        <option value="">Todo el Año</option>
-                        {% for i in meses_del_ano %}
-                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit" style="background-color: {{ color_tema }}; border-color: {{ color_tema }};">Filtrar</button>
-            </div>
-        </form>
         <hr>
 
-        <div style="background-color: {{ bg_color }}; padding: 20px; border-radius: 8px; border: 2px solid {{ color_tema }}; margin-bottom: 30px;">
-            <h2 style="color: {{ color_tema }}; margin-top: 0;">Resumen del Periodo</h2>
-            <div style="display: flex; justify-content: space-between; font-size: 1.1em;">
-                <p>Ingresos: <span class="ingresos">{{ total_ingresos|floatformat:2 }} €</span></p>
-                <p>Gastos: <span class="gastos">{{ total_gastos|floatformat:2 }} €</span></p>
-                <p style="font-weight: bold;">Balance: {{ balance|floatformat:2 }} €</p>
+        <form method="get" class="filter-bar">
+            <div class="form-group">
+                <label>Concepto / Búsqueda:</label>
+                <input type="text" name="concepto" value="{{ concepto }}" placeholder="Ej: Aceite, Nómina...">
+            </div>
+            <div class="form-group">
+                <label>Mes:</label>
+                <select name="mes">
+                    <option value="Todos" {% if mes_seleccionado == 'Todos' %}selected{% endif %}>Todos los meses</option>
+                    {% for m in meses_del_ano %}
+                        <option value="{{ m }}" {% if mes_seleccionado == m|stringformat:"s" %}selected{% endif %}>Mes {{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Año:</label>
+                <select name="ano">
+                    <option value="Todos" {% if ano_seleccionado == 'Todos' %}selected{% endif %}>Todos los años</option>
+                    {% for a in anos_disponibles %}
+                        <option value="{{ a }}" {% if ano_seleccionado == a|stringformat:"s" %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn-filter">🔍 Filtrar / Buscar</button>
+            <a href="{% url 'historial_cuenta' cuenta_nombre %}" style="margin-left: 10px; color: #dc3545; text-decoration: none; font-size: 0.9em; font-weight:bold;">✖ Limpiar</a>
+        </form>
+
+        <div class="summary-cards">
+            <div class="summary-card" style="border-bottom: 4px solid #28a745;">
+                <h3>Total Ingresos</h3>
+                <div class="val" style="color: #28a745;">+{{ total_ingresos|floatformat:2 }} €</div>
+            </div>
+            <div class="summary-card" style="border-bottom: 4px solid #dc3545;">
+                <h3>Total Gastos</h3>
+                <div class="val" style="color: #dc3545;">-{{ total_gastos|floatformat:2 }} €</div>
+            </div>
+            <div class="summary-card" style="border-bottom: 4px solid #007bff;">
+                <h3>Balance del Periodo</h3>
+                <div class="val" style="{% if balance_periodo < 0 %}color: #dc3545;{% else %}color: #007bff;{% endif %}">
+                    {{ balance_periodo|floatformat:2 }} €
+                </div>
             </div>
         </div>
 
-        <table class="history-table">
+        <table class="mov-table">
             <thead>
                 <tr>
                     <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Descripción</th>
+                    <th>Concepto / Descripción</th>
+                    <th>Categoría</th>
                     <th style="text-align: right;">Importe</th>
                 </tr>
             </thead>
             <tbody>
-                {% for movimiento in movimientos %}
-                    {% with es_gasto=movimiento|get_class_name|is_gasto %}
-                    <tr class="{% if es_gasto %}gasto-row{% else %}ingreso-row{% endif %}">
-                        <td>{{ movimiento.fecha|date:"d/m/Y" }}</td>
-                        <td>{{ movimiento.get_categoria_display }}</td>
-                        <td>{{ movimiento.descripcion }}</td>
-                        <td style="text-align: right;">
-                            {% if es_gasto %}-{% endif %}
-                            {{ movimiento.importe|floatformat:2 }} €
-                        </td>
-                    </tr>
-                    {% endwith %}
+                {% for mov in movimientos %}
+                <tr>
+                    <td style="color: #666; font-size: 0.9em;">{{ mov.fecha|date:"d/m/Y" }}</td>
+                    <td style="font-weight: bold;">{{ mov.descripcion }}</td>
+                    <td style="color: #6c757d; font-size: 0.9em;">{{ mov.categoria }}</td>
+                    <td style="text-align: right; font-weight: bold; font-size: 1.1em; {% if mov.tipo == 'Gasto' %}color: #dc3545;{% else %}color: #28a745;{% endif %}">
+                        {% if mov.tipo == 'Gasto' %}{% else %}+{% endif %}{{ mov.importe|floatformat:2 }} €
+                    </td>
+                </tr>
                 {% empty %}
-                    <tr><td colspan="4" style="text-align: center; padding: 20px;">No hay movimientos en este periodo.</td></tr>
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 40px; color: #6c757d;">
+                        No se encontraron movimientos con estos filtros.
+                    </td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
+
     </div>
 </body>
 </html>

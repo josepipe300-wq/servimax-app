@@ -27,6 +27,9 @@
         .btn-giant:hover { transform: translateY(-5px); }
         .btn-vehiculo { background-color: #007bff; color: white; }
         .btn-gasto { background-color: #ffc107; color: #333; }
+        
+        /* Etiqueta del método de pago */
+        .badge-metodo { display: inline-block; margin-top: 5px; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; background-color: #e9ecef; color: #495057; border: 1px solid #ced4da; }
     </style>
 </head>
 <body>
@@ -98,23 +101,42 @@
             </div>
 
             <div class="dashboard-grid">
-                <div class="card" style="border-top-color: #28a745;">
-                    <h3>Caja (Efectivo)</h3>
-                    <div class="amount text-success">{{ balance_efectivo|floatformat:2 }} €</div>
-                </div>
-                <div class="card" style="border-top-color: #007bff;">
-                    <h3>Cuenta Taller (Banco)</h3>
-                    <div class="amount text-primary">{{ balance_taller|floatformat:2 }} €</div>
-                </div>
-                <div class="card" style="border-top-color: #dc3545;">
-                    <h3>Tarjeta 1 (Revolving)</h3>
-                    <div class="amount text-danger">-{{ tarjeta_1.dispuesto|floatformat:2 }} €</div>
-                    <p style="font-size: 0.8em; margin:0; color:#666;">Límite: {{ tarjeta_1.limite }}€</p>
-                </div>
-                <div class="card" style="border-top-color: #ffc107;">
-                    <h3>Tarjeta 2 (Mes)</h3>
-                    <div class="amount text-warning" style="color: #d39e00;">-{{ tarjeta_2.dispuesto|floatformat:2 }} €</div>
-                </div>
+                
+                <a href="{% url 'historial_cuenta' 'efectivo' %}" style="text-decoration: none; color: inherit;">
+                    <div class="card" style="border-top-color: #28a745; transition: transform 0.2s, box-shadow 0.2s;">
+                        <h3>Caja (Efectivo)</h3>
+                        <div class="amount text-success">{{ balance_efectivo|floatformat:2 }} €</div>
+                        <div style="text-align: right; font-size: 0.85em; color: #007bff; font-weight: bold;">Ver historial ➔</div>
+                    </div>
+                </a>
+
+                <a href="{% url 'historial_cuenta' 'banco' %}" style="text-decoration: none; color: inherit;">
+                    <div class="card" style="border-top-color: #007bff; transition: transform 0.2s, box-shadow 0.2s;">
+                        <h3>Cuenta Taller (Banco)</h3>
+                        <div class="amount text-primary">{{ balance_taller|floatformat:2 }} €</div>
+                        <div style="text-align: right; font-size: 0.85em; color: #007bff; font-weight: bold;">Ver historial ➔</div>
+                    </div>
+                </a>
+
+                <a href="{% url 'historial_cuenta' 'tarjeta1' %}" style="text-decoration: none; color: inherit;">
+                    <div class="card" style="border-top-color: #dc3545; transition: transform 0.2s, box-shadow 0.2s;">
+                        <h3>Tarjeta 1 (Revolving)</h3>
+                        <div class="amount text-danger">-{{ tarjeta_1.dispuesto|floatformat:2 }} €</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.8em; margin:0; color:#666;">Límite: {{ tarjeta_1.limite }}€</span>
+                            <span style="font-size: 0.85em; color: #007bff; font-weight: bold;">Ver historial ➔</span>
+                        </div>
+                    </div>
+                </a>
+
+                <a href="{% url 'historial_cuenta' 'tarjeta2' %}" style="text-decoration: none; color: inherit;">
+                    <div class="card" style="border-top-color: #ffc107; transition: transform 0.2s, box-shadow 0.2s;">
+                        <h3>Tarjeta 2 (Mes)</h3>
+                        <div class="amount text-warning" style="color: #d39e00;">-{{ tarjeta_2.dispuesto|floatformat:2 }} €</div>
+                        <div style="text-align: right; font-size: 0.85em; color: #007bff; font-weight: bold;">Ver historial ➔</div>
+                    </div>
+                </a>
+
             </div>
 
             <div style="display: flex; gap: 30px; flex-wrap: wrap;">
@@ -127,9 +149,13 @@
                         <tbody>
                             {% for mov in movimientos_recientes %}
                             <tr style="border-bottom: 1px solid #eee;">
-                                <td style="padding: 10px 0;">{{ mov.fecha|date:"d/m/Y" }}</td>
-                                <td>{{ mov.descripcion }}</td>
-                                <td style="text-align: right; font-weight: bold; {% if mov.importe < 0 or mov.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Gasolina/Diesel,Otros,Compra de Consumibles,COMISIONES_INTERESES' %}color: #dc3545;{% else %}color: #28a745;{% endif %}">
+                                <td style="padding: 10px 0; color: #666; font-size: 0.9em; vertical-align: top;">{{ mov.fecha|date:"d/m/Y" }}</td>
+                                <td style="padding: 10px 0;">
+                                    {{ mov.descripcion }}
+                                    <br>
+                                    <span class="badge-metodo">💳 {{ mov.metodo_pago }}</span>
+                                </td>
+                                <td style="text-align: right; font-weight: bold; font-size: 1.1em; vertical-align: middle; {% if mov.importe < 0 or mov.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Gasolina/Diesel,Otros,Compra de Consumibles,COMISIONES_INTERESES' %}color: #dc3545;{% else %}color: #28a745;{% endif %}">
                                     {% if mov.importe < 0 or mov.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Gasolina/Diesel,Otros,Compra de Consumibles,COMISIONES_INTERESES' %}-{% else %}+{% endif %}{{ mov.importe|floatformat:2 }} €
                                 </td>
                             </tr>
