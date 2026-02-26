@@ -1,160 +1,133 @@
 <!DOCTYPE html>
 {% load static %}
-{% load taller_extras %}
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Informe de Cuentas Bancarias - ServiMax</title>
+    <title>Panel de Tarjetas - ServiMax</title>
+    
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <style>
-        /* Estilos específicos para las tarjetas clicables */
-        .card-link {
-            text-decoration: none;
-            color: inherit;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            display: block;
-            height: 100%;
-        }
-        .card-link:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        .account-card {
-            padding: 20px;
-            border-radius: 8px;
-            height: 100%;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .credit-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-top: 5px solid #007bff; }
+        .credit-card.roja { border-top-color: #dc3545; }
+        .credit-card.amarilla { border-top-color: #ffc107; }
+        
+        .cc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .cc-header h3 { margin: 0; font-size: 1.2em; color: #333; }
+        
+        .cc-balance { font-size: 2em; font-weight: bold; margin: 10px 0; }
+        .cc-deuda { color: #dc3545; }
+        
+        .cc-details { display: flex; justify-content: space-between; font-size: 0.9em; color: #666; margin-bottom: 15px; }
+        
+        /* Barra de progreso de límite */
+        .progress-container { width: 100%; background-color: #e9ecef; border-radius: 5px; height: 10px; margin-bottom: 5px; overflow: hidden; }
+        .progress-bar { height: 100%; border-radius: 5px; background-color: #28a745; }
+        .progress-bar.warning { background-color: #ffc107; }
+        .progress-bar.danger { background-color: #dc3545; }
+
+        .action-bar { background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 30px; display: flex; justify-content: center; border: 1px dashed #ccc;}
+        .btn-pago-tarjeta { background-color: #007bff; color: white; padding: 12px 25px; border-radius: 5px; text-decoration: none; font-weight: bold; font-size: 1.1em; display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 2px 4px rgba(0,123,255,0.3); }
+        .btn-pago-tarjeta:hover { background-color: #0056b3; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Informe de Cuentas Bancarias</h1>
+            <h1>Panel de Control de Tarjetas</h1>
             <a href="{% url 'home' %}" class="back-btn">← Volver al Inicio</a>
         </div>
-
-        <form method="get" action="{% url 'informe_tarjeta' %}">
-            <div class="filters">
-                <div>
-                    <label for="ano">Año:</label>
-                    <select name="ano" id="ano">
-                        <option value="">Todos</option>
-                        {% for ano in anos_disponibles %}
-                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label for="mes">Mes:</label>
-                    <select name="mes" id="mes">
-                        <option value="">Todo el Año</option>
-                        {% for i in meses_del_ano %}
-                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit">Filtrar</button>
-            </div>
-        </form>
         <hr>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-            
-            <a href="{% url 'historial_cuenta' 'erika' %}?ano={{ ano_seleccionado|default:'' }}&mes={{ mes_seleccionado|default:'' }}" class="card-link">
-                <div class="account-card" style="background-color: #fff0f6; border: 2px solid #e83e8c;">
-                    <div>
-                        <h2 style="color: #e83e8c; margin-top: 0; display: flex; justify-content: space-between;">
-                            <span>💳 Cuenta Erika</span>
-                            <span style="font-size: 0.6em; background: #e83e8c; color: white; padding: 2px 8px; border-radius: 4px;">Ver Detalles ➔</span>
-                        </h2>
-                        <p>Ingresos: <span class="ingresos" style="color: #28a745;">{{ total_ing_erika|floatformat:2 }} €</span></p>
-                        <p>Gastos: <span class="gastos" style="color: #dc3545;">{{ total_gas_erika|floatformat:2 }} €</span></p>
-                    </div>
-                    <div>
-                        <hr style="border-color: #e83e8c; opacity: 0.3;">
-                        <h3 style="text-align: right; color: #333;">Balance: {{ balance_erika|floatformat:2 }} €</h3>
-                    </div>
-                </div>
+        <div class="action-bar">
+            <a href="{% url 'registrar_pago_tarjeta' %}" class="btn-pago-tarjeta">
+                <span>💳 Registrar Pago de Tarjeta a Fin de Mes</span>
             </a>
-
-            <a href="{% url 'historial_cuenta' 'taller' %}?ano={{ ano_seleccionado|default:'' }}&mes={{ mes_seleccionado|default:'' }}" class="card-link">
-                <div class="account-card" style="background-color: #f3f0ff; border: 2px solid #6f42c1;">
-                    <div>
-                        <h2 style="color: #6f42c1; margin-top: 0; display: flex; justify-content: space-between;">
-                            <span>🏦 Cuenta Taller</span>
-                            <span style="font-size: 0.6em; background: #6f42c1; color: white; padding: 2px 8px; border-radius: 4px;">Ver Detalles ➔</span>
-                        </h2>
-                        <p>Ingresos: <span class="ingresos" style="color: #28a745;">{{ total_ing_taller|floatformat:2 }} €</span></p>
-                        <p>Gastos: <span class="gastos" style="color: #dc3545;">{{ total_gas_taller|floatformat:2 }} €</span></p>
-                    </div>
-                    <div>
-                        <hr style="border-color: #6f42c1; opacity: 0.3;">
-                        <h3 style="text-align: right; color: #333;">Balance: {{ balance_taller|floatformat:2 }} €</h3>
-                    </div>
-                </div>
-            </a>
-
         </div>
 
-        <h2>Detalle de Movimientos Bancarios (Global)</h2>
-        <div class="table-responsive">
-            <table class="history-table">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Cuenta</th>
-                        <th>Categoría</th>
-                        <th>Descripción</th>
-                        <th style="text-align: right;">Importe</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for mov in movimientos_bancarios %}
-                        {% with es_gasto=mov|get_class_name|is_gasto %}
-                        <tr class="{% if es_gasto %}gasto-row{% else %}ingreso-row{% endif %}">
-                            <td>{{ mov.fecha|date:"d/m/Y" }}</td>
-                            
-                            <td style="font-weight: bold;">
-                                {% if mov.metodo_pago == 'CUENTA_ERIKA' %}
-                                    <span style="color: #e83e8c;">Erika</span>
-                                {% elif mov.metodo_pago == 'CUENTA_TALLER' %}
-                                    <span style="color: #6f42c1;">Taller</span>
-                                {% else %}
-                                    {{ mov.metodo_pago }}
-                                {% endif %}
-                            </td>
+        <div class="cards-grid">
+            <div class="credit-card roja">
+                <div class="cc-header">
+                    <h3>Tarjeta 1 (Revolving)</h3>
+                    <span class="badge bg-danger" style="color:white; padding: 5px 8px; border-radius:4px; font-size:0.8em;">Límite: {{ tarjeta_1.limite }}€</span>
+                </div>
+                <div class="cc-details">
+                    <span>Deuda Acumulada:</span>
+                </div>
+                <div class="cc-balance cc-deuda">{{ tarjeta_1.dispuesto|floatformat:2 }} €</div>
+                
+                {% widthratio tarjeta_1.dispuesto tarjeta_1.limite 100 as porcentaje %}
+                <div class="progress-container">
+                    <div class="progress-bar {% if porcentaje > '80' %}danger{% elif porcentaje > '50' %}warning{% endif %}" style="width: {% if porcentaje > '100' %}100{% else %}{{ porcentaje }}{% endif %}%;"></div>
+                </div>
+                <div class="cc-details" style="margin-top: 5px;">
+                    <span>Disponible: <strong style="color: #28a745;">{{ tarjeta_1.disponible|floatformat:2 }} €</strong></span>
+                </div>
+                <a href="{% url 'historial_cuenta' 'tarjeta1' %}" style="display:block; text-align:center; margin-top: 10px; font-size:0.9em; text-decoration:none; color:#007bff;">Ver todos los tickets →</a>
+            </div>
 
-                            <td>
-                                {% if es_gasto %}
-                                    {{ mov.get_categoria_display }}
-                                {% else %}
-                                    {{ mov.get_categoria_display }}
-                                {% endif %}
-                            </td>
-                            <td>{{ mov.descripcion }}</td>
-                            <td style="text-align: right; font-weight: bold;">
-                                {% if es_gasto %}
-                                    <span style="color: #dc3545;">-{{ mov.importe|floatformat:2 }} €</span>
-                                {% else %}
-                                    <span style="color: #28a745;">+{{ mov.importe|floatformat:2 }} €</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endwith %}
-                    {% empty %}
-                        <tr>
-                            <td colspan="5" style="text-align: center; padding: 20px;">No hay movimientos bancarios registrados en este periodo.</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="credit-card amarilla">
+                <div class="cc-header">
+                    <h3>Tarjeta 2 (Pago Total)</h3>
+                    <span class="badge bg-warning" style="color:#333; padding: 5px 8px; border-radius:4px; font-size:0.8em;">Límite: {{ tarjeta_2.limite }}€</span>
+                </div>
+                <div class="cc-details">
+                    <span>Próximo Cargo al Banco:</span>
+                </div>
+                <div class="cc-balance cc-deuda">{{ tarjeta_2.dispuesto|floatformat:2 }} €</div>
+                
+                {% widthratio tarjeta_2.dispuesto tarjeta_2.limite 100 as porcentaje2 %}
+                <div class="progress-container">
+                    <div class="progress-bar {% if porcentaje2 > '80' %}danger{% elif porcentaje2 > '50' %}warning{% endif %}" style="width: {% if porcentaje2 > '100' %}100{% else %}{{ porcentaje2 }}{% endif %}%;"></div>
+                </div>
+                <div class="cc-details" style="margin-top: 5px;">
+                    <span>Disponible: <strong style="color: #28a745;">{{ tarjeta_2.disponible|floatformat:2 }} €</strong></span>
+                </div>
+                <a href="{% url 'historial_cuenta' 'tarjeta2' %}" style="display:block; text-align:center; margin-top: 10px; font-size:0.9em; text-decoration:none; color:#007bff;">Ver todos los tickets →</a>
+            </div>
         </div>
+
+        <h3 style="margin-top: 40px; border-bottom: 2px solid #eee; padding-bottom: 10px;">Intereses y Cierres Automáticos</h3>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Fecha Cierre</th>
+                    <th>Tarjeta</th>
+                    <th>Pago Realizado</th>
+                    <th>Deuda Reportada</th>
+                    <th>Intereses Detectados</th>
+                    <th>Acción</th> </tr>
+            </thead>
+            <tbody>
+                {% for cierre in cierres %}
+                <tr>
+                    <td>{{ cierre.fecha_cierre|date:"d/m/Y" }}</td>
+                    <td><strong>{{ cierre.get_tarjeta_display }}</strong></td>
+                    <td style="color: #28a745;">{{ cierre.pago_cuota|floatformat:2 }} €</td>
+                    <td>{{ cierre.saldo_deuda_banco|floatformat:2 }} €</td>
+                    <td style="color: #dc3545; font-weight:bold;">
+                        {% if cierre.intereses_calculados > 0 %}
+                            ⚠️ {{ cierre.intereses_calculados|floatformat:2 }} €
+                        {% else %}
+                            0.00 €
+                        {% endif %}
+                    </td>
+                    <td style="text-align: center;">
+                        <form method="post" action="{% url 'eliminar_cierre_tarjeta' cierre.id %}" onsubmit="return confirm('¿Seguro que quieres DESHACER este cierre? Se devolverá el dinero a la cuenta del taller y se borrarán los gastos de interés de forma automática.');">
+                            {% csrf_token %}
+                            <button type="submit" style="background: none; border: none; cursor: pointer; font-size: 1.5em; padding: 0;" title="Deshacer cierre">🗑️</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" style="text-align: center; color: #666; padding: 20px;">Aún no se han registrado pagos de fin de mes.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </body>
 </html>

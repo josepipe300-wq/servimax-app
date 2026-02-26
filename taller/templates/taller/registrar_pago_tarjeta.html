@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrar Pago de Tarjeta - ServiMax</title>
+    
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
+    <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <style>
+        .card-form { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 600px; margin: 20px auto; }
+        .form-group { margin-bottom: 25px; }
+        .form-group label { display: block; font-weight: bold; margin-bottom: 10px; font-size: 1.1em; color: #333; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 2px solid #ced4da; border-radius: 6px; font-size: 1.2em; box-sizing: border-box; }
+        .form-group input:focus, .form-group select:focus { border-color: #007bff; outline: none; }
+        .help-text { font-size: 0.9em; color: #6c757d; margin-top: 5px; }
+        .btn-submit { background-color: #28a745; color: white; border: none; padding: 15px; font-size: 1.2em; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(40,167,69,0.2); }
+        .btn-submit:hover { background-color: #218838; }
+        .info-box { background-color: #e2e3e5; border-left: 5px solid #6c757d; padding: 15px; margin-bottom: 25px; border-radius: 4px; }
+        .highlight-box { background-color: #fff3cd; border: 2px solid #ffeeba; padding: 15px; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💳 Registrar Pago de Tarjeta</h1>
+            <a href="{% url 'informe_tarjeta' %}" class="back-btn">← Volver al Panel de Tarjetas</a>
+        </div>
+        <hr>
+        
+        <div class="card-form">
+            <div class="info-box">
+                <h4 style="margin-top: 0; margin-bottom: 10px;">💡 Instrucciones Rápidas:</h4>
+                <p style="margin: 0; font-size: 0.95em; line-height: 1.5;">
+                    1. Indica cuánto dinero te ha cobrado el banco en la cuenta.<br>
+                    2. Mira la App del banco y escribe la Deuda Exacta actual.<br>
+                    3. <strong>ServiMax calculará los intereses automáticamente.</strong>
+                </p>
+            </div>
+
+            <form method="post" action="{% url 'registrar_pago_tarjeta' %}">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="tarjeta">1. ¿Qué tarjeta ha cobrado el banco?</label>
+                    <select name="tarjeta" id="tarjeta" required>
+                        <option value="">-- Selecciona una tarjeta --</option>
+                        <option value="TARJETA_1">Tarjeta 1 (Límite 2000€ - Cuota Fija)</option>
+                        <option value="TARJETA_2">Tarjeta 2 (Límite 1000€ - Pago Total)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="importe_pago">2. Importe cobrado en la cuenta (€)</label>
+                    <input type="number" step="0.01" name="importe_pago" id="importe_pago" placeholder="Ej: 150.00" required>
+                    <div class="help-text">El dinero que ha salido de la Cuenta Taller para pagar la tarjeta.</div>
+                </div>
+
+                <div class="form-group highlight-box">
+                    <label for="saldo_real_banco" style="color: #856404;">3. Deuda ACTUAL que sale en la App del Banco (€)</label>
+                    <input type="number" step="0.01" name="saldo_real_banco" id="saldo_real_banco" placeholder="Ej: 2161.51" required style="border-color: #ffc107;">
+                    <div class="help-text" style="color: #856404;"><strong>¡Ojo!</strong> No calcules nada. Simplemente abre la App del banco ahora mismo y copia el "Saldo Dispuesto" o "Deuda" que te aparece.</div>
+                </div>
+
+                <button type="submit" class="btn-submit">✅ Registrar Pago y Cuadrar Intereses</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

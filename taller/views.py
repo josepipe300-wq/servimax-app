@@ -3,7 +3,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from .models import (
     Ingreso, Gasto, Cliente, Vehiculo, OrdenDeReparacion, Empleado,
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
-    Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible
+    Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
+    CierreTarjeta # <-- NUEVO MODELO IMPORTADO
 )
 from django.db.models import Sum, F, Q
 from django.db import transaction
@@ -148,22 +149,16 @@ def home(request):
     mes_seleccionado_str = request.GET.get('mes')
 
     if ano_seleccionado_str:
-        try:
-            ano_actual = int(ano_seleccionado_str)
-        except (ValueError, TypeError):
-            ano_actual = hoy.year
-    else:
-        ano_actual = hoy.year
+        try: ano_actual = int(ano_seleccionado_str)
+        except (ValueError, TypeError): ano_actual = hoy.year
+    else: ano_actual = hoy.year
 
     if mes_seleccionado_str:
         try:
             mes_actual = int(mes_seleccionado_str)
-            if not 1 <= mes_actual <= 12:
-                mes_actual = hoy.month
-        except (ValueError, TypeError):
-            mes_actual = hoy.month
-    else:
-        mes_actual = hoy.month
+            if not 1 <= mes_actual <= 12: mes_actual = hoy.month
+        except (ValueError, TypeError): mes_actual = hoy.month
+    else: mes_actual = hoy.month
     
     # Totales del Mes seleccionado (Globales)
     ingresos_mes = Ingreso.objects.filter(fecha__month=mes_actual, fecha__year=ano_actual)
@@ -187,6 +182,16 @@ def home(request):
     ing_taller = Ingreso.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_taller = Gasto.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_taller = ing_taller - gas_taller
+    
+    # 4. Tarjetas de Crédito (Cálculo de Deuda)
+    def calcular_tarjeta(tag, limite):
+        gastos = Gasto.objects.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        abonos = Ingreso.objects.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        dispuesto = gastos - abonos
+        return {'limite': limite, 'dispuesto': dispuesto, 'disponible': limite - dispuesto}
+
+    tarjeta_1 = calcular_tarjeta('TARJETA_1', Decimal('2000.00'))
+    tarjeta_2 = calcular_tarjeta('TARJETA_2', Decimal('1000.00'))
     # ---------------------------------------------------------
 
     ultimos_gastos = Gasto.objects.order_by('-id')[:5]
@@ -213,7 +218,6 @@ def home(request):
             })
     
     is_read_only_user = request.user.groups.filter(name='Solo Ver').exists()
-    
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
 
@@ -221,10 +225,12 @@ def home(request):
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
         
-        # Nuevos Balances Separados
+        # Balances
         'balance_efectivo': balance_efectivo,
         'balance_erika': balance_erika,
         'balance_taller': balance_taller,
+        'tarjeta_1': tarjeta_1,
+        'tarjeta_2': tarjeta_2,
 
         'movimientos_recientes': movimientos_recientes,
         'alertas_stock': alertas_stock,
@@ -236,6 +242,104 @@ def home(request):
         'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/home.html', context)
+
+
+# --- NUEVA VISTA: REGISTRAR PAGO Y AJUSTAR INTERESES ---
+@login_required
+def registrar_pago_tarjeta(request):
+    """
+    Registra el pago mensual de la tarjeta (ej. 150€), sacando dinero de la Cuenta Taller
+    y abonándolo a la Tarjeta. Luego calcula los intereses automáticamente.
+    """
+    if request.method == 'POST':
+        tarjeta = request.POST.get('tarjeta')
+        importe_pago = Decimal(request.POST.get('importe_pago', '0'))
+        saldo_real_banco = Decimal(request.POST.get('saldo_real_banco', '0'))
+        
+        # 1. Calcular deuda actual en ServiMax
+        gastos = Gasto.objects.filter(metodo_pago=tarjeta).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        pagos = Ingreso.objects.filter(metodo_pago=tarjeta).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        deuda_app_antes = gastos - pagos
+        deuda_app_despues = deuda_app_antes - importe_pago
+        
+        # 2. Diferencia = Intereses cobrados por el banco
+        intereses = saldo_real_banco - deuda_app_despues
+        
+        with transaction.atomic():
+            # A. Sacar dinero de Cuenta Taller
+            Gasto.objects.create(
+                fecha=timezone.now().date(),
+                categoria='Otros',
+                importe=importe_pago,
+                descripcion=f"PAGO CUOTA MENSUAL {tarjeta}",
+                metodo_pago='CUENTA_TALLER'
+            )
+            # B. Meter abono en Tarjeta (liberar cupo)
+            Ingreso.objects.create(
+                fecha=timezone.now().date(),
+                categoria='ABONO_TARJETA',
+                importe=importe_pago,
+                descripcion="ABONO RECIBIDO DESDE CUENTA TALLER",
+                metodo_pago=tarjeta
+            )
+            # C. Si hay intereses, anotarlos como gasto automático de la tarjeta
+            if intereses > 0:
+                Gasto.objects.create(
+                    fecha=timezone.now().date(),
+                    categoria='COMISIONES_INTERESES',
+                    importe=intereses,
+                    descripcion="AJUSTE AUTOMÁTICO DE INTERESES Y COMISIONES",
+                    metodo_pago=tarjeta
+                )
+            
+            # D. Guardar historial del cierre
+            CierreTarjeta.objects.create(
+                tarjeta=tarjeta,
+                pago_cuota=importe_pago,
+                saldo_deuda_banco=saldo_real_banco,
+                intereses_calculados=intereses if intereses > 0 else Decimal('0.00')
+            )
+
+        return redirect('informe_tarjeta')
+    
+    return render(request, 'taller/registrar_pago_tarjeta.html')
+
+    # --- NUEVA VISTA: ELIMINAR CIERRE DE TARJETA (DESHACER) ---
+@login_required
+def eliminar_cierre_tarjeta(request, cierre_id):
+    if request.method == 'POST':
+        cierre = get_object_or_404(CierreTarjeta, id=cierre_id)
+        
+        with transaction.atomic():
+            # 1. Borramos el Gasto que sacó el dinero de la Cuenta Taller
+            Gasto.objects.filter(
+                fecha=cierre.fecha_cierre,
+                metodo_pago='CUENTA_TALLER',
+                importe=cierre.pago_cuota,
+                descripcion__icontains=f"PAGO CUOTA MENSUAL {cierre.tarjeta}"
+            ).delete()
+            
+            # 2. Borramos el Ingreso que recargó la Tarjeta
+            Ingreso.objects.filter(
+                fecha=cierre.fecha_cierre,
+                metodo_pago=cierre.tarjeta,
+                importe=cierre.pago_cuota,
+                categoria='ABONO_TARJETA'
+            ).delete()
+            
+            # 3. Si hubo intereses, también borramos ese Gasto fantasma
+            if cierre.intereses_calculados > 0:
+                Gasto.objects.filter(
+                    fecha=cierre.fecha_cierre,
+                    metodo_pago=cierre.tarjeta,
+                    importe=cierre.intereses_calculados,
+                    categoria='COMISIONES_INTERESES'
+                ).delete()
+            
+            # 4. Finalmente, borramos el registro del cierre
+            cierre.delete()
+            
+    return redirect('informe_tarjeta')
 
 
 # --- VISTA INGRESAR VEHÍCULO ---
@@ -408,8 +512,6 @@ def anadir_gasto(request):
                     try:
                         orden = OrdenDeReparacion.objects.get(id=orden_id)
                         gasto.orden = orden 
-                        
-                        # Actualizar estado si es necesario
                         if orden.estado in ['Recibido', 'En Diagnostico']:
                             orden.estado = 'En Reparacion'
                             orden.save()
@@ -425,7 +527,6 @@ def anadir_gasto(request):
         return redirect('home')
 
     ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente').order_by('-id')
-    
     empleados = Empleado.objects.all()
     tipos_consumible = TipoConsumible.objects.all()
     categorias_gasto_choices = [choice for choice in Gasto.CATEGORIA_CHOICES if choice[0] != 'Compra de Consumibles']
@@ -449,7 +550,6 @@ def registrar_ingreso(request):
 
         categoria = request.POST['categoria']; importe_str = request.POST.get('importe')
         descripcion = request.POST.get('descripcion', '')
-        
         metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
         es_tpv_bool = (metodo_pago != 'EFECTIVO')
 
@@ -838,10 +938,9 @@ def lista_ordenes(request):
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
     
-    # --- NUEVO: Búsqueda por Matrícula ---
+    # --- Búsqueda por Matrícula ---
     matricula_buscada = request.GET.get('matricula', '').strip()
     if matricula_buscada:
-        # icontains busca coincidencias (ej: si buscas "1234", salen las "1234ABC")
         ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
 
     if ano_seleccionado:
@@ -870,7 +969,7 @@ def lista_ordenes(request):
         'ano_seleccionado': ano_sel_int, 
         'mes_seleccionado': mes_sel_int, 
         'meses_del_ano': range(1, 13),
-        'matricula_buscada': matricula_buscada # Enviamos esto a la plantilla
+        'matricula_buscada': matricula_buscada
     }
     return render(request, 'taller/lista_ordenes.html', context)
 
@@ -880,7 +979,6 @@ def lista_ordenes(request):
 def detalle_orden(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura'), id=orden_id)
     
-    # --- Filtrar gastos por ORDEN ---
     repuestos = Gasto.objects.filter(orden=orden, categoria='Repuestos')
     gastos_otros = Gasto.objects.filter(orden=orden, categoria='Otros')
     
@@ -889,34 +987,26 @@ def detalle_orden(request, orden_id):
     
     factura = None
     pendiente_pago = Decimal('0.00')
-    whatsapp_url = None # Variable para el enlace seguro
+    whatsapp_url = None 
     
     try: 
         factura = orden.factura
         pendiente_pago = factura.total_final - abonos
         
-    # --- GENERAR LINK SEGURO DE WHATSAPP ---
         if orden.cliente.telefono:
             signer = Signer()
-            signed_id = signer.sign(factura.id) # Firmamos el ID
-            
-            # Construimos la URL completa pública
+            signed_id = signer.sign(factura.id) 
             public_url = request.build_absolute_uri(reverse('ver_factura_publica', args=[signed_id]))
             
-            # Limpiamos el teléfono
             telefono_limpio = "".join(filter(str.isdigit, orden.cliente.telefono))
             if not telefono_limpio.startswith('34') and len(telefono_limpio) == 9:
                 telefono_limpio = '34' + telefono_limpio
             
-            # --- NUEVA LÓGICA: Determinar si es Factura o Recibo ---
             tipo_doc = "factura" if factura.es_factura else "recibo"
-            
-            # Preparamos el mensaje dinámico
             mensaje = f"Hola {orden.cliente.nombre}, aquí tienes el enlace para descargar tu {tipo_doc} del taller:\n\n{public_url}\n\n¡Gracias por confiar en ServiMax!"
             mensaje_encoded = quote(mensaje)
             
             whatsapp_url = f"https://wa.me/{telefono_limpio}?text={mensaje_encoded}"
-        # --------------------------------
     except Factura.DoesNotExist: 
         pass
 
@@ -949,13 +1039,11 @@ def detalle_orden(request, orden_id):
                 pass
             return redirect('detalle_orden', orden_id=orden.id)
         
-        # --- SUBIR FOTOS PENDIENTES ---
         elif form_type == 'subir_fotos':
             if not request.user.has_perm('taller.change_ordendereparacion'): 
                  return HttpResponseForbidden("No tienes permiso para añadir fotos a la orden.")
 
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
-            
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
                 if foto_campo in request.FILES:
@@ -970,7 +1058,7 @@ def detalle_orden(request, orden_id):
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
         'abonos': abonos, 'pendiente_pago': pendiente_pago, 'tipos_consumible': tipos_consumible,
         'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES,
-        'whatsapp_url': whatsapp_url, # Añadimos el enlace al contexto
+        'whatsapp_url': whatsapp_url,
     }
     return render(request, 'taller/detalle_orden.html', context)
 
@@ -984,7 +1072,7 @@ def historial_ordenes(request):
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
     
-    # --- NUEVO: Búsqueda por Matrícula ---
+    # --- Búsqueda por Matrícula ---
     matricula_buscada = request.GET.get('matricula', '').strip()
     if matricula_buscada:
         ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
@@ -1006,7 +1094,7 @@ def historial_ordenes(request):
     context = {
         'ordenes': ordenes, 'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13),
-        'matricula_buscada': matricula_buscada # Enviamos esto a la plantilla
+        'matricula_buscada': matricula_buscada
     }
     return render(request, 'taller/historial_ordenes.html', context)
 
@@ -1161,7 +1249,7 @@ def generar_factura(request, orden_id):
     return redirect('detalle_orden', orden_id=orden.id)
 
 
-# --- VISTAS PARA VER PDF (USANDO LA FUNCIÓN AUXILIAR) ---
+# --- VISTAS PARA VER PDF ---
 @login_required
 def ver_factura_pdf(request, factura_id):
     factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=factura_id)
@@ -1173,7 +1261,6 @@ def ver_factura_publica(request, signed_id):
     """ Vista pública segura para acceder desde WhatsApp sin login """
     signer = Signer()
     try:
-        # Desencripta el ID. Fallará si alguien modifica la URL.
         original_id = signer.unsign(signed_id)
         factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=original_id)
         return generar_pdf_response(factura)
@@ -1207,7 +1294,6 @@ def editar_factura(request, factura_id):
              print(f"Error al llamar a generar_factura desde editar_factura: {e}")
              return redirect('detalle_orden', orden_id=orden.id)
 
-    # --- Lógica GET ---
     repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
     gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
     tipos_consumible = TipoConsumible.objects.all()
@@ -1233,20 +1319,16 @@ def editar_factura(request, factura_id):
 @login_required
 def informe_rentabilidad(request):
     hoy = timezone.now().date()
-    
-    # 1. Configuración de Filtros de Fecha
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
 
-    # 2. QuerySets base
     facturas_qs = Factura.objects.select_related('orden__vehiculo').prefetch_related('lineas', 'orden__vehiculo__gasto_set')
     ingresos_grua_qs = Ingreso.objects.filter(categoria='Grua')
     otras_ganancias_qs = Ingreso.objects.filter(categoria='Otras Ganancias')
 
-    # 3. Aplicar Filtros
     ano_sel_int = None
     if ano_seleccionado:
         try:
@@ -1254,8 +1336,7 @@ def informe_rentabilidad(request):
             facturas_qs = facturas_qs.filter(fecha_emision__year=ano_sel_int)
             ingresos_grua_qs = ingresos_grua_qs.filter(fecha__year=ano_sel_int)
             otras_ganancias_qs = otras_ganancias_qs.filter(fecha__year=ano_sel_int)
-        except (ValueError, TypeError):
-            ano_seleccionado = None
+        except (ValueError, TypeError): ano_seleccionado = None
             
     mes_sel_int = None
     if mes_seleccionado:
@@ -1265,12 +1346,9 @@ def informe_rentabilidad(request):
                 facturas_qs = facturas_qs.filter(fecha_emision__month=mes_sel_int)
                 ingresos_grua_qs = ingresos_grua_qs.filter(fecha__month=mes_sel_int)
                 otras_ganancias_qs = otras_ganancias_qs.filter(fecha__month=mes_sel_int)
-            else:
-                mes_seleccionado = None
-         except (ValueError, TypeError):
-            mes_seleccionado = None
+            else: mes_seleccionado = None
+         except (ValueError, TypeError): mes_seleccionado = None
 
-    # 4. Procesamiento de Datos (Lógica de Rentabilidad)
     facturas = facturas_qs.order_by('-fecha_emision')
     ingresos_grua = ingresos_grua_qs.order_by('-fecha')
     otras_ganancias = otras_ganancias_qs.order_by('-fecha')
@@ -1278,7 +1356,6 @@ def informe_rentabilidad(request):
     ganancia_trabajos = Decimal('0.00')
     reporte = []
     
-    # Optimizacion de compras
     compras_consumibles = CompraConsumible.objects.order_by('tipo_id', '-fecha_compra')
     ultimas_compras_por_tipo = {}
     for compra in compras_consumibles:
@@ -1291,7 +1368,6 @@ def informe_rentabilidad(request):
         if not orden: continue 
         
         gastos_orden_qs = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros'])
-
         coste_piezas_externos_factura = gastos_orden_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
         coste_consumibles_factura = Decimal('0.00')
         
@@ -1309,31 +1385,18 @@ def informe_rentabilidad(request):
         ganancia_total_orden = base_cobrada - coste_total_directo
         
         ganancia_trabajos += ganancia_total_orden
-        reporte.append({
-            'orden': orden, 
-            'factura': factura, 
-            'ganancia_total': ganancia_total_orden
-        })
+        reporte.append({ 'orden': orden, 'factura': factura, 'ganancia_total': ganancia_total_orden })
     
     ganancia_grua_total = ingresos_grua.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     ganancia_otras_total = otras_ganancias.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    
     total_ganancia_general = ganancia_trabajos + ganancia_grua_total + ganancia_otras_total
     ganancias_directas_desglose = sorted(list(ingresos_grua) + list(otras_ganancias), key=lambda x: x.fecha, reverse=True)
     
     context = { 
-        'reporte': reporte, 
-        'ganancia_trabajos': ganancia_trabajos, 
-        'ganancia_grua': ganancia_grua_total, 
-        'ganancia_otras': ganancia_otras_total, 
-        'ganancias_directas_desglose': ganancias_directas_desglose, 
-        'total_ganancia_general': total_ganancia_general,
-        
-        # Filtros para el Template
-        'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 
-        'mes_seleccionado': mes_sel_int, 
-        'meses_del_ano': range(1, 13)
+        'reporte': reporte, 'ganancia_trabajos': ganancia_trabajos, 'ganancia_grua': ganancia_grua_total, 
+        'ganancia_otras': ganancia_otras_total, 'ganancias_directas_desglose': ganancias_directas_desglose, 
+        'total_ganancia_general': total_ganancia_general, 'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/informe_rentabilidad.html', context)
 
@@ -1345,12 +1408,12 @@ def detalle_ganancia_orden(request, orden_id):
     desglose_agrupado = {}; gastos_usados_ids = set()
     
     gastos_asociados = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros']).order_by('id')
-    
     compras_consumibles = CompraConsumible.objects.filter(fecha_compra__lte=factura.fecha_emision).order_by('tipo_id', '-fecha_compra')
     ultimas_compras_por_tipo = {};
     for compra in compras_consumibles:
         if compra.tipo_id not in ultimas_compras_por_tipo: ultimas_compras_por_tipo[compra.tipo_id] = compra
     tipos_consumible_dict = {tipo.nombre.upper(): tipo for tipo in TipoConsumible.objects.all()}
+    
     for linea in factura.lineas.all():
         pvp_linea = linea.total_linea; coste_linea = Decimal('0.00'); descripcion_limpia = linea.descripcion.strip().upper(); key = (linea.tipo, descripcion_limpia)
         desglose_agrupado.setdefault(key, {'descripcion': f"{linea.get_tipo_display()}: {linea.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
@@ -1364,15 +1427,18 @@ def detalle_ganancia_orden(request, orden_id):
              tipo_obj = tipos_consumible_dict.get(descripcion_limpia)
              if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo: coste_unitario = ultimas_compras_por_tipo[tipo_obj.id].coste_por_unidad or Decimal('0.00'); coste_linea = coste_unitario * linea.cantidad
         desglose_agrupado[key]['coste'] += coste_linea
+        
     for gasto in gastos_asociados:
         if gasto.id not in gastos_usados_ids:
              descripcion_limpia = gasto.descripcion.strip().upper(); tipo_gasto_map = {'Repuestos': 'Repuesto', 'Otros': 'Externo'}; tipo_para_key = tipo_gasto_map.get(gasto.categoria, 'Externo'); key = (tipo_para_key, descripcion_limpia)
              desglose_agrupado.setdefault(key, {'descripcion': f"{gasto.get_categoria_display()}: {gasto.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
              desglose_agrupado[key]['coste'] += gasto.importe or Decimal('0.00')
+             
     desglose_final_list = []; ganancia_total_calculada = Decimal('0.00')
     for item_agrupado in desglose_agrupado.values():
         ganancia = item_agrupado['pvp'] - item_agrupado['coste']; item_agrupado['ganancia'] = ganancia; desglose_final_list.append(item_agrupado); ganancia_total_calculada += ganancia
     desglose_final_list.sort(key=lambda x: x['descripcion'])
+    
     abonos = sum(ing.importe for ing in factura.orden.ingreso_set.all()) if hasattr(factura.orden, 'ingreso_set') else Decimal('0.00')
     saldo_cliente = abonos - factura.total_final; saldo_cliente_abs = abs(saldo_cliente)
     context = { 'orden': orden, 'factura': factura, 'desglose': desglose_final_list, 'ganancia_total': ganancia_total_calculada, 'abonos_totales': abonos, 'saldo_cliente': saldo_cliente, 'saldo_cliente_abs': saldo_cliente_abs }
@@ -1392,14 +1458,17 @@ def informe_gastos(request):
             if 1 <= mes <= 12: gastos_qs = gastos_qs.filter(fecha__month=mes)
             else: mes_seleccionado = None
         except (ValueError, TypeError): mes_seleccionado = None
+        
     totales_por_categoria_query = gastos_qs.values('categoria').annotate(total=Sum('importe')).order_by('categoria')
     categoria_display_map = dict(Gasto.CATEGORIA_CHOICES); resumen_categorias = {}
     for item in totales_por_categoria_query:
          clave_interna = item['categoria']; nombre_legible = categoria_display_map.get(clave_interna, clave_interna)
          total_categoria = item['total'] or Decimal('0.00'); resumen_categorias[clave_interna] = {'display_name': nombre_legible, 'total': total_categoria}
+         
     desglose_sueldos_query = gastos_qs.filter(categoria='Sueldos', empleado__isnull=False).values('empleado__nombre').annotate(total=Sum('importe')).order_by('empleado__nombre')
     desglose_sueldos = {item['empleado__nombre']: item['total'] or Decimal('0.00') for item in desglose_sueldos_query if item['empleado__nombre']}
     ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None; mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
+    
     context = { 'totales_por_categoria': resumen_categorias, 'desglose_sueldos': desglose_sueldos, 'anos_disponibles': anos_disponibles, 'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13) }
     return render(request, 'taller/informe_gastos.html', context)
 
@@ -1423,6 +1492,7 @@ def informe_gastos_desglose(request, categoria, empleado_nombre=None):
             if 1 <= mes <= 12: gastos_qs = gastos_qs.filter(fecha__month=mes)
             else: mes_seleccionado = None
         except (ValueError, TypeError): mes_seleccionado = None
+        
     total_desglose = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gastos_desglose = gastos_qs.order_by('-fecha', '-id')
     context = { 'titulo': titulo, 'gastos_desglose': gastos_desglose, 'total_desglose': total_desglose, 'ano_seleccionado': ano_seleccionado, 'mes_seleccionado': mes_seleccionado, 'categoria_original_url': categoria }
@@ -1442,10 +1512,12 @@ def informe_ingresos(request):
             if 1 <= mes <= 12: ingresos_qs = ingresos_qs.filter(fecha__month=mes)
             else: mes_seleccionado = None
         except (ValueError, TypeError): mes_seleccionado = None
+        
     totales_por_categoria_query = ingresos_qs.values('categoria').annotate(total=Sum('importe')).order_by('categoria')
     categoria_display_map = dict(Ingreso.CATEGORIA_CHOICES)
     resumen_categorias = { item['categoria']: {'display_name': categoria_display_map.get(item['categoria'], item['categoria']), 'total': item['total'] or Decimal('0.00')} for item in totales_por_categoria_query }
     ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None; mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
+    
     context = { 'totales_por_categoria': resumen_categorias, 'anos_disponibles': anos_disponibles, 'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13) }
     return render(request, 'taller/informe_ingresos.html', context)
 
@@ -1464,6 +1536,7 @@ def informe_ingresos_desglose(request, categoria):
             if 1 <= mes <= 12: ingresos_qs = ingresos_qs.filter(fecha__month=mes)
             else: mes_seleccionado = None
         except (ValueError, TypeError): mes_seleccionado = None
+        
     total_desglose = ingresos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     ingresos_desglose = ingresos_qs.order_by('-fecha', '-id')
     context = { 'titulo': titulo, 'ingresos_desglose': ingresos_desglose, 'total_desglose': total_desglose, 'ano_seleccionado': ano_seleccionado, 'mes_seleccionado': mes_seleccionado, 'categoria_original_url': categoria }
@@ -1474,7 +1547,6 @@ def informe_ingresos_desglose(request, categoria):
 @login_required
 def contabilidad(request):
     hoy = timezone.now().date()
-    
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano')
@@ -1489,8 +1561,7 @@ def contabilidad(request):
             ano_sel_int = int(ano_seleccionado)
             ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
             gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
-        except (ValueError, TypeError):
-            ano_seleccionado = None
+        except (ValueError, TypeError): ano_seleccionado = None
     
     mes_sel_int = None
     if mes_seleccionado:
@@ -1499,33 +1570,26 @@ def contabilidad(request):
             if 1 <= mes_sel_int <= 12:
                 ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
                 gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
-            else:
-                mes_seleccionado = None
-         except (ValueError, TypeError):
-            mes_seleccionado = None
+            else: mes_seleccionado = None
+         except (ValueError, TypeError): mes_seleccionado = None
     
     total_ingresado = ingresos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastado = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_ganancia = total_ingresado - total_gastado
     
     context = { 
-        'total_ingresado': total_ingresado, 
-        'total_gastado': total_gastado, 
-        'total_ganancia': total_ganancia, 
-        'anos_y_meses': anos_y_meses_data, 
-        'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 
-        'mes_seleccionado': mes_sel_int, 
-        'meses_del_ano': range(1, 13)
+        'total_ingresado': total_ingresado, 'total_gastado': total_gastado, 'total_ganancia': total_ganancia, 
+        'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/contabilidad.html', context)
-
 
 @login_required
 def cuentas_por_cobrar(request):
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
     facturas_qs = Factura.objects.select_related('orden__cliente', 'orden__vehiculo').prefetch_related('orden__ingreso_set')
+    
     if ano_seleccionado:
         try: facturas_qs = facturas_qs.filter(fecha_emision__year=int(ano_seleccionado))
         except (ValueError, TypeError): ano_seleccionado = None
@@ -1535,6 +1599,7 @@ def cuentas_por_cobrar(request):
             if 1 <= mes <= 12: facturas_qs = facturas_qs.filter(fecha_emision__month=mes)
             else: mes_seleccionado = None
         except (ValueError, TypeError): mes_seleccionado = None
+        
     facturas_pendientes = []; total_pendiente = Decimal('0.00')
     for factura in facturas_qs.order_by('fecha_emision', 'id'):
         abonos = sum(ing.importe for ing in factura.orden.ingreso_set.all()) if hasattr(factura.orden, 'ingreso_set') and factura.orden.ingreso_set.exists() else Decimal('0.00')
@@ -1542,34 +1607,30 @@ def cuentas_por_cobrar(request):
         if pendiente > Decimal('0.01'):
             facturas_pendientes.append({'factura': factura, 'orden': factura.orden, 'cliente': factura.orden.cliente, 'vehiculo': factura.orden.vehiculo, 'pendiente': pendiente})
             total_pendiente += pendiente
+            
     ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None; mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
     context = { 'facturas_pendientes': facturas_pendientes, 'total_pendiente': total_pendiente, 'anos_disponibles': anos_disponibles, 'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13) }
     return render(request, 'taller/cuentas_por_cobrar.html', context)
-
 
 # --- VISTA INFORME TARJETA ---
 @login_required
 def informe_tarjeta(request):
     hoy = timezone.now().date()
-    
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
 
-    # 1. Filtramos todo lo que NO sea Efectivo (es decir, cuentas bancarias)
     ingresos_qs = Ingreso.objects.exclude(metodo_pago='EFECTIVO')
     gastos_qs = Gasto.objects.exclude(metodo_pago='EFECTIVO')
 
-    # 2. Aplicar filtros de Fecha
     ano_sel_int = None
     if ano_seleccionado:
         try:
             ano_sel_int = int(ano_seleccionado)
             ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
             gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
-        except (ValueError, TypeError):
-            ano_seleccionado = None
+        except (ValueError, TypeError): ano_seleccionado = None
             
     mes_sel_int = None
     if mes_seleccionado:
@@ -1578,43 +1639,32 @@ def informe_tarjeta(request):
             if 1 <= mes_sel_int <= 12:
                 ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
                 gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
-            else:
-                mes_seleccionado = None
-         except (ValueError, TypeError):
-            mes_seleccionado = None
+            else: mes_seleccionado = None
+         except (ValueError, TypeError): mes_seleccionado = None
     
-    # 3. Calcular Balances para CUENTA ERIKA
-    ing_erika = ingresos_qs.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    gas_erika = gastos_qs.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_erika = ing_erika - gas_erika
+    # Cálculos Tarjetas
+    def calcular_tarjeta(tag, limite):
+        gastos = gastos_qs.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        abonos = ingresos_qs.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        dispuesto = gastos - abonos
+        return {'limite': limite, 'dispuesto': dispuesto, 'disponible': limite - dispuesto}
 
-    # 4. Calcular Balances para CUENTA TALLER
-    ing_taller = ingresos_qs.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    gas_taller = gastos_qs.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_taller = ing_taller - gas_taller
+    tarjeta_1 = calcular_tarjeta('TARJETA_1', Decimal('2000.00'))
+    tarjeta_2 = calcular_tarjeta('TARJETA_2', Decimal('1000.00'))
 
-    # 5. Combinar movimientos para la lista inferior
     movimientos_bancarios = sorted(
         list(ingresos_qs) + list(gastos_qs), 
         key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), 
         reverse=True
     )
     
+    cierres = CierreTarjeta.objects.order_by('-fecha_cierre')
+    
     context = { 
-        # Variables para Erika
-        'total_ing_erika': ing_erika,
-        'total_gas_erika': gas_erika,
-        'balance_erika': balance_erika,
-
-        # Variables para Taller
-        'total_ing_taller': ing_taller,
-        'total_gas_taller': gas_taller,
-        'balance_taller': balance_taller,
-
-        # Lista combinada
+        'tarjeta_1': tarjeta_1,
+        'tarjeta_2': tarjeta_2,
         'movimientos_bancarios': movimientos_bancarios, 
-        
-        # Filtros
+        'cierres': cierres,
         'anos_y_meses': anos_y_meses_data, 
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 
@@ -1642,6 +1692,7 @@ def ver_presupuesto_pdf(request, presupuesto_id):
     matricula_filename = presupuesto.vehiculo.matricula if presupuesto.vehiculo else presupuesto.matricula_nueva if presupuesto.matricula_nueva else 'SIN_VEHICULO'
     cliente_filename = "".join(c if c.isalnum() else "_" for c in presupuesto.cliente.nombre); nombre_archivo = f"presupuesto_{presupuesto.id}_{cliente_filename}_{matricula_filename}.pdf"
     response['Content-Disposition'] = f'inline; filename="{nombre_archivo}"'
+    
     def link_callback(uri, rel):
         logo_uri_abs = context.get('logo_path');
         if logo_uri_abs: logo_uri_abs = logo_uri_abs.replace("\\", "/")
@@ -1656,6 +1707,7 @@ def ver_presupuesto_pdf(request, presupuesto_id):
                  if os.path.exists(file_path): return file_path
         if uri.startswith("http://") or uri.startswith("https://"): return uri
         print(f"WARN: Could not resolve URI '{uri}' in PDF generation."); return None
+        
     pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
     if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
     return response
@@ -1663,28 +1715,35 @@ def ver_presupuesto_pdf(request, presupuesto_id):
 # --- VISTA PARA EL HISTORIAL DETALLADO POR CUENTA ---
 @login_required
 def historial_cuenta(request, cuenta_nombre):
-    # 1. Configuración según la cuenta seleccionada
     if cuenta_nombre == 'erika':
         metodo_pago_db = 'CUENTA_ERIKA'
         titulo_cuenta = "Cuenta Erika"
-        color_tema = "#e83e8c" # Rosa
+        color_tema = "#e83e8c" 
         bg_color = "#fff0f6"
     elif cuenta_nombre == 'taller':
         metodo_pago_db = 'CUENTA_TALLER'
         titulo_cuenta = "Cuenta Taller"
-        color_tema = "#6f42c1" # Morado
+        color_tema = "#6f42c1" 
         bg_color = "#f3f0ff"
+    elif cuenta_nombre == 'tarjeta1':
+        metodo_pago_db = 'TARJETA_1'
+        titulo_cuenta = "Tarjeta 1 (Límite 2000€)"
+        color_tema = "#dc3545" 
+        bg_color = "#f8d7da"
+    elif cuenta_nombre == 'tarjeta2':
+        metodo_pago_db = 'TARJETA_2'
+        titulo_cuenta = "Tarjeta 2 (Límite 1000€)"
+        color_tema = "#ffc107" 
+        bg_color = "#fff3cd"
     else:
-        return redirect('informe_tarjeta') # Si ponen un nombre raro, volver al inicio
+        return redirect('informe_tarjeta') 
 
-    # 2. Preparar Filtros de Fecha
     hoy = timezone.now().date()
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
 
-    # 3. Filtrar QuerySets
     ingresos_qs = Ingreso.objects.filter(metodo_pago=metodo_pago_db)
     gastos_qs = Gasto.objects.filter(metodo_pago=metodo_pago_db)
 
@@ -1694,8 +1753,7 @@ def historial_cuenta(request, cuenta_nombre):
             ano_sel_int = int(ano_seleccionado)
             ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
             gastos_qs = gastos_qs.filter(fecha__year=ano_sel_int)
-        except (ValueError, TypeError):
-            ano_seleccionado = None
+        except (ValueError, TypeError): ano_seleccionado = None
             
     mes_sel_int = None
     if mes_seleccionado:
@@ -1704,17 +1762,13 @@ def historial_cuenta(request, cuenta_nombre):
             if 1 <= mes_sel_int <= 12:
                 ingresos_qs = ingresos_qs.filter(fecha__month=mes_sel_int)
                 gastos_qs = gastos_qs.filter(fecha__month=mes_sel_int)
-            else:
-                mes_seleccionado = None
-         except (ValueError, TypeError):
-            mes_seleccionado = None
+            else: mes_seleccionado = None
+         except (ValueError, TypeError): mes_seleccionado = None
 
-    # 4. Calcular Totales
     total_ingresos = ingresos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastos = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance = total_ingresos - total_gastos
 
-    # 5. Lista de Movimientos
     movimientos = sorted(
         list(ingresos_qs) + list(gastos_qs), 
         key=lambda mov: (mov.fecha, -mov.id if hasattr(mov, 'id') else 0), 
@@ -1722,17 +1776,14 @@ def historial_cuenta(request, cuenta_nombre):
     )
 
     context = {
-        'cuenta_nombre': cuenta_nombre, # 'erika' o 'taller' para la URL
+        'cuenta_nombre': cuenta_nombre, 
         'titulo_cuenta': titulo_cuenta,
         'color_tema': color_tema,
         'bg_color': bg_color,
-        
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
         'balance': balance,
         'movimientos': movimientos,
-
-        # Datos para el filtro
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int,
         'mes_seleccionado': mes_sel_int,
