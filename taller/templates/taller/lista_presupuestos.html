@@ -6,10 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lista de Presupuestos - ServiMax</title>
     
-    {# --- INICIO MODIFICACIÓN --- #}
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    {# --- FIN MODIFICACIÓN (Style block eliminado) --- #}
 
 </head>
 <body>
@@ -17,13 +15,14 @@
         <div class="header">
             <h1>Lista de Presupuestos</h1>
             <div>
+                 {% if not request.user.groups.all.0.name == 'Solo Ver' %}
                  <a href="{% url 'crear_presupuesto' %}" class="btn-new" style="margin-right: 10px;">+ Crear Nuevo</a>
+                 {% endif %}
                  <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
             </div>
         </div>
         <hr>
 
-        {# Filtros por estado, año y mes #}
         <div class="filters">
             <form method="get" action="{% url 'lista_presupuestos' %}" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                 <div>
@@ -57,7 +56,6 @@
             </form>
         </div>
 
-
         <table class="budget-table">
             <thead>
                 <tr>
@@ -65,13 +63,13 @@
                     <th>Fecha</th>
                     <th>Cliente</th>
                     <th>Vehículo</th>
-                    <th style="text-align: right;">Total Est.</th>
+                    {% if request.user.is_superuser %} <th style="text-align: right;">Total Est.</th>
+                    {% endif %}
                     <th>Estado</th>
                 </tr>
             </thead>
             <tbody>
                 {% for p in presupuestos %}
-                    {# Hacer la fila clickeable para ir al detalle #}
                     <tr data-url="{% url 'detalle_presupuesto' p.id %}">
                         <td>{{ p.id }}</td>
                         <td>{{ p.fecha_creacion|date:"d/m/Y H:i" }}</td>
@@ -85,14 +83,14 @@
                                 N/A
                             {% endif %}
                         </td>
-                        <td style="text-align: right;">{{ p.total_estimado|floatformat:2 }} €</td>
+                        {% if request.user.is_superuser %} <td style="text-align: right;">{{ p.total_estimado|floatformat:2 }} €</td>
+                        {% endif %}
                         <td>
                             <span class="estado-{{ p.estado|lower }}">{{ p.get_estado_display }}</span>
                         </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        {# Mensaje actualizado para reflejar filtros #}
                         <td colspan="6" style="text-align: center; padding: 20px;">
                             No hay presupuestos que coincidan con los filtros seleccionados.
                         </td>
@@ -110,6 +108,5 @@
             });
         });
     </script>
-
 </body>
 </html>

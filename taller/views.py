@@ -4,7 +4,7 @@ from .models import (
     Ingreso, Gasto, Cliente, Vehiculo, OrdenDeReparacion, Empleado,
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
-    CierreTarjeta # <-- NUEVO MODELO IMPORTADO
+    CierreTarjeta
 )
 from django.db.models import Sum, F, Q
 from django.db import transaction
@@ -20,14 +20,14 @@ from django.utils import timezone
 import json
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
-from functools import wraps # <-- IMPORTANTE PARA EL CANDADO DE SEGURIDAD
+from functools import wraps
 
 # --- NUEVOS IMPORTS PARA WHATSAPP Y SEGURIDAD ---
 from django.core.signing import Signer, BadSignature
 from urllib.parse import quote
 
 # ==============================================================
-# --- NUEVO CANDADO DE SEGURIDAD PARA EL MODO LECTURA (PADRE) ---
+# --- CANDADO DE SEGURIDAD PARA EL MODO LECTURA (PADRE) ---
 # ==============================================================
 def bloquear_lectura(view_func):
     @wraps(view_func)
@@ -143,7 +143,6 @@ def generar_pdf_response(factura):
                  file_path = os.path.join(settings.STATIC_ROOT, path)
                  if os.path.exists(file_path): return file_path
         if uri.startswith("http://") or uri.startswith("https://"): return uri
-        print(f"WARN: Could not resolve URI '{uri}' in PDF generation.")
         return None
 
     pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
@@ -179,23 +178,19 @@ def home(request):
     total_ingresos = ingresos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastos = gastos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
 
-    # --- NUEVA LÓGICA DE BALANCES (HISTÓRICOS MULTICUENTA) ---
-    # 1. Efectivo (Caja)
+    # Balances de cuentas
     ing_efectivo = Ingreso.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_efectivo = Gasto.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_efectivo = ing_efectivo - gas_efectivo
     
-    # 2. Cuenta Erika
     ing_erika = Ingreso.objects.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_erika = Gasto.objects.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_erika = ing_erika - gas_erika
 
-    # 3. Cuenta Taller
     ing_taller = Ingreso.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_taller = Gasto.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_taller = ing_taller - gas_taller
     
-    # 4. Tarjetas de Crédito (Cálculo de Deuda)
     def calcular_tarjeta(tag, limite):
         gastos = Gasto.objects.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
         abonos = Ingreso.objects.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
@@ -204,7 +199,6 @@ def home(request):
 
     tarjeta_1 = calcular_tarjeta('TARJETA_1', Decimal('2000.00'))
     tarjeta_2 = calcular_tarjeta('TARJETA_2', Decimal('1000.00'))
-    # ---------------------------------------------------------
 
     ultimos_gastos = Gasto.objects.order_by('-id')[:5]
     ultimos_ingresos = Ingreso.objects.order_by('-id')[:5]
@@ -236,18 +230,14 @@ def home(request):
     context = {
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
-        
-        # Balances
         'balance_efectivo': balance_efectivo,
         'balance_erika': balance_erika,
         'balance_taller': balance_taller,
         'tarjeta_1': tarjeta_1,
         'tarjeta_2': tarjeta_2,
-
         'movimientos_recientes': movimientos_recientes,
         'alertas_stock': alertas_stock,
         'is_read_only_user': is_read_only_user,
-        
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_actual,
         'mes_seleccionado': mes_actual,
@@ -256,107 +246,47 @@ def home(request):
     return render(request, 'taller/home.html', context)
 
 
-# --- NUEVA VISTA: REGISTRAR PAGO Y AJUSTAR INTERESES ---
+# --- REGISTRAR PAGO Y AJUSTAR INTERESES ---
 @login_required
 @bloquear_lectura # CANDADO
 def registrar_pago_tarjeta(request):
-    """
-    Registra el pago mensual de la tarjeta (ej. 150€), sacando dinero de la Cuenta Taller
-    y abonándolo a la Tarjeta. Luego calcula los intereses automáticamente.
-    """
     if request.method == 'POST':
         tarjeta = request.POST.get('tarjeta')
         importe_pago = Decimal(request.POST.get('importe_pago', '0'))
         saldo_real_banco = Decimal(request.POST.get('saldo_real_banco', '0'))
         
-        # 1. Calcular deuda actual en ServiMax
         gastos = Gasto.objects.filter(metodo_pago=tarjeta).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
         pagos = Ingreso.objects.filter(metodo_pago=tarjeta).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
         deuda_app_antes = gastos - pagos
         deuda_app_despues = deuda_app_antes - importe_pago
-        
-        # 2. Diferencia = Intereses cobrados por el banco
         intereses = saldo_real_banco - deuda_app_despues
         
         with transaction.atomic():
-            # A. Sacar dinero de Cuenta Taller
-            Gasto.objects.create(
-                fecha=timezone.now().date(),
-                categoria='Otros',
-                importe=importe_pago,
-                descripcion=f"PAGO CUOTA MENSUAL {tarjeta}",
-                metodo_pago='CUENTA_TALLER'
-            )
-            # B. Meter abono en Tarjeta (liberar cupo)
-            Ingreso.objects.create(
-                fecha=timezone.now().date(),
-                categoria='ABONO_TARJETA',
-                importe=importe_pago,
-                descripcion="ABONO RECIBIDO DESDE CUENTA TALLER",
-                metodo_pago=tarjeta
-            )
-            # C. Si hay intereses, anotarlos como gasto automático de la tarjeta
+            Gasto.objects.create(fecha=timezone.now().date(), categoria='Otros', importe=importe_pago, descripcion=f"PAGO CUOTA MENSUAL {tarjeta}", metodo_pago='CUENTA_TALLER')
+            Ingreso.objects.create(fecha=timezone.now().date(), categoria='ABONO_TARJETA', importe=importe_pago, descripcion="ABONO RECIBIDO DESDE CUENTA TALLER", metodo_pago=tarjeta)
             if intereses > 0:
-                Gasto.objects.create(
-                    fecha=timezone.now().date(),
-                    categoria='COMISIONES_INTERESES',
-                    importe=intereses,
-                    descripcion="AJUSTE AUTOMÁTICO DE INTERESES Y COMISIONES",
-                    metodo_pago=tarjeta
-                )
-            
-            # D. Guardar historial del cierre
-            CierreTarjeta.objects.create(
-                tarjeta=tarjeta,
-                pago_cuota=importe_pago,
-                saldo_deuda_banco=saldo_real_banco,
-                intereses_calculados=intereses if intereses > 0 else Decimal('0.00')
-            )
+                Gasto.objects.create(fecha=timezone.now().date(), categoria='COMISIONES_INTERESES', importe=intereses, descripcion="AJUSTE AUTOMÁTICO DE INTERESES Y COMISIONES", metodo_pago=tarjeta)
+            CierreTarjeta.objects.create(tarjeta=tarjeta, pago_cuota=importe_pago, saldo_deuda_banco=saldo_real_banco, intereses_calculados=intereses if intereses > 0 else Decimal('0.00'))
 
         return redirect('informe_tarjeta')
-    
     return render(request, 'taller/registrar_pago_tarjeta.html')
 
-# --- NUEVA VISTA: ELIMINAR CIERRE DE TARJETA (DESHACER) ---
+# --- ELIMINAR CIERRE DE TARJETA ---
 @login_required
 @bloquear_lectura # CANDADO
 def eliminar_cierre_tarjeta(request, cierre_id):
     if request.method == 'POST':
         cierre = get_object_or_404(CierreTarjeta, id=cierre_id)
-        
         with transaction.atomic():
-            # 1. Borramos el Gasto que sacó el dinero de la Cuenta Taller
-            Gasto.objects.filter(
-                fecha=cierre.fecha_cierre,
-                metodo_pago='CUENTA_TALLER',
-                importe=cierre.pago_cuota,
-                descripcion__icontains=f"PAGO CUOTA MENSUAL {cierre.tarjeta}"
-            ).delete()
-            
-            # 2. Borramos el Ingreso que recargó la Tarjeta
-            Ingreso.objects.filter(
-                fecha=cierre.fecha_cierre,
-                metodo_pago=cierre.tarjeta,
-                importe=cierre.pago_cuota,
-                categoria='ABONO_TARJETA'
-            ).delete()
-            
-            # 3. Si hubo intereses, también borramos ese Gasto fantasma
+            Gasto.objects.filter(fecha=cierre.fecha_cierre, metodo_pago='CUENTA_TALLER', importe=cierre.pago_cuota, descripcion__icontains=f"PAGO CUOTA MENSUAL {cierre.tarjeta}").delete()
+            Ingreso.objects.filter(fecha=cierre.fecha_cierre, metodo_pago=cierre.tarjeta, importe=cierre.pago_cuota, categoria='ABONO_TARJETA').delete()
             if cierre.intereses_calculados > 0:
-                Gasto.objects.filter(
-                    fecha=cierre.fecha_cierre,
-                    metodo_pago=cierre.tarjeta,
-                    importe=cierre.intereses_calculados,
-                    categoria='COMISIONES_INTERESES'
-                ).delete()
-            
-            # 4. Finalmente, borramos el registro del cierre
+                Gasto.objects.filter(fecha=cierre.fecha_cierre, metodo_pago=cierre.tarjeta, importe=cierre.intereses_calculados, categoria='COMISIONES_INTERESES').delete()
             cierre.delete()
-            
     return redirect('informe_tarjeta')
 
 
-# --- VISTA INGRESAR VEHÍCULO ---
+# --- INGRESAR VEHÍCULO ---
 @login_required
 @bloquear_lectura # CANDADO
 def ingresar_vehiculo(request):
@@ -366,14 +296,12 @@ def ingresar_vehiculo(request):
 
         nombre_cliente = request.POST['cliente_nombre'].upper()
         telefono_cliente = request.POST['cliente_telefono']
-        
         tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
         documento_fiscal = request.POST.get('cliente_documento_fiscal', '')
         direccion_fiscal = request.POST.get('cliente_direccion_fiscal', '')
         codigo_postal_fiscal = request.POST.get('cliente_codigo_postal_fiscal', '')
         ciudad_fiscal = request.POST.get('cliente_ciudad_fiscal', '')
         provincia_fiscal = request.POST.get('cliente_provincia_fiscal', '')
-
         matricula_vehiculo = request.POST['vehiculo_matricula'].upper()
         marca_vehiculo = request.POST['vehiculo_marca'].upper()
         modelo_vehiculo = request.POST['vehiculo_modelo'].upper()
@@ -382,28 +310,16 @@ def ingresar_vehiculo(request):
         problema_reportado = request.POST['problema'].upper()
 
         with transaction.atomic():
-            cliente, created = Cliente.objects.get_or_create(
-                telefono=telefono_cliente, defaults={'nombre': nombre_cliente}
-            )
-            
-            cliente.nombre = nombre_cliente
-            cliente.tipo_documento = tipo_documento
-            cliente.documento_fiscal = documento_fiscal
-            cliente.direccion_fiscal = direccion_fiscal
-            cliente.codigo_postal_fiscal = codigo_postal_fiscal
-            cliente.ciudad_fiscal = ciudad_fiscal
-            cliente.provincia_fiscal = provincia_fiscal
+            cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente, defaults={'nombre': nombre_cliente})
+            cliente.nombre = nombre_cliente; cliente.tipo_documento = tipo_documento; cliente.documento_fiscal = documento_fiscal
+            cliente.direccion_fiscal = direccion_fiscal; cliente.codigo_postal_fiscal = codigo_postal_fiscal
+            cliente.ciudad_fiscal = ciudad_fiscal; cliente.provincia_fiscal = provincia_fiscal
             cliente.save()
 
-            vehiculo, v_created = Vehiculo.objects.get_or_create(
-                matricula=matricula_vehiculo,
-                defaults={'marca': marca_vehiculo, 'modelo': modelo_vehiculo, 'kilometraje': kilometraje_vehiculo, 'cliente': cliente}
-            )
+            vehiculo, v_created = Vehiculo.objects.get_or_create(matricula=matricula_vehiculo, defaults={'marca': marca_vehiculo, 'modelo': modelo_vehiculo, 'kilometraje': kilometraje_vehiculo, 'cliente': cliente})
             if not v_created:
-                if kilometraje_vehiculo > vehiculo.kilometraje:
-                    vehiculo.kilometraje = kilometraje_vehiculo
-                if vehiculo.cliente != cliente:
-                    vehiculo.cliente = cliente
+                if kilometraje_vehiculo > vehiculo.kilometraje: vehiculo.kilometraje = kilometraje_vehiculo
+                if vehiculo.cliente != cliente: vehiculo.cliente = cliente
                 vehiculo.save()
 
             presupuesto_id = request.POST.get('presupuesto_asociado')
@@ -415,49 +331,36 @@ def ingresar_vehiculo(request):
                          vehiculo.marca = presupuesto.marca_nueva
                          vehiculo.modelo = presupuesto.modelo_nuevo
                          vehiculo.save()
-                except Presupuesto.DoesNotExist:
-                    presupuesto = None
+                except Presupuesto.DoesNotExist: pass
 
-            nueva_orden = OrdenDeReparacion.objects.create(
-                cliente=cliente, vehiculo=vehiculo, problema=problema_reportado, presupuesto_origen=presupuesto
-            )
-
+            nueva_orden = OrdenDeReparacion.objects.create(cliente=cliente, vehiculo=vehiculo, problema=problema_reportado, presupuesto_origen=presupuesto)
             if presupuesto:
-                presupuesto.estado = 'Convertido'
-                presupuesto.save()
+                presupuesto.estado = 'Convertido'; presupuesto.save()
 
-            # --- GUARDAR FOTOS ---
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
                 if foto_campo in request.FILES:
-                    FotoVehiculo.objects.create(
-                        orden=nueva_orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1]
-                    )
+                    FotoVehiculo.objects.create(orden=nueva_orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1])
 
         return redirect('detalle_orden', orden_id=nueva_orden.id)
 
     presupuestos_disponibles_qs = Presupuesto.objects.filter(estado='Aceptado').select_related('cliente', 'vehiculo').order_by('-fecha_creacion')
-    
     presupuestos_con_datos_fiscales = []
     for p in presupuestos_disponibles_qs:
         presupuestos_con_datos_fiscales.append({
             'presupuesto': p,
             'cliente_data': {
-                'tipo_documento': p.cliente.tipo_documento or 'DNI',
-                'documento_fiscal': p.cliente.documento_fiscal or '',
-                'direccion_fiscal': p.cliente.direccion_fiscal or '',
-                'codigo_postal_fiscal': p.cliente.codigo_postal_fiscal or '',
-                'ciudad_fiscal': p.cliente.ciudad_fiscal or '',
-                'provincia_fiscal': p.cliente.provincia_fiscal or 'TARRAGONA',
+                'tipo_documento': p.cliente.tipo_documento or 'DNI', 'documento_fiscal': p.cliente.documento_fiscal or '',
+                'direccion_fiscal': p.cliente.direccion_fiscal or '', 'codigo_postal_fiscal': p.cliente.codigo_postal_fiscal or '',
+                'ciudad_fiscal': p.cliente.ciudad_fiscal or '', 'provincia_fiscal': p.cliente.provincia_fiscal or 'TARRAGONA',
             }
         })
-    
     context = { 'presupuestos_disponibles_data': presupuestos_con_datos_fiscales }
     return render(request, 'taller/ingresar_vehiculo.html', context)
 
 
-# --- VISTA AÑADIR GASTO ---
+# --- AÑADIR GASTO (CON LÓGICA DE CONSUMIBLES ARREGLADA) ---
 @login_required
 @bloquear_lectura # CANDADO
 def anadir_gasto(request):
@@ -465,7 +368,7 @@ def anadir_gasto(request):
         if not (request.user.has_perm('taller.add_gasto') or request.user.has_perm('taller.add_compraconsumible')):
              return HttpResponseForbidden("No tienes permiso para añadir gastos o compras.")
 
-        categoria = request.POST['categoria']
+        categoria = request.POST.get('categoria', '')
         metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
         pagado_con_tarjeta_bool = (metodo_pago != 'EFECTIVO')
 
@@ -474,36 +377,31 @@ def anadir_gasto(request):
                 return HttpResponseForbidden("No tienes permiso para añadir compras de consumibles.")
 
             tipo_id = request.POST.get('tipo_consumible')
-            fecha_compra_str = request.POST.get('fecha_compra')
-            cantidad_str = request.POST.get('cantidad')
-            coste_total_str = request.POST.get('coste_total')
+            fecha_compra_str = request.POST.get('fecha_compra') or request.POST.get('fecha_gasto')
+            cantidad_str = request.POST.get('cantidad') or '1' 
+            coste_total_str = request.POST.get('coste_total') or request.POST.get('importe')
 
-            if not all([tipo_id, fecha_compra_str, cantidad_str, coste_total_str]):
+            if not tipo_id or not coste_total_str:
                  return redirect('anadir_gasto')
+                 
             try:
                 with transaction.atomic():
-                    cantidad = Decimal(cantidad_str); coste_total = Decimal(coste_total_str)
+                    cantidad = Decimal(cantidad_str)
+                    coste_total = Decimal(coste_total_str)
                     if cantidad <= 0 or coste_total < 0: return redirect('anadir_gasto')
                     tipo_consumible = get_object_or_404(TipoConsumible, id=tipo_id)
-                    try: fecha_compra = datetime.strptime(fecha_compra_str, '%Y-%m-%d').date()
-                    except ValueError: return redirect('anadir_gasto')
+                    try: fecha_compra = datetime.strptime(fecha_compra_str, '%Y-%m-%d').date() if fecha_compra_str else timezone.now().date()
+                    except ValueError: fecha_compra = timezone.now().date()
 
                     CompraConsumible.objects.create(tipo=tipo_consumible, fecha_compra=fecha_compra, cantidad=cantidad, coste_total=coste_total)
-                    
-                    Gasto.objects.create(
-                        fecha=fecha_compra, 
-                        categoria=categoria, 
-                        importe=coste_total,
-                        descripcion=f"Compra de {cantidad} {tipo_consumible.unidad_medida} de {tipo_consumible.nombre}",
-                        pagado_con_tarjeta=pagado_con_tarjeta_bool,
-                        metodo_pago=metodo_pago
-                    )
+                    Gasto.objects.create(fecha=fecha_compra, categoria=categoria, importe=coste_total, descripcion=f"COMPRA DE {cantidad} {tipo_consumible.unidad_medida} DE {tipo_consumible.nombre}".upper(), pagado_con_tarjeta=pagado_con_tarjeta_bool, metodo_pago=metodo_pago)
             except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('anadir_gasto')
-        else:
-            if not request.user.has_perm('taller.add_gasto'):
-                 return HttpResponseForbidden("No tienes permiso para añadir gastos.")
 
-            importe_str = request.POST.get('importe'); descripcion = request.POST.get('descripcion', '')
+        else:
+            if not request.user.has_perm('taller.add_gasto'): return HttpResponseForbidden("No tienes permiso para añadir gastos.")
+
+            importe_str = request.POST.get('importe')
+            descripcion = request.POST.get('descripcion', '')
             fecha_gasto_str = request.POST.get('fecha_gasto')
             try: fecha_gasto = datetime.strptime(fecha_gasto_str, '%Y-%m-%d').date() if fecha_gasto_str else timezone.now().date()
             except ValueError: fecha_gasto = timezone.now().date()
@@ -512,16 +410,8 @@ def anadir_gasto(request):
                 if importe is not None and importe < 0: importe = None
             except (ValueError, TypeError, Decimal.InvalidOperation): importe = None
 
-            gasto = Gasto(
-                fecha=fecha_gasto, 
-                categoria=categoria, 
-                importe=importe, 
-                descripcion=descripcion.upper(), 
-                pagado_con_tarjeta=pagado_con_tarjeta_bool,
-                metodo_pago=metodo_pago
-            )
+            gasto = Gasto(fecha=fecha_gasto, categoria=categoria, importe=importe, descripcion=descripcion.upper(), pagado_con_tarjeta=pagado_con_tarjeta_bool, metodo_pago=metodo_pago)
 
-            # --- Asociar a ORDEN ---
             if categoria in ['Repuestos', 'Otros']:
                 orden_id = request.POST.get('orden')
                 if orden_id:
@@ -549,21 +439,19 @@ def anadir_gasto(request):
     metodos_pago = Gasto.METODO_PAGO_CHOICES 
     
     context = {
-        'ordenes_activas': ordenes_activas, 
-        'empleados': empleados, 'tipos_consumible': tipos_consumible,
+        'ordenes_activas': ordenes_activas, 'empleados': empleados, 'tipos_consumible': tipos_consumible,
         'categorias_gasto': Gasto.CATEGORIA_CHOICES, 'categorias_gasto_select': categorias_gasto_choices,
         'metodos_pago': metodos_pago
     }
     return render(request, 'taller/anadir_gasto.html', context)
 
 
-# --- VISTA REGISTRAR INGRESO ---
+# --- REGISTRAR INGRESO ---
 @login_required
 @bloquear_lectura # CANDADO
 def registrar_ingreso(request):
     if request.method == 'POST':
-        if not request.user.has_perm('taller.add_ingreso'):
-            return HttpResponseForbidden("No tienes permiso para registrar ingresos.")
+        if not request.user.has_perm('taller.add_ingreso'): return HttpResponseForbidden("No tienes permiso para registrar ingresos.")
 
         categoria = request.POST['categoria']; importe_str = request.POST.get('importe')
         descripcion = request.POST.get('descripcion', '')
@@ -578,14 +466,7 @@ def registrar_ingreso(request):
             if importe <= 0: return redirect('registrar_ingreso')
         except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('registrar_ingreso')
 
-        ingreso = Ingreso(
-            fecha=fecha_ingreso, 
-            categoria=categoria, 
-            importe=importe, 
-            descripcion=descripcion.upper(), 
-            es_tpv=es_tpv_bool,
-            metodo_pago=metodo_pago
-        )
+        ingreso = Ingreso(fecha=fecha_ingreso, categoria=categoria, importe=importe, descripcion=descripcion.upper(), es_tpv=es_tpv_bool, metodo_pago=metodo_pago)
 
         if categoria == 'Taller':
             orden_id = request.POST.get('orden')
@@ -606,12 +487,11 @@ def registrar_ingreso(request):
     return render(request, 'taller/registrar_ingreso.html', context)
 
 
-# --- VISTA STOCK INICIAL ---
+# --- STOCK INICIAL CONSUMIBLES ---
 @login_required
 @bloquear_lectura # CANDADO
 def stock_inicial_consumible(request):
-    if not request.user.has_perm('taller.add_compraconsumible'):
-         return HttpResponseForbidden("No tienes permiso para registrar compras.")
+    if not request.user.has_perm('taller.add_compraconsumible'): return HttpResponseForbidden("No tienes permiso para registrar compras.")
 
     if request.method == 'POST':
         tipo_id = request.POST['tipo_consumible']; cantidad_str = request.POST.get('cantidad'); coste_total_str = request.POST.get('coste_total')
@@ -628,7 +508,7 @@ def stock_inicial_consumible(request):
     context = { 'tipos_consumible': tipos_consumible }
     return render(request, 'taller/stock_inicial_consumible.html', context)
 
-# --- VISTA CREAR PRESUPUESTO ---
+# --- CREAR PRESUPUESTO ---
 @login_required
 @bloquear_lectura # CANDADO
 def crear_presupuesto(request):
@@ -639,14 +519,12 @@ def crear_presupuesto(request):
         cliente_id = request.POST.get('cliente_existente')
         nombre_cliente_form = request.POST.get('cliente_nombre', '').upper()
         telefono_cliente_form = request.POST.get('cliente_telefono', '')
-        
         tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
         documento_fiscal = request.POST.get('cliente_documento_fiscal', '')
         direccion_fiscal = request.POST.get('cliente_direccion_fiscal', '')
         codigo_postal_fiscal = request.POST.get('cliente_codigo_postal_fiscal', '')
         ciudad_fiscal = request.POST.get('cliente_ciudad_fiscal', '')
         provincia_fiscal = request.POST.get('cliente_provincia_fiscal', '')
-        
         aplicar_iva = 'aplicar_iva' in request.POST
 
         cliente = None
@@ -656,17 +534,10 @@ def crear_presupuesto(request):
                     try: cliente = Cliente.objects.get(id=cliente_id)
                     except Cliente.DoesNotExist: pass
                 elif nombre_cliente_form and telefono_cliente_form:
-                    cliente, created = Cliente.objects.get_or_create(
-                        telefono=telefono_cliente_form, 
-                        defaults={'nombre': nombre_cliente_form}
-                    )
-                    cliente.nombre = nombre_cliente_form
-                    cliente.tipo_documento = tipo_documento
-                    cliente.documento_fiscal = documento_fiscal
-                    cliente.direccion_fiscal = direccion_fiscal
-                    cliente.codigo_postal_fiscal = codigo_postal_fiscal
-                    cliente.ciudad_fiscal = ciudad_fiscal
-                    cliente.provincia_fiscal = provincia_fiscal
+                    cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente_form, defaults={'nombre': nombre_cliente_form})
+                    cliente.nombre = nombre_cliente_form; cliente.tipo_documento = tipo_documento; cliente.documento_fiscal = documento_fiscal
+                    cliente.direccion_fiscal = direccion_fiscal; cliente.codigo_postal_fiscal = codigo_postal_fiscal
+                    cliente.ciudad_fiscal = ciudad_fiscal; cliente.provincia_fiscal = provincia_fiscal
                     cliente.save()
 
                 if not cliente: return HttpResponse("Error: Cliente inválido o no proporcionado.", status=400)
@@ -685,63 +556,32 @@ def crear_presupuesto(request):
                 problema = request.POST.get('problema_o_trabajo', '').upper()
                 
                 presupuesto = Presupuesto.objects.create(
-                    cliente=cliente, 
-                    vehiculo=vehiculo,
-                    matricula_nueva=matricula_nueva if not vehiculo and matricula_nueva else None,
-                    marca_nueva=marca_nueva if not vehiculo and marca_nueva else None,
-                    modelo_nuevo=modelo_nuevo if not vehiculo and modelo_nuevo else None,
-                    problema_o_trabajo=problema, 
-                    estado='Pendiente',
-                    aplicar_iva=aplicar_iva
+                    cliente=cliente, vehiculo=vehiculo, matricula_nueva=matricula_nueva if not vehiculo and matricula_nueva else None,
+                    marca_nueva=marca_nueva if not vehiculo and marca_nueva else None, modelo_nuevo=modelo_nuevo if not vehiculo and modelo_nuevo else None,
+                    problema_o_trabajo=problema, estado='Pendiente', aplicar_iva=aplicar_iva
                 )
 
-                tipos_linea = request.POST.getlist('linea_tipo')
-                descripciones_linea = request.POST.getlist('linea_descripcion')
-                cantidades_linea = request.POST.getlist('linea_cantidad')
-                precios_linea = request.POST.getlist('linea_precio_unitario')
-                
+                tipos_linea = request.POST.getlist('linea_tipo'); descripciones_linea = request.POST.getlist('linea_descripcion')
+                cantidades_linea = request.POST.getlist('linea_cantidad'); precios_linea = request.POST.getlist('linea_precio_unitario')
                 subtotal_calculado = Decimal('0.00')
 
                 for i in range(len(tipos_linea)):
                     if all([tipos_linea[i], descripciones_linea[i], cantidades_linea[i], precios_linea[i]]):
                         try:
-                            cantidad = Decimal(cantidades_linea[i])
-                            precio_unitario = Decimal(precios_linea[i])
+                            cantidad = Decimal(cantidades_linea[i]); precio_unitario = Decimal(precios_linea[i])
                             if cantidad <= 0 or precio_unitario < 0: continue
-                            
-                            linea_total = cantidad * precio_unitario
-                            subtotal_calculado += linea_total
-                            
-                            if not request.user.has_perm('taller.add_lineapresupuesto'):
-                                raise PermissionError("No tienes permiso para añadir líneas al presupuesto.")
-
-                            LineaPresupuesto.objects.create(
-                                presupuesto=presupuesto, 
-                                tipo=tipos_linea[i], 
-                                descripcion=descripciones_linea[i].upper(), 
-                                cantidad=cantidad, 
-                                precio_unitario_estimado=precio_unitario
-                            )
-                        except (ValueError, TypeError, Decimal.InvalidOperation): pass
-                        except PermissionError as pe: raise 
+                            linea_total = cantidad * precio_unitario; subtotal_calculado += linea_total
+                            LineaPresupuesto.objects.create(presupuesto=presupuesto, tipo=tipos_linea[i], descripcion=descripciones_linea[i].upper(), cantidad=cantidad, precio_unitario_estimado=precio_unitario)
+                        except: pass
 
                 iva_calculado = Decimal('0.00')
-                if aplicar_iva:
-                    iva_calculado = (subtotal_calculado * Decimal('0.21')).quantize(Decimal('0.01'))
+                if aplicar_iva: iva_calculado = (subtotal_calculado * Decimal('0.21')).quantize(Decimal('0.01'))
                 
-                total_estimado = subtotal_calculado + iva_calculado
-
-                presupuesto.subtotal = subtotal_calculado
-                presupuesto.iva = iva_calculado
-                presupuesto.total_estimado = total_estimado
+                presupuesto.subtotal = subtotal_calculado; presupuesto.iva = iva_calculado; presupuesto.total_estimado = subtotal_calculado + iva_calculado
                 presupuesto.save()
                 
                 return redirect('detalle_presupuesto', presupuesto_id=presupuesto.id)
-        
-        except PermissionError as pe: return HttpResponseForbidden(str(pe))
-        except Exception as e: 
-             print(f"Error inesperado: {e}") 
-             return redirect('crear_presupuesto')
+        except Exception as e: return redirect('crear_presupuesto')
 
     clientes = Cliente.objects.all().order_by('nombre')
     vehiculos = Vehiculo.objects.select_related('cliente').order_by('matricula')
@@ -752,12 +592,9 @@ def crear_presupuesto(request):
         clientes_con_datos_fiscales.append({
             'cliente': cliente,
             'cliente_data_json': json.dumps({
-                'tipo_documento': cliente.tipo_documento or 'DNI',
-                'documento_fiscal': cliente.documento_fiscal or '',
-                'direccion_fiscal': cliente.direccion_fiscal or '',
-                'codigo_postal_fiscal': cliente.codigo_postal_fiscal or '',
-                'ciudad_fiscal': cliente.ciudad_fiscal or '',
-                'provincia_fiscal': cliente.provincia_fiscal or 'TARRAGONA',
+                'tipo_documento': cliente.tipo_documento or 'DNI', 'documento_fiscal': cliente.documento_fiscal or '',
+                'direccion_fiscal': cliente.direccion_fiscal or '', 'codigo_postal_fiscal': cliente.codigo_postal_fiscal or '',
+                'ciudad_fiscal': cliente.ciudad_fiscal or '', 'provincia_fiscal': cliente.provincia_fiscal or 'TARRAGONA',
             })
         })
     
@@ -765,7 +602,7 @@ def crear_presupuesto(request):
     return render(request, 'taller/crear_presupuesto.html', context)
 
 
-# --- VISTA LISTA PRESUPUESTOS ---
+# --- LISTA PRESUPUESTOS ---
 @login_required
 def lista_presupuestos(request):
     estado_filtro = request.GET.get('estado'); ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
@@ -791,19 +628,17 @@ def lista_presupuestos(request):
     return render(request, 'taller/lista_presupuestos.html', context)
 
 
-# --- VISTA DETALLE PRESUPUESTO ---
+# --- DETALLE PRESUPUESTO ---
 @login_required
 def detalle_presupuesto(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo__cliente').prefetch_related('lineas'), id=presupuesto_id)
 
     if request.method == 'POST' and 'nuevo_estado' in request.POST:
-        # BLOQUEO INTERNO PARA EL PADRE EN POST
+        # BLOQUEO INTERNO PARA EL PADRE
         if request.user.groups.filter(name='Solo Ver').exists():
             return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'. No tienes permiso para modificar datos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
-        if not request.user.has_perm('taller.change_presupuesto'):
-            return HttpResponseForbidden("No tienes permiso para modificar presupuestos.")
-
+        # LOS MECANICOS PUEDEN ACEPTAR EL PRESUPUESTO
         nuevo_estado = request.POST['nuevo_estado']; estados_validos_cambio = ['Aceptado', 'Rechazado', 'Pendiente']
         if nuevo_estado in estados_validos_cambio and presupuesto.estado != 'Convertido':
             presupuesto.estado = nuevo_estado; presupuesto.save()
@@ -815,7 +650,7 @@ def detalle_presupuesto(request, presupuesto_id):
     context = { 'presupuesto': presupuesto, 'lineas': presupuesto.lineas.all(), 'estados_posibles': Presupuesto.ESTADO_CHOICES, 'orden_generada': orden_generada }
     return render(request, 'taller/detalle_presupuesto.html', context)
 
-# --- VISTA EDITAR PRESUPUESTO ---
+# --- EDITAR PRESUPUESTO ---
 @login_required
 @bloquear_lectura # CANDADO
 def editar_presupuesto(request, presupuesto_id):
@@ -830,17 +665,12 @@ def editar_presupuesto(request, presupuesto_id):
             with transaction.atomic():
                 aplicar_iva = 'aplicar_iva' in request.POST
 
-                LineaPresupuesto.objects.filter(presupuesto=presupuesto).delete()
-                presupuesto.delete()
+                LineaPresupuesto.objects.filter(presupuesto=presupuesto).delete(); presupuesto.delete()
                 
-                cliente_id = request.POST.get('cliente_existente')
-                nombre_cliente_form = request.POST.get('cliente_nombre', '').upper()
-                telefono_cliente_form = request.POST.get('cliente_telefono', '')
-                tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
-                documento_fiscal = request.POST.get('cliente_documento_fiscal', '')
-                direccion_fiscal = request.POST.get('cliente_direccion_fiscal', '')
-                codigo_postal_fiscal = request.POST.get('cliente_codigo_postal_fiscal', '')
-                ciudad_fiscal = request.POST.get('cliente_ciudad_fiscal', '')
+                cliente_id = request.POST.get('cliente_existente'); nombre_cliente_form = request.POST.get('cliente_nombre', '').upper()
+                telefono_cliente_form = request.POST.get('cliente_telefono', ''); tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
+                documento_fiscal = request.POST.get('cliente_documento_fiscal', ''); direccion_fiscal = request.POST.get('cliente_direccion_fiscal', '')
+                codigo_postal_fiscal = request.POST.get('cliente_codigo_postal_fiscal', ''); ciudad_fiscal = request.POST.get('cliente_ciudad_fiscal', '')
                 provincia_fiscal = request.POST.get('cliente_provincia_fiscal', '')
                 
                 cliente = None
@@ -849,21 +679,14 @@ def editar_presupuesto(request, presupuesto_id):
                     except Cliente.DoesNotExist: pass
                 elif nombre_cliente_form and telefono_cliente_form:
                     cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente_form, defaults={'nombre': nombre_cliente_form})
-                    cliente.nombre = nombre_cliente_form
-                    cliente.tipo_documento = tipo_documento
-                    cliente.documento_fiscal = documento_fiscal
-                    cliente.direccion_fiscal = direccion_fiscal
-                    cliente.codigo_postal_fiscal = codigo_postal_fiscal
-                    cliente.ciudad_fiscal = ciudad_fiscal
-                    cliente.provincia_fiscal = provincia_fiscal
-                    cliente.save()
+                    cliente.nombre = nombre_cliente_form; cliente.tipo_documento = tipo_documento; cliente.documento_fiscal = documento_fiscal
+                    cliente.direccion_fiscal = direccion_fiscal; cliente.codigo_postal_fiscal = codigo_postal_fiscal
+                    cliente.ciudad_fiscal = ciudad_fiscal; cliente.provincia_fiscal = provincia_fiscal; cliente.save()
 
                 if not cliente: raise ValueError("Cliente inválido")
 
-                vehiculo_id = request.POST.get('vehiculo_existente')
-                matricula_nueva = request.POST.get('matricula_nueva', '').upper()
-                marca_nueva = request.POST.get('marca_nueva', '').upper()
-                modelo_nuevo = request.POST.get('modelo_nuevo', '').upper()
+                vehiculo_id = request.POST.get('vehiculo_existente'); matricula_nueva = request.POST.get('matricula_nueva', '').upper()
+                marca_nueva = request.POST.get('marca_nueva', '').upper(); modelo_nuevo = request.POST.get('modelo_nuevo', '').upper()
                 vehiculo = None
                 if vehiculo_id:
                     try:
@@ -874,51 +697,34 @@ def editar_presupuesto(request, presupuesto_id):
                 problema = request.POST.get('problema_o_trabajo', '').upper()
                 
                 nuevo_presupuesto = Presupuesto.objects.create(
-                    cliente=cliente, vehiculo=vehiculo,
-                    matricula_nueva=matricula_nueva if not vehiculo and matricula_nueva else None,
-                    marca_nueva=marca_nueva if not vehiculo and marca_nueva else None,
-                    modelo_nuevo=modelo_nuevo if not vehiculo and modelo_nuevo else None,
-                    problema_o_trabajo=problema, 
-                    estado='Pendiente',
-                    aplicar_iva=aplicar_iva
+                    cliente=cliente, vehiculo=vehiculo, matricula_nueva=matricula_nueva if not vehiculo and matricula_nueva else None,
+                    marca_nueva=marca_nueva if not vehiculo and marca_nueva else None, modelo_nuevo=modelo_nuevo if not vehiculo and modelo_nuevo else None,
+                    problema_o_trabajo=problema, estado='Pendiente', aplicar_iva=aplicar_iva
                 )
 
-                tipos_linea = request.POST.getlist('linea_tipo')
-                descripciones_linea = request.POST.getlist('linea_descripcion')
-                cantidades_linea = request.POST.getlist('linea_cantidad')
-                precios_linea = request.POST.getlist('linea_precio_unitario')
-                
+                tipos_linea = request.POST.getlist('linea_tipo'); descripciones_linea = request.POST.getlist('linea_descripcion')
+                cantidades_linea = request.POST.getlist('linea_cantidad'); precios_linea = request.POST.getlist('linea_precio_unitario')
                 subtotal_calculado = Decimal('0.00')
 
                 for i in range(len(tipos_linea)):
                      if all([tipos_linea[i], descripciones_linea[i], cantidades_linea[i], precios_linea[i]]):
                          try:
-                             cantidad = Decimal(cantidades_linea[i])
-                             precio_unitario = Decimal(precios_linea[i])
+                             cantidad = Decimal(cantidades_linea[i]); precio_unitario = Decimal(precios_linea[i])
                              if cantidad <= 0 or precio_unitario < 0: continue
-                             
-                             linea_total = cantidad * precio_unitario
-                             subtotal_calculado += linea_total
-                             
+                             linea_total = cantidad * precio_unitario; subtotal_calculado += linea_total
                              LineaPresupuesto.objects.create(presupuesto=nuevo_presupuesto, tipo=tipos_linea[i], descripcion=descripciones_linea[i].upper(), cantidad=cantidad, precio_unitario_estimado=precio_unitario)
                          except: pass
                 
                 iva_calculado = Decimal('0.00')
-                if aplicar_iva:
-                    iva_calculado = (subtotal_calculado * Decimal('0.21')).quantize(Decimal('0.01'))
+                if aplicar_iva: iva_calculado = (subtotal_calculado * Decimal('0.21')).quantize(Decimal('0.01'))
                 
-                nuevo_presupuesto.subtotal = subtotal_calculado
-                nuevo_presupuesto.iva = iva_calculado
-                nuevo_presupuesto.total_estimado = subtotal_calculado + iva_calculado
+                nuevo_presupuesto.subtotal = subtotal_calculado; nuevo_presupuesto.iva = iva_calculado; nuevo_presupuesto.total_estimado = subtotal_calculado + iva_calculado
                 nuevo_presupuesto.save()
                 
                 return redirect('detalle_presupuesto', presupuesto_id=nuevo_presupuesto.id)
-        except Exception as e:
-            print(e)
-            return redirect('lista_presupuestos')
+        except Exception as e: return redirect('lista_presupuestos')
 
-    clientes = Cliente.objects.all().order_by('nombre')
-    vehiculos = Vehiculo.objects.select_related('cliente').order_by('matricula')
+    clientes = Cliente.objects.all().order_by('nombre'); vehiculos = Vehiculo.objects.select_related('cliente').order_by('matricula')
     tipos_linea = LineaFactura.TIPO_CHOICES
     
     clientes_con_datos_fiscales = []
@@ -926,184 +732,122 @@ def editar_presupuesto(request, presupuesto_id):
         clientes_con_datos_fiscales.append({
             'cliente': cliente,
             'cliente_data_json': json.dumps({
-                'tipo_documento': cliente.tipo_documento or 'DNI',
-                'documento_fiscal': cliente.documento_fiscal or '',
-                'direccion_fiscal': cliente.direccion_fiscal or '',
-                'codigo_postal_fiscal': cliente.codigo_postal_fiscal or '',
-                'ciudad_fiscal': cliente.ciudad_fiscal or '',
-                'provincia_fiscal': cliente.provincia_fiscal or 'TARRAGONA',
+                'tipo_documento': cliente.tipo_documento or 'DNI', 'documento_fiscal': cliente.documento_fiscal or '',
+                'direccion_fiscal': cliente.direccion_fiscal or '', 'codigo_postal_fiscal': cliente.codigo_postal_fiscal or '',
+                'ciudad_fiscal': cliente.ciudad_fiscal or '', 'provincia_fiscal': cliente.provincia_fiscal or 'TARRAGONA',
             })
         })
     
     lineas_existentes_list = []
     for linea in presupuesto.lineas.all():
-        lineas_existentes_list.append({ 
-            'tipo': linea.tipo, 'descripcion': linea.descripcion, 
-            'cantidad': float(linea.cantidad), 'precio_unitario_estimado': float(linea.precio_unitario_estimado) 
-        })
+        lineas_existentes_list.append({ 'tipo': linea.tipo, 'descripcion': linea.descripcion, 'cantidad': float(linea.cantidad), 'precio_unitario_estimado': float(linea.precio_unitario_estimado) })
         
-    context = { 
-        'presupuesto_existente': presupuesto, 
-        'clientes_data': clientes_con_datos_fiscales, 
-        'vehiculos': vehiculos, 
-        'tipos_linea': tipos_linea, 
-        'lineas_existentes_json': json.dumps(lineas_existentes_list) 
-    }
+    context = { 'presupuesto_existente': presupuesto, 'clientes_data': clientes_con_datos_fiscales, 'vehiculos': vehiculos, 'tipos_linea': tipos_linea, 'lineas_existentes_json': json.dumps(lineas_existentes_list) }
     return render(request, 'taller/editar_presupuesto.html', context)
 
 
-# --- VISTA LISTA ORDENES ---
+# --- LISTA ORDENES ---
 @login_required
 def lista_ordenes(request):
     ordenes_qs = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('cliente', 'vehiculo').order_by('-fecha_entrada')
-
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
-    ano_seleccionado = request.GET.get('ano')
-    mes_seleccionado = request.GET.get('mes')
+    ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
     
-    # --- Búsqueda por Matrícula ---
     matricula_buscada = request.GET.get('matricula', '').strip()
-    if matricula_buscada:
-        ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
+    if matricula_buscada: ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
 
     if ano_seleccionado:
-        try:
-            ano_int = int(ano_seleccionado)
-            ordenes_qs = ordenes_qs.filter(fecha_entrada__year=ano_int)
-        except (ValueError, TypeError):
-            ano_seleccionado = None
+        try: ano_int = int(ano_seleccionado); ordenes_qs = ordenes_qs.filter(fecha_entrada__year=ano_int)
+        except (ValueError, TypeError): ano_seleccionado = None
     if mes_seleccionado:
          try:
             mes_int = int(mes_seleccionado)
-            if 1 <= mes_int <= 12:
-                ordenes_qs = ordenes_qs.filter(fecha_entrada__month=mes_int)
-            else:
-                mes_seleccionado = None
-         except (ValueError, TypeError):
-            mes_seleccionado = None
+            if 1 <= mes_int <= 12: ordenes_qs = ordenes_qs.filter(fecha_entrada__month=mes_int)
+            else: mes_seleccionado = None
+         except (ValueError, TypeError): mes_seleccionado = None
     
-    ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None
-    mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
+    ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None; mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
 
     context = { 
-        'ordenes': ordenes_qs,
-        'anos_y_meses': anos_y_meses_data, 
-        'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 
-        'mes_seleccionado': mes_sel_int, 
-        'meses_del_ano': range(1, 13),
-        'matricula_buscada': matricula_buscada
+        'ordenes': ordenes_qs, 'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13), 'matricula_buscada': matricula_buscada
     }
     return render(request, 'taller/lista_ordenes.html', context)
 
 
-# --- VISTA DETALLE ORDEN (CON WHATSAPP DIRECTO) ---
+# --- DETALLE ORDEN (CON WHATSAPP DIRECTO) ---
 @login_required
 def detalle_orden(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura'), id=orden_id)
-    
     repuestos = Gasto.objects.filter(orden=orden, categoria='Repuestos')
     gastos_otros = Gasto.objects.filter(orden=orden, categoria='Otros')
-    
     abonos = sum(ing.importe for ing in orden.ingreso_set.all()) if hasattr(orden, 'ingreso_set') and orden.ingreso_set.exists() else Decimal('0.00')
     tipos_consumible = TipoConsumible.objects.all()
     
-    factura = None
-    pendiente_pago = Decimal('0.00')
-    whatsapp_url = None 
+    factura = None; pendiente_pago = Decimal('0.00'); whatsapp_url = None 
     
-    try: 
-        factura = orden.factura
-        pendiente_pago = factura.total_final - abonos
-        
-        if orden.cliente.telefono:
-            signer = Signer()
-            signed_id = signer.sign(factura.id) 
-            public_url = request.build_absolute_uri(reverse('ver_factura_publica', args=[signed_id]))
+    # NUEVA LÓGICA DE SEGURIDAD: Solo Jefes pueden cargar la factura
+    if request.user.is_superuser:
+        try: 
+            factura = orden.factura
+            pendiente_pago = factura.total_final - abonos
             
-            telefono_limpio = "".join(filter(str.isdigit, orden.cliente.telefono))
-            if not telefono_limpio.startswith('34') and len(telefono_limpio) == 9:
-                telefono_limpio = '34' + telefono_limpio
-            
-            tipo_doc = "factura" if factura.es_factura else "recibo"
-            mensaje = f"Hola {orden.cliente.nombre}, aquí tienes el enlace para descargar tu {tipo_doc} del taller:\n\n{public_url}\n\n¡Gracias por confiar en ServiMax!"
-            mensaje_encoded = quote(mensaje)
-            
-            whatsapp_url = f"https://wa.me/{telefono_limpio}?text={mensaje_encoded}"
-    except Factura.DoesNotExist: 
-        pass
+            if orden.cliente.telefono:
+                signer = Signer(); signed_id = signer.sign(factura.id) 
+                public_url = request.build_absolute_uri(reverse('ver_factura_publica', args=[signed_id]))
+                telefono_limpio = "".join(filter(str.isdigit, orden.cliente.telefono))
+                if not telefono_limpio.startswith('34') and len(telefono_limpio) == 9: telefono_limpio = '34' + telefono_limpio
+                tipo_doc = "factura" if factura.es_factura else "recibo"
+                mensaje = f"Hola {orden.cliente.nombre}, aquí tienes el enlace para descargar tu {tipo_doc} del taller:\n\n{public_url}\n\n¡Gracias por confiar en ServiMax!"
+                mensaje_encoded = quote(mensaje); whatsapp_url = f"https://wa.me/{telefono_limpio}?text={mensaje_encoded}"
+        except Factura.DoesNotExist: pass
 
     if request.method == 'POST':
-        # BLOQUEO INTERNO PARA EL PADRE EN POST
         if request.user.groups.filter(name='Solo Ver').exists():
-            return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'. No tienes permiso para modificar datos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+            return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
         form_type = request.POST.get('form_type')
 
         if form_type == 'estado':
-            if not request.user.has_perm('taller.change_ordendereparacion'):
-                return HttpResponseForbidden("No tienes permiso para modificar órdenes.")
-            
             nuevo_estado = request.POST.get('nuevo_estado')
             if nuevo_estado in [choice[0] for choice in OrdenDeReparacion.ESTADO_CHOICES]:
-                orden.estado = nuevo_estado
-                orden.save()
+                orden.estado = nuevo_estado; orden.save()
             return redirect('detalle_orden', orden_id=orden.id)
 
         elif form_type == 'kilometraje':
-            if not request.user.has_perm('taller.change_vehiculo'):
-                return HttpResponseForbidden("No tienes permiso para modificar vehículos.")
-            
             try:
                 nuevo_km_str = request.POST.get('nuevo_kilometraje')
-                nuevo_km_int = int(nuevo_km_str)
-                
-                if nuevo_km_int >= 0:
-                    vehiculo = orden.vehiculo
-                    vehiculo.kilometraje = nuevo_km_int
-                    vehiculo.save()
-            except (ValueError, TypeError):
-                pass
+                if int(nuevo_km_str) >= 0:
+                    vehiculo = orden.vehiculo; vehiculo.kilometraje = int(nuevo_km_str); vehiculo.save()
+            except (ValueError, TypeError): pass
             return redirect('detalle_orden', orden_id=orden.id)
         
         elif form_type == 'subir_fotos':
-            if not request.user.has_perm('taller.change_ordendereparacion'): 
-                 return HttpResponseForbidden("No tienes permiso para añadir fotos a la orden.")
-
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
                 if foto_campo in request.FILES:
-                    FotoVehiculo.objects.create(
-                        orden=orden, 
-                        imagen=request.FILES[foto_campo], 
-                        descripcion=descripciones[i-1]
-                    )
+                    FotoVehiculo.objects.create(orden=orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1])
             return redirect('detalle_orden', orden_id=orden.id)
 
     context = {
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
         'abonos': abonos, 'pendiente_pago': pendiente_pago, 'tipos_consumible': tipos_consumible,
-        'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES,
-        'whatsapp_url': whatsapp_url,
+        'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES, 'whatsapp_url': whatsapp_url,
     }
     return render(request, 'taller/detalle_orden.html', context)
 
 
-# --- VISTA HISTORIAL ORDENES ---
+# --- HISTORIAL ORDENES ---
 @login_required
 def historial_ordenes(request):
     ordenes_qs = OrdenDeReparacion.objects.filter(estado='Entregado').select_related('cliente', 'vehiculo', 'factura')
-    anos_y_meses_data = get_anos_y_meses_con_datos()
-    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
-    ano_seleccionado = request.GET.get('ano')
-    mes_seleccionado = request.GET.get('mes')
+    anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
     
-    # --- Búsqueda por Matrícula ---
     matricula_buscada = request.GET.get('matricula', '').strip()
-    if matricula_buscada:
-        ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
+    if matricula_buscada: ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
 
     if ano_seleccionado:
         try: ano_int = int(ano_seleccionado); ordenes_qs = ordenes_qs.filter(factura__fecha_emision__year=ano_int)
@@ -1119,15 +863,11 @@ def historial_ordenes(request):
     ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None
     mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
     
-    context = {
-        'ordenes': ordenes, 'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13),
-        'matricula_buscada': matricula_buscada
-    }
+    context = { 'ordenes': ordenes, 'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles, 'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13), 'matricula_buscada': matricula_buscada }
     return render(request, 'taller/historial_ordenes.html', context)
 
 
-# --- VISTA HISTORIAL MOVIMIENTOS ---
+# --- HISTORIAL MOVIMIENTOS ---
 @login_required
 def historial_movimientos(request):
     periodo = request.GET.get('periodo', 'semana'); hoy = timezone.now().date()
@@ -1143,87 +883,54 @@ def historial_movimientos(request):
     return render(request, 'taller/historial_movimientos.html', context)
 
 
-# --- VISTA EDITAR MOVIMIENTO ---
+# --- EDITAR MOVIMIENTO ---
 @login_required
 @bloquear_lectura # CANDADO
 def editar_movimiento(request, tipo, movimiento_id):
-    permiso_necesario = f'taller.change_{tipo}'
-    if not request.user.has_perm(permiso_necesario):
-         return HttpResponseForbidden("No tienes permiso para editar este tipo de movimiento.")
-
     if tipo not in ['gasto', 'ingreso']: return redirect('historial_movimientos')
     admin_url_name = f'admin:taller_{tipo}_change'
     try: admin_url = reverse(admin_url_name, args=[movimiento_id]); return redirect(admin_url)
-    except Exception as e:
-        print(f"Error reversing admin URL: {e}")
-        return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
+    except Exception as e: return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
 
 
-# --- VISTA GENERAR FACTURA ---
+# --- GENERAR FACTURA ---
 @login_required
 @bloquear_lectura # CANDADO
 def generar_factura(request, orden_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo'), id=orden_id)
 
     if request.method == 'POST':
-        if not (request.user.has_perm('taller.add_factura') and \
-                request.user.has_perm('taller.add_lineafactura') and \
-                request.user.has_perm('taller.add_usoconsumible') and \
-                request.user.has_perm('taller.delete_factura') and \
-                request.user.has_perm('taller.delete_usoconsumible') and \
-                request.user.has_perm('taller.change_ordendereparacion')):
+        if not (request.user.has_perm('taller.add_factura') and request.user.has_perm('taller.add_lineafactura')):
             return HttpResponseForbidden("No tienes permiso para generar o reemplazar facturas.")
 
         es_factura = 'aplicar_iva' in request.POST
         notas = request.POST.get('notas_cliente', '')
 
         with transaction.atomic():
-            # 1. PRESERVAR DATOS
             factura_anterior = Factura.objects.filter(orden=orden).first()
-            numero_a_conservar = None
-            fecha_a_conservar = None
-            
+            numero_a_conservar = None; fecha_a_conservar = None
             if factura_anterior:
-                if factura_anterior.es_factura and factura_anterior.numero_factura:
-                    numero_a_conservar = factura_anterior.numero_factura
+                if factura_anterior.es_factura and factura_anterior.numero_factura: numero_a_conservar = factura_anterior.numero_factura
                 fecha_a_conservar = factura_anterior.fecha_emision
 
-            # 2. BORRAR
-            Factura.objects.filter(orden=orden).delete()
-            UsoConsumible.objects.filter(orden=orden).delete()
+            Factura.objects.filter(orden=orden).delete(); UsoConsumible.objects.filter(orden=orden).delete()
 
-            # 3. ASIGNAR NÚMERO
             nuevo_numero_factura = None
             if es_factura:
-                if numero_a_conservar:
-                    nuevo_numero_factura = numero_a_conservar
+                if numero_a_conservar: nuevo_numero_factura = numero_a_conservar
                 else:
-                    ultima_factura = Factura.objects.select_for_update().filter(
-                        numero_factura__isnull=False
-                    ).order_by('-numero_factura').first()
-                    
-                    if ultima_factura and ultima_factura.numero_factura:
-                        nuevo_numero_factura = ultima_factura.numero_factura + 1
-                    else:
-                        nuevo_numero_factura = 1
+                    ultima_factura = Factura.objects.select_for_update().filter(numero_factura__isnull=False).order_by('-numero_factura').first()
+                    if ultima_factura and ultima_factura.numero_factura: nuevo_numero_factura = ultima_factura.numero_factura + 1
+                    else: nuevo_numero_factura = 1
             
-            # 4. CREAR
-            factura = Factura.objects.create(
-                orden=orden, 
-                es_factura=es_factura, 
-                notas_cliente=notas,
-                numero_factura=nuevo_numero_factura 
-            )
+            factura = Factura.objects.create(orden=orden, es_factura=es_factura, notas_cliente=notas, numero_factura=nuevo_numero_factura )
             
-            # 5. RESTAURAR FECHA
             if fecha_a_conservar:
                 Factura.objects.filter(id=factura.id).update(fecha_emision=fecha_a_conservar)
                 factura.fecha_emision = fecha_a_conservar
             
             subtotal = Decimal('0.00')
-            
-            repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
-            gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
+            repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos'); gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
             
             for repuesto in repuestos_qs:
                 pvp_str = request.POST.get(f'pvp_repuesto_{repuesto.id}')
@@ -1231,9 +938,8 @@ def generar_factura(request, orden_id):
                     try:
                         pvp = Decimal(pvp_str); coste_repuesto = repuesto.importe or Decimal('0.00')
                         if pvp < coste_repuesto: pvp = coste_repuesto
-                        subtotal += pvp
-                        LineaFactura.objects.create(factura=factura, tipo='Repuesto', descripcion=repuesto.descripcion, cantidad=1, precio_unitario=pvp)
-                    except (ValueError, TypeError, Decimal.InvalidOperation): pass
+                        subtotal += pvp; LineaFactura.objects.create(factura=factura, tipo='Repuesto', descripcion=repuesto.descripcion, cantidad=1, precio_unitario=pvp)
+                    except: pass
             
             for gasto_otro in gastos_otros_qs:
                 pvp_str = request.POST.get(f'pvp_otro_{gasto_otro.id}')
@@ -1241,9 +947,8 @@ def generar_factura(request, orden_id):
                     try:
                         pvp = Decimal(pvp_str); coste_gasto = gasto_otro.importe or Decimal('0.00')
                         if pvp < coste_gasto: pvp = coste_gasto
-                        subtotal += pvp
-                        LineaFactura.objects.create(factura=factura, tipo='Externo', descripcion=gasto_otro.descripcion, cantidad=1, precio_unitario=pvp)
-                    except (ValueError, TypeError, Decimal.InvalidOperation): pass
+                        subtotal += pvp; LineaFactura.objects.create(factura=factura, tipo='Externo', descripcion=gasto_otro.descripcion, cantidad=1, precio_unitario=pvp)
+                    except: pass
             
             tipos_consumible_id = request.POST.getlist('tipo_consumible'); cantidades_consumible = request.POST.getlist('consumible_cantidad'); pvps_consumible = request.POST.getlist('consumible_pvp_total')
             for i in range(len(tipos_consumible_id)):
@@ -1254,7 +959,7 @@ def generar_factura(request, orden_id):
                         precio_unitario_calculado = (pvp_total / cantidad).quantize(Decimal('0.01')); subtotal += pvp_total
                         LineaFactura.objects.create(factura=factura, tipo='Consumible', descripcion=tipo.nombre, cantidad=cantidad, precio_unitario=precio_unitario_calculado)
                         UsoConsumible.objects.create(orden=orden, tipo=tipo, cantidad_usada=cantidad)
-                    except (TipoConsumible.DoesNotExist, ValueError, TypeError, Decimal.InvalidOperation, ZeroDivisionError): pass
+                    except: pass
             
             descripciones_mo = request.POST.getlist('mano_obra_desc'); importes_mo = request.POST.getlist('mano_obra_importe')
             for desc, importe_str in zip(descripciones_mo, importes_mo):
@@ -1262,15 +967,13 @@ def generar_factura(request, orden_id):
                     try:
                         importe = Decimal(importe_str)
                         if importe <= 0: continue
-                        subtotal += importe
-                        LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
-                    except (ValueError, TypeError, Decimal.InvalidOperation): pass
+                        subtotal += importe; LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
+                    except: pass
             
             iva_calculado = Decimal('0.00'); subtotal_positivo = max(subtotal, Decimal('0.00'))
             if es_factura: iva_calculado = (subtotal_positivo * Decimal('0.21')).quantize(Decimal('0.01'))
             total_final = subtotal_positivo + iva_calculado
             factura.subtotal = subtotal; factura.iva = iva_calculado; factura.total_final = total_final
-            
             factura.save() 
             
             orden.estado = 'Listo para Recoger'; orden.save()
@@ -1279,26 +982,20 @@ def generar_factura(request, orden_id):
     return redirect('detalle_orden', orden_id=orden.id)
 
 
-# --- VISTAS PARA VER PDF ---
 @login_required
 def ver_factura_pdf(request, factura_id):
     factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=factura_id)
-    if not request.user.has_perm('taller.view_factura'):
-         return HttpResponseForbidden("No tienes permiso para ver facturas.")
     return generar_pdf_response(factura)
 
 def ver_factura_publica(request, signed_id):
-    """ Vista pública segura para acceder desde WhatsApp sin login """
     signer = Signer()
     try:
         original_id = signer.unsign(signed_id)
         factura = get_object_or_404(Factura.objects.select_related('orden__cliente', 'orden__vehiculo'), id=original_id)
         return generar_pdf_response(factura)
-    except BadSignature:
-        return HttpResponseForbidden("El enlace de la factura es inválido o ha sido modificado.")
+    except BadSignature: return HttpResponseForbidden("El enlace de la factura es inválido o ha sido modificado.")
 
 
-# --- VISTA EDITAR FACTURA ---
 @login_required
 @bloquear_lectura # CANDADO
 def editar_factura(request, factura_id):
@@ -1306,23 +1003,13 @@ def editar_factura(request, factura_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo__cliente'), id=factura.orden_id)
 
     if request.method == 'POST':
-        if not (request.user.has_perm('taller.delete_factura') and \
-                request.user.has_perm('taller.add_factura') and \
-                request.user.has_perm('taller.add_lineafactura') and \
-                request.user.has_perm('taller.delete_usoconsumible') and \
-                request.user.has_perm('taller.add_usoconsumible') and \
-                request.user.has_perm('taller.change_ordendereparacion')):
-             return HttpResponseForbidden("No tienes permiso para editar facturas.")
-
         with transaction.atomic():
             UsoConsumible.objects.filter(orden=orden).delete()
             factura.delete()
-        
         try:
              original_request = getattr(request, '_request', request)
              return generar_factura(original_request, orden.id)
         except Exception as e:
-             print(f"Error al llamar a generar_factura desde editar_factura: {e}")
              return redirect('detalle_orden', orden_id=orden.id)
 
     repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
@@ -1346,9 +1033,12 @@ def editar_factura(request, factura_id):
     return render(request, 'taller/editar_factura.html', context)
 
 
-# --- INFORMES Y VISUALIZACIONES ---
+# --- INFORMES Y CONTABILIDAD (VISTAS DE LECTURA) ---
 @login_required
 def informe_rentabilidad(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     hoy = timezone.now().date()
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
@@ -1433,6 +1123,9 @@ def informe_rentabilidad(request):
 
 @login_required
 def detalle_ganancia_orden(request, orden_id):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo', 'cliente'), id=orden_id)
     try: factura = Factura.objects.prefetch_related('lineas', 'orden__ingreso_set').get(orden=orden)
     except Factura.DoesNotExist: return redirect('detalle_orden', orden_id=orden.id)
@@ -1477,6 +1170,9 @@ def detalle_ganancia_orden(request, orden_id):
 
 @login_required
 def informe_gastos(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     gastos_qs = Gasto.objects.select_related('empleado', 'vehiculo')
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
@@ -1505,6 +1201,9 @@ def informe_gastos(request):
 
 @login_required
 def informe_gastos_desglose(request, categoria, empleado_nombre=None):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     gastos_qs = Gasto.objects.select_related('vehiculo__cliente', 'empleado')
     categoria_map = dict(Gasto.CATEGORIA_CHOICES); categoria_interna = categoria
     if empleado_nombre:
@@ -1531,6 +1230,9 @@ def informe_gastos_desglose(request, categoria, empleado_nombre=None):
 
 @login_required
 def informe_ingresos(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     ingresos_qs = Ingreso.objects.all()
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
@@ -1554,6 +1256,9 @@ def informe_ingresos(request):
 
 @login_required
 def informe_ingresos_desglose(request, categoria):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     ingresos_qs = Ingreso.objects.select_related('orden__vehiculo')
     categoria_display_map = dict(Ingreso.CATEGORIA_CHOICES); categoria_interna = categoria
     titulo = f"Desglose de Ingresos: {categoria_display_map.get(categoria_interna, categoria_interna)}"; ingresos_qs = ingresos_qs.filter(categoria__iexact=categoria_interna)
@@ -1576,6 +1281,9 @@ def informe_ingresos_desglose(request, categoria):
 
 @login_required
 def contabilidad(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     hoy = timezone.now().date()
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
@@ -1616,6 +1324,9 @@ def contabilidad(request):
 
 @login_required
 def cuentas_por_cobrar(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
     facturas_qs = Factura.objects.select_related('orden__cliente', 'orden__vehiculo').prefetch_related('orden__ingreso_set')
@@ -1645,6 +1356,9 @@ def cuentas_por_cobrar(request):
 
 @login_required
 def informe_tarjeta(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
     hoy = timezone.now().date()
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
@@ -1699,8 +1413,10 @@ def informe_tarjeta(request):
 @login_required
 def ver_presupuesto_pdf(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
-    if not request.user.has_perm('taller.view_presupuesto'):
-         return HttpResponseForbidden("No tienes permiso para ver presupuestos.")
+    
+    # NUEVA LÓGICA DE SEGURIDAD: Solo Jefes pueden ver el PDF con los precios
+    if not request.user.is_superuser:
+         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para ver los precios ni descargar el PDF del presupuesto.</p>")
 
     lineas = presupuesto.lineas.all()
     context = { 
@@ -1729,7 +1445,7 @@ def ver_presupuesto_pdf(request, presupuesto_id):
                  file_path = os.path.join(settings.STATIC_ROOT, path)
                  if os.path.exists(file_path): return file_path
         if uri.startswith("http://") or uri.startswith("https://"): return uri
-        print(f"WARN: Could not resolve URI '{uri}' in PDF generation."); return None
+        return None
         
     pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
     if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')

@@ -9,96 +9,20 @@
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <style>
-        /* --- ESTILOS PARA CORREGIR EL FORMULARIO DE FACTURA --- */
-        
-        /* Contenedor de la fila */
-        .item-row {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 10px;
-            width: 100%;
-        }
-        
-        /* Asegurar que los inputs dentro de la fila se comporten bien */
-        .item-row input, .item-row select {
-            margin-bottom: 0 !important; /* Quitar margen inferior */
-            height: 38px; /* Altura fija para alinear con el botón */
-        }
-
-        /* ESTILO DEL BOTÓN DE BORRAR (ROJO Y PEQUEÑO) */
-        .factura-form .btn-remove-line {
-            background-color: #dc3545 !important; /* Rojo */
-            color: white !important;
-            border: none !important;
-            border-radius: 4px !important;
-            width: 40px !important;       /* Ancho fijo */
-            min-width: 40px !important;   /* Evitar que se aplaste */
-            height: 38px !important;      /* Altura igual al input */
-            padding: 0 !important;
-            margin: 0 !important;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .factura-form .btn-remove-line:hover {
-            background-color: #c82333 !important;
-        }
-
-        /* Ajustes para móviles */
+        .item-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; width: 100%; }
+        .item-row input, .item-row select { margin-bottom: 0 !important; height: 38px; }
+        .factura-form .btn-remove-line { background-color: #dc3545 !important; color: white !important; border: none !important; border-radius: 4px !important; width: 40px !important; min-width: 40px !important; height: 38px !important; padding: 0 !important; margin: 0 !important; cursor: pointer; font-weight: bold; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+        .factura-form .btn-remove-line:hover { background-color: #c82333 !important; }
         @media (max-width: 600px) {
-            .item-row {
-                flex-wrap: wrap;
-            }
-            .item-row input[type="text"] { 
-                width: 100% !important;
-                order: 1;
-                margin-bottom: 5px !important;
-            }
-            .item-row input[type="number"], .item-row select {
-                flex-grow: 1;
-                width: auto !important;
-                order: 2;
-            }
-            .factura-form .btn-remove-line {
-                order: 3;
-            }
+            .item-row { flex-wrap: wrap; }
+            .item-row input[type="text"] { width: 100% !important; order: 1; margin-bottom: 5px !important; }
+            .item-row input[type="number"], .item-row select { flex-grow: 1; width: auto !important; order: 2; }
+            .factura-form .btn-remove-line { order: 3; }
         }
-        
-        /* Estilo simple para el formulario de fotos ocultable */
-        .upload-photo-form {
-            margin-top: 15px;
-            padding: 15px;
-            background-color: #fff;
-            border: 1px dashed #ccc;
-            border-radius: 5px;
-        }
-        .upload-photo-form label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            font-size: 0.9em;
-        }
-        .upload-photo-form input[type="file"] {
-            margin-bottom: 10px;
-            width: 100%;
-            padding: 10px; 
-            background-color: #f8f9fa;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-        }
-
-        /* --- ESTILO NUEVO: CHECK DE CONFIRMACIÓN --- */
-        .upload-status {
-            font-weight: bold;
-            color: #28a745; /* Verde */
-            margin-left: 10px;
-            display: none; /* Oculto por defecto */
-        }
+        .upload-photo-form { margin-top: 15px; padding: 15px; background-color: #fff; border: 1px dashed #ccc; border-radius: 5px; }
+        .upload-photo-form label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9em; }
+        .upload-photo-form input[type="file"] { margin-bottom: 10px; width: 100%; padding: 10px; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 4px; }
+        .upload-status { font-weight: bold; color: #28a745; margin-left: 10px; display: none; }
     </style>
 </head>
 <body>
@@ -110,7 +34,7 @@
         <p><strong>Estado Actual:</strong> <span style="background-color: #007bff; color: white; padding: 5px 10px; border-radius: 5px;">{{ orden.estado }}</span></p>
         <hr>
 
-        <div class="financial-summary">
+        {% if request.user.is_superuser %} <div class="financial-summary">
             <h3>Resumen Financiero</h3>
             {% if factura %}
                 <p><strong>Total {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}:</strong> {{ factura.total_final|floatformat:2 }} €</p>
@@ -125,6 +49,7 @@
                 {% endif %}
             {% endif %}
         </div>
+        {% endif %}
 
         <div class="info-grid">
             <div class="info-item"><strong>Cliente:</strong> {{ orden.cliente.nombre }} ({{ orden.cliente.telefono }})</div>
@@ -134,63 +59,34 @@
         
         <div class="info-item" style="margin-top: 20px;">
             <strong>Fotos del Vehículo</strong>
-            
             <div class="photo-gallery">
                 {% for foto in orden.fotos.all %}
-                    <a href="{{ foto.imagen.url }}" target="_blank">
-                        <img src="{{ foto.imagen.url }}" alt="{{ foto.descripcion }}">
-                    </a>
+                    <a href="{{ foto.imagen.url }}" target="_blank"><img src="{{ foto.imagen.url }}" alt="{{ foto.descripcion }}"></a>
                 {% empty %}
                     <p style="color: #666; font-style: italic;">No hay fotos registradas actualmente.</p>
                 {% endfor %}
             </div>
 
-            <button type="button" id="btn-toggle-upload" style="margin-top: 15px; background-color: #6c757d; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
-                📷 Añadir / Subir Fotos Pendientes
-            </button>
+            {% if not request.user.groups.all.0.name == 'Solo Ver' %}
+            <button type="button" id="btn-toggle-upload" style="margin-top: 15px; background-color: #6c757d; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em;">📷 Añadir / Subir Fotos Pendientes</button>
 
             <div id="upload-photos-container" class="upload-photo-form" style="display: none;">
                 <form action="{% url 'detalle_orden' orden.id %}" method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <input type="hidden" name="form_type" value="subir_fotos">
-                    
                     <p style="font-size: 0.9em; color: #555; margin-bottom: 10px;">Sube las fotos que faltaron al crear la orden. Puedes subir una o varias a la vez.</p>
-
-                    <div>
-                        <label for="foto1">
-                            Foto Frontal: <span id="check-foto1" class="upload-status">✅ Lista</span>
-                        </label>
-                        <input type="file" id="foto1" name="foto1" accept="image/*" capture="environment">
-                    </div>
-                    <div>
-                        <label for="foto2">
-                            Foto Trasera: <span id="check-foto2" class="upload-status">✅ Lista</span>
-                        </label>
-                        <input type="file" id="foto2" name="foto2" accept="image/*" capture="environment">
-                    </div>
-                    <div>
-                        <label for="foto3">
-                            Lateral Izquierdo: <span id="check-foto3" class="upload-status">✅ Lista</span>
-                        </label>
-                        <input type="file" id="foto3" name="foto3" accept="image/*" capture="environment">
-                    </div>
-                    <div>
-                        <label for="foto4">
-                            Lateral Derecho: <span id="check-foto4" class="upload-status">✅ Lista</span>
-                        </label>
-                        <input type="file" id="foto4" name="foto4" accept="image/*" capture="environment">
-                    </div>
-                    <div>
-                        <label for="foto5">
-                            Cuadro / Km: <span id="check-foto5" class="upload-status">✅ Lista</span>
-                        </label>
-                        <input type="file" id="foto5" name="foto5" accept="image/*" capture="environment">
-                    </div>
-
+                    <div><label for="foto1">Foto Frontal: <span id="check-foto1" class="upload-status">✅ Lista</span></label><input type="file" id="foto1" name="foto1" accept="image/*" capture="environment"></div>
+                    <div><label for="foto2">Foto Trasera: <span id="check-foto2" class="upload-status">✅ Lista</span></label><input type="file" id="foto2" name="foto2" accept="image/*" capture="environment"></div>
+                    <div><label for="foto3">Lateral Izquierdo: <span id="check-foto3" class="upload-status">✅ Lista</span></label><input type="file" id="foto3" name="foto3" accept="image/*" capture="environment"></div>
+                    <div><label for="foto4">Lateral Derecho: <span id="check-foto4" class="upload-status">✅ Lista</span></label><input type="file" id="foto4" name="foto4" accept="image/*" capture="environment"></div>
+                    <div><label for="foto5">Cuadro / Km: <span id="check-foto5" class="upload-status">✅ Lista</span></label><input type="file" id="foto5" name="foto5" accept="image/*" capture="environment"></div>
                     <button type="submit" style="background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 10px;">Subir Fotos Seleccionadas</button>
                 </form>
             </div>
+            {% endif %}
         </div>
+        
+        {% if not request.user.groups.all.0.name == 'Solo Ver' %}
         <div class="status-form">
             <h2>Actualizar Estado</h2>
             <form action="{% url 'detalle_orden' orden.id %}" method="post">
@@ -209,94 +105,103 @@
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="kilometraje">
                 <label for="nuevo_kilometraje" style="display: none;">Kilometraje Actual del Vehículo:</label>
-                <input type="number" id="nuevo_kilometraje" name="nuevo_kilometraje" value="{{ orden.vehiculo.kilometraje }}" required
-                       style="font-size: 1.1em; padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box;">
+                <input type="number" id="nuevo_kilometraje" name="nuevo_kilometraje" value="{{ orden.vehiculo.kilometraje }}" required style="font-size: 1.1em; padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box;">
                 <button type="submit" style="background-color: #ffc107; color: #333; margin-top: 10px;">Guardar KM</button>
             </form>
         </div>
+        {% endif %}
+
         <div style="margin-top: 30px;">
-            <h2>Gastos Asociados (Costes del Taller)</h2>
-            <h3>Repuestos</h3>
+            <h2>Gastos Asociados al Vehículo</h2>
+            <h3>Repuestos / Piezas</h3>
             <table class="items-table">
-                {% for repuesto in repuestos %}<tr><td>{{ repuesto.descripcion }}</td><td>{{ repuesto.importe|floatformat:2 }} €</td></tr>{% empty %}<tr><td>No hay repuestos asociados.</td></tr>{% endfor %}
+                {% for repuesto in repuestos %}
+                <tr>
+                    <td>{{ repuesto.descripcion }}</td>
+                    {% if request.user.is_superuser %} <td>{{ repuesto.importe|floatformat:2 }} €</td>
+                    {% endif %}
+                </tr>
+                {% empty %}<tr><td>No hay repuestos asociados.</td></tr>{% endfor %}
             </table>
+            
             <h3 style="margin-top: 15px;">Trabajos Externos (Otros)</h3>
             <table class="items-table">
-                {% for gasto in gastos_otros %}<tr><td>{{ gasto.descripcion }}</td><td>{{ gasto.importe|floatformat:2 }} €</td></tr>{% empty %}<tr><td>No hay trabajos externos asociados.</td></tr>{% endfor %}
+                {% for gasto in gastos_otros %}
+                <tr>
+                    <td>{{ gasto.descripcion }}</td>
+                    {% if request.user.is_superuser %} <td>{{ gasto.importe|floatformat:2 }} €</td>
+                    {% endif %}
+                </tr>
+                {% empty %}<tr><td>No hay trabajos externos asociados.</td></tr>{% endfor %}
             </table>
         </div>
 
-        {% if factura %}
-            <div class="factura-form">
-                <h2>Documento Generado</h2>
-                <a href="{% url 'ver_factura_pdf' factura.id %}" class="btn-pdf" target="_blank">📄 Ver {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %} PDF</a>
-                <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">✏️ Modificar {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}</a>
-                
-                {% if whatsapp_url %}
-                    <a href="{{ whatsapp_url }}" target="_blank" class="btn-pdf" style="background-color: #25D366; color: white; margin-top: 10px; font-weight: bold; border: none;">
-                        📱 Enviar por WhatsApp
-                    </a>
-                {% else %}
-                    <p style="margin-top: 10px; text-align: center; color: #999; font-size: 0.9em; font-style: italic;">(El cliente no tiene un teléfono registrado para WhatsApp)</p>
-                {% endif %}
-            </div>
-        {% else %}
-            <div class="factura-form">
-                <h2>Generar Factura o Recibo</h2>
-                <form id="factura-form" action="{% url 'generar_factura' orden.id %}" method="post">
-                    {% csrf_token %}
+        {% if request.user.is_superuser %} {% if factura %}
+                <div class="factura-form">
+                    <h2>Documento Generado</h2>
+                    <a href="{% url 'ver_factura_pdf' factura.id %}" class="btn-pdf" target="_blank">📄 Ver {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %} PDF</a>
+                    <a href="{% url 'editar_factura' factura.id %}" class="btn-pdf" style="background-color: #ffc107; color: #333; margin-top: 10px;">✏️ Modificar {% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}</a>
                     
-                    {% if repuestos %}
-                    <h4>Repuestos</h4>
-                    {% for repuesto in repuestos %}
-                        <label>{{ repuesto.descripcion }} (Coste: {{ repuesto.importe|floatformat:2 }}€)</label>
-                        <input type="number" step="0.01" name="pvp_repuesto_{{ repuesto.id }}" class="pvp-input" data-coste="{{ repuesto.importe }}" placeholder="PVP Repuesto">
-                    {% endfor %}
+                    {% if whatsapp_url %}
+                        <a href="{{ whatsapp_url }}" target="_blank" class="btn-pdf" style="background-color: #25D366; color: white; margin-top: 10px; font-weight: bold; border: none;">📱 Enviar por WhatsApp</a>
+                    {% else %}
+                        <p style="margin-top: 10px; text-align: center; color: #999; font-size: 0.9em; font-style: italic;">(El cliente no tiene un teléfono registrado para WhatsApp)</p>
                     {% endif %}
+                </div>
+            {% else %}
+                <div class="factura-form">
+                    <h2>Generar Factura o Recibo</h2>
+                    <form id="factura-form" action="{% url 'generar_factura' orden.id %}" method="post">
+                        {% csrf_token %}
+                        {% if repuestos %}
+                        <h4>Repuestos</h4>
+                        {% for repuesto in repuestos %}
+                            <label>{{ repuesto.descripcion }} (Coste: {{ repuesto.importe|floatformat:2 }}€)</label>
+                            <input type="number" step="0.01" name="pvp_repuesto_{{ repuesto.id }}" class="pvp-input" data-coste="{{ repuesto.importe }}" placeholder="PVP Repuesto">
+                        {% endfor %}
+                        {% endif %}
 
-                    {% if gastos_otros %}
-                    <h4>Trabajos Externos</h4>
-                    {% for gasto in gastos_otros %}
-                        <label>{{ gasto.descripcion }} (Coste: {{ gasto.importe|floatformat:2 }}€)</label>
-                        <input type="number" step="0.01" name="pvp_otro_{{ gasto.id }}" class="pvp-input" data-coste="{{ gasto.importe }}" placeholder="PVP Trabajo Externo">
-                    {% endfor %}
-                    {% endif %}
+                        {% if gastos_otros %}
+                        <h4>Trabajos Externos</h4>
+                        {% for gasto in gastos_otros %}
+                            <label>{{ gasto.descripcion }} (Coste: {{ gasto.importe|floatformat:2 }}€)</label>
+                            <input type="number" step="0.01" name="pvp_otro_{{ gasto.id }}" class="pvp-input" data-coste="{{ gasto.importe }}" placeholder="PVP Trabajo Externo">
+                        {% endfor %}
+                        {% endif %}
 
-                    <h4>Consumibles</h4>
-                    <div id="consumibles-container">
-                    </div>
-                    <button type="button" id="add-consumible-btn" class="btn-add" style="margin-bottom: 20px;">+ Añadir Consumible</button>
+                        <h4>Consumibles</h4>
+                        <div id="consumibles-container"></div>
+                        <button type="button" id="add-consumible-btn" class="btn-add" style="margin-bottom: 20px;">+ Añadir Consumible</button>
 
-                    <h4>Mano de Obra</h4>
-                    <div id="mano-de-obra-container">
-                        <div class="item-row">
-                            <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" required style="flex-grow: 2;">
-                            <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required style="flex-grow: 1;">
-                            <button type="button" class="btn-remove-line" onclick="this.parentElement.remove()" title="Eliminar línea">X</button>
+                        <h4>Mano de Obra</h4>
+                        <div id="mano-de-obra-container">
+                            <div class="item-row">
+                                <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" required style="flex-grow: 2;">
+                                <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required style="flex-grow: 1;">
+                                <button type="button" class="btn-remove-line" onclick="this.parentElement.remove()" title="Eliminar línea">X</button>
+                            </div>
                         </div>
-                    </div>
-                    <button type="button" id="add-mano-obra" class="btn-add">+ Añadir línea de trabajo</button>
-                    
-                    <h4 style="margin-top: 20px;">Notas para el Cliente (Opcional)</h4>
-                    <textarea name="notas_cliente" placeholder="Añadir observaciones, garantía, próximos mantenimientos, etc."></textarea>
-                    
-                    <h4 style="margin-top: 20px;">Finalizar</h4>
-                    <div class="checkbox-container">
-                        <input type="checkbox" id="aplicar_iva" name="aplicar_iva">
-                        <label for="aplicar_iva">Generar FACTURA (Aplicar IVA 21%)</label>
-                    </div>
-                    <hr>
-                    <button type="submit">Crear Documento</button>
-                </form>
-            </div>
+                        <button type="button" id="add-mano-obra" class="btn-add">+ Añadir línea de trabajo</button>
+                        
+                        <h4 style="margin-top: 20px;">Notas para el Cliente (Opcional)</h4>
+                        <textarea name="notas_cliente" placeholder="Añadir observaciones, garantía, próximos mantenimientos, etc."></textarea>
+                        
+                        <h4 style="margin-top: 20px;">Finalizar</h4>
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="aplicar_iva" name="aplicar_iva">
+                            <label for="aplicar_iva">Generar FACTURA (Aplicar IVA 21%)</label>
+                        </div>
+                        <hr>
+                        <button type="submit">Crear Documento</button>
+                    </form>
+                </div>
+            {% endif %}
         {% endif %}
     </div>
 
     <script>
-        // --- Script para mostrar/ocultar formulario de fotos ---
         const btnToggleUpload = document.getElementById('btn-toggle-upload');
         const uploadContainer = document.getElementById('upload-photos-container');
-        
         if (btnToggleUpload && uploadContainer) {
             btnToggleUpload.addEventListener('click', function() {
                 if (uploadContainer.style.display === 'none') {
@@ -309,66 +214,36 @@
             });
         }
 
-        // --- NUEVO SCRIPT VISUAL: CHECKS DE FOTOS ---
         function updateUploadStatus(inputId, statusId) {
             const input = document.getElementById(inputId);
             const statusSpan = document.getElementById(statusId);
-            
             if (input && statusSpan) {
                 input.addEventListener('change', function() {
                     if (this.files && this.files.length > 0) {
-                        statusSpan.style.display = 'inline'; // Mostrar el Check
-                        this.style.borderColor = '#28a745'; // Borde verde
+                        statusSpan.style.display = 'inline';
+                        this.style.borderColor = '#28a745'; 
                     } else {
-                        statusSpan.style.display = 'none'; // Ocultar si se borra
-                        this.style.borderColor = '#ced4da'; // Borde normal
+                        statusSpan.style.display = 'none'; 
+                        this.style.borderColor = '#ced4da'; 
                     }
                 });
             }
         }
 
-        // Activar la función para los 5 inputs
-        updateUploadStatus('foto1', 'check-foto1');
-        updateUploadStatus('foto2', 'check-foto2');
-        updateUploadStatus('foto3', 'check-foto3');
-        updateUploadStatus('foto4', 'check-foto4');
-        updateUploadStatus('foto5', 'check-foto5');
+        updateUploadStatus('foto1', 'check-foto1'); updateUploadStatus('foto2', 'check-foto2'); updateUploadStatus('foto3', 'check-foto3'); updateUploadStatus('foto4', 'check-foto4'); updateUploadStatus('foto5', 'check-foto5');
 
-
-        // --- Scripts existentes de facturación ---
-        // Script para añadir Mano de Obra
         document.getElementById('add-mano-obra')?.addEventListener('click', () => {
             const container = document.getElementById('mano-de-obra-container');
             const newItem = document.createElement('div');
             newItem.classList.add('item-row');
-            newItem.innerHTML = `
-                <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" required style="flex-grow: 2;">
-                <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required style="flex-grow: 1;">
-                <button type="button" class="btn-remove-line" onclick="this.parentElement.remove()" title="Eliminar línea">X</button>
-            `;
+            newItem.innerHTML = `<input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" required style="flex-grow: 2;"><input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" required style="flex-grow: 1;"><button type="button" class="btn-remove-line" onclick="this.parentElement.remove()" title="Eliminar línea">X</button>`;
             container.appendChild(newItem);
         });
 
-        // Script para añadir Consumibles
         document.getElementById('add-consumible-btn')?.addEventListener('click', () => {
             const container = document.getElementById('consumibles-container');
             const newItem = document.createElement('div');
-            newItem.innerHTML = `
-                <div class="item-row">
-                    <select name="tipo_consumible" required style="flex-grow: 1;">
-                        <option value="">--- Selecciona tipo ---</option>
-                        {% for tipo in tipos_consumible %}
-                        <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="button" class="btn-remove-line" onclick="this.closest('div').remove()" title="Eliminar consumible">X</button>
-                </div>
-                <div class="item-row">
-                    <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cant. Usada" required style="flex-grow: 1;">
-                    <input type="number" step="0.01" name="consumible_pvp_total" placeholder="Precio Total (€)" required style="flex-grow: 1;">
-                </div>
-                <hr style="margin-top: 5px; margin-bottom: 15px; border-top: 1px dashed #ccc;">
-            `;
+            newItem.innerHTML = `<div class="item-row"><select name="tipo_consumible" required style="flex-grow: 1;"><option value="">--- Selecciona tipo ---</option>{% for tipo in tipos_consumible %}<option value="{{ tipo.id }}">{{ tipo.nombre }}</option>{% endfor %}</select><button type="button" class="btn-remove-line" onclick="this.closest('div').remove()" title="Eliminar consumible">X</button></div><div class="item-row"><input type="number" step="0.01" name="consumible_cantidad" placeholder="Cant. Usada" required style="flex-grow: 1;"><input type="number" step="0.01" name="consumible_pvp_total" placeholder="Precio Total (€)" required style="flex-grow: 1;"></div><hr style="margin-top: 5px; margin-bottom: 15px; border-top: 1px dashed #ccc;">`;
             container.appendChild(newItem);
         });
 
@@ -377,7 +252,6 @@
             facturaForm.addEventListener('submit', function(event) {
                 let preciosInvalidos = false;
                 const pvpInputs = this.querySelectorAll('.pvp-input');
-                
                 pvpInputs.forEach(input => {
                     if (input.value) {
                         const pvp = parseFloat(input.value);
@@ -389,17 +263,10 @@
                         }
                     }
                 });
-
-                if (preciosInvalidos) {
-                    event.preventDefault();
-                }
+                if (preciosInvalidos) event.preventDefault();
             });
-            
-            // Evitar envío con Enter
             facturaForm.addEventListener('keydown', function(event) {
-                if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') {
-                    event.preventDefault();
-                }
+                if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') event.preventDefault();
             });
         }
     </script>

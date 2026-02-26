@@ -27,6 +27,7 @@
         .btn-giant:hover { transform: translateY(-5px); }
         .btn-vehiculo { background-color: #007bff; color: white; }
         .btn-gasto { background-color: #ffc107; color: #333; }
+        .btn-presupuestos { background-color: #17a2b8; color: white; }
         
         /* Etiqueta del método de pago */
         .badge-metodo { display: inline-block; margin-top: 5px; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; background-color: #e9ecef; color: #495057; border: 1px solid #ced4da; }
@@ -201,6 +202,10 @@
                     
                     <a href="{% url 'anadir_gasto' %}" class="btn-giant btn-gasto">
                         🛒 Registrar Pieza / Gasto
+                    </a>
+
+                    <a href="{% url 'lista_presupuestos' %}" class="btn-giant btn-presupuestos">
+                        📋 Ver Presupuestos
                     </a>
                     
                     <br><br>
