@@ -4,119 +4,183 @@
 <head>
     <meta charset="UTF-8">
     <title>{% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Nº {{ factura.id }}{% endif %}</title>
-    <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <style>
-        @page { size: a4 portrait; margin: 1.5cm; }
-        body { font-family: sans-serif; font-size: 11px; }
-
-        .header-container {
-            position: relative;
-            border-bottom: 2px solid #f2f2f2;
-            margin-bottom: 20px;
-            overflow: auto;
+        /* ==============================================================
+           ESTILOS INCRUSTADOS PARA GARANTIZAR COMPATIBILIDAD CON PDF
+           ============================================================== */
+        @page { size: A4 portrait; margin: 1.2cm; }
+        
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #334155;
+            margin: 0;
+            padding: 0;
+            font-size: 12px;
+            background-color: #ffffff;
         }
-        .info-factura {
-            text-align: right;
-            width: 100%; 
-        }
 
-        .cliente-info { border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .totales { margin-top: 20px; text-align: right; width: 250px; margin-left: auto; }
-        .totales p { margin: 5px 0; }
-        .cliente-info p { margin: 4px 0; line-height: 1.4; }
+        table { width: 100%; border-collapse: collapse; }
+        
+        /* 1. CABECERA */
+        .header { margin-bottom: 30px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; }
+        .header td { vertical-align: top; }
+        .invoice-title { font-size: 28px; font-weight: 900; color: #0f172a; margin: 0 0 5px 0; text-transform: uppercase; letter-spacing: -0.03em; }
+        .company-name { margin: 0 0 5px 0; color: #1e40af; font-size: 20px; font-weight: 800; text-transform: uppercase; }
+        .company-details { color: #475569; font-size: 11px; line-height: 1.5; }
+
+        /* 2. SECCIÓN CLIENTE Y VEHÍCULO */
+        .info-table { margin-bottom: 30px; }
+        .info-table td { vertical-align: top; width: 50%; line-height: 1.6; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .section-title { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+        .matricula-badge { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 800; border: 1px solid #cbd5e1; color: #0f172a; font-size: 1.1em;}
+
+        /* 3. TABLA DE CONCEPTOS */
+        .items-table { margin-bottom: 25px; }
+        .items-table th { background-color: #f8fafc; color: #64748b; font-weight: 700; text-align: left; padding: 10px 12px; border: 1px solid #e2e8f0; border-bottom: 2px solid #cbd5e1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
+        .items-table td { padding: 12px; border: 1px solid #e2e8f0; color: #0f172a; vertical-align: middle; }
+        .items-table .money { text-align: right; font-weight: 600; width: 15%; }
+        .items-table .cant-col { text-align: right; width: 10%; }
+        .items-table .desc-col { font-weight: 500; }
+
+        /* 4. TOTALES */
+        .totals-wrapper { width: 100%; margin-top: 10px; page-break-inside: avoid; }
+        .totals-table { width: 45%; float: right; border-collapse: collapse; }
+        .totals-table td { padding: 8px 12px; text-align: right; border-bottom: 1px solid #f1f5f9; }
+        .totals-table .label { font-weight: 600; color: #64748b; text-align: left; }
+        .totals-table .grand-total td { font-size: 16px; font-weight: 900; color: #0f172a; border-top: 2px solid #cbd5e1; padding-top: 12px; }
+        
+        .abonos-row td { color: #64748b; }
+        .pendiente-row td { color: #dc2626; font-size: 16px; font-weight: 900; border-top: 2px solid #fecaca; background-color: #fef2f2; padding-top: 12px; padding-bottom: 12px;}
+
+        /* 5. NOTAS */
+        .notes-box { width: 50%; float: left; background: #f8fafc; padding: 15px; border-radius: 6px; border-left: 4px solid #3b82f6; page-break-inside: avoid; }
+        .clear { clear: both; }
+
+        .footer { text-align: center; color: #94a3b8; font-size: 10px; margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header-container">
-            <div class="info-factura">
-                
-                {# --- INICIO DE LA MODIFICACIÓN (Nº de Factura/Recibo) --- #}
-                <h2>{% if factura.es_factura %}Factura{% else %}Recibo{% endif %}</h2>
-                <p>
-                    <strong>{% if factura.es_factura %}Factura Nº:{% else %}Recibo Nº:{% endif %}</strong> 
-                    {% if factura.es_factura %}{{ factura.numero_factura }}{% else %}{{ factura.id }}{% endif %}<br>
-                    <strong>Fecha:</strong> {{ factura.fecha_emision|date:"d/m/Y" }}
-                </p>
-                {# --- FIN DE LA MODIFICACIÓN --- #}
-                
-                <p>
-                    <strong>Taller ServiMax</strong><br>
+
+    <table class="header">
+        <tr>
+            <td style="width: 50%;">
+                <div class="invoice-title">
+                    {% if factura.es_factura %}FACTURA{% else %}RECIBO{% endif %}
+                </div>
+                <div style="color: #64748b; font-size: 12px; margin-top: 8px; font-weight: 500; line-height: 1.6;">
+                    <strong>Nº Documento:</strong> <span style="color: #0f172a;">{% if factura.es_factura %}{{ factura.numero_factura }}{% else %}{{ factura.id }}{% endif %}</span><br>
+                    <strong>Fecha de emisión:</strong> <span style="color: #0f172a;">{{ factura.fecha_emision|date:"d/m/Y" }}</span>
+                </div>
+            </td>
+            <td style="width: 50%; text-align: right;">
+                <h2 class="company-name">Taller ServiMax</h2>
+                <div class="company-details">
                     <em>Honestidad y Calidad</em><br>
-                    
                     {% if factura.es_factura %}
-                    <strong>NIE:</strong> Y9305858A<br>
-                    <em>JOSE EVARDID MENDIETA CORTES</em><br>
+                    <strong>JOSE EVARDID MENDIETA CORTES</strong><br>
+                    NIE: Y9305858A<br>
                     Carrer del Terrer 18<br>
                     43840 Salou, Tarragona<br>
                     {% endif %}
-                    
                     <strong>Teléfono:</strong> 642 99 30 63
-                </p>
-            </div>
-        </div>
+                </div>
+            </td>
+        </tr>
+    </table>
 
-        <div class="cliente-info">
-            <h3>Datos del Cliente</h3>
-            <p>
-                <strong>Nombre:</strong> {{ cliente.nombre }}<br>
-                <strong>Teléfono:</strong> {{ cliente.telefono }}<br>
+    <table class="info-table">
+        <tr>
+            <td style="border-right: 5px solid #ffffff;">
+                <div class="section-title">👤 Datos del Cliente</div>
+                <strong style="font-size: 14px; color: #0f172a; display: block; margin-bottom: 5px;">{{ cliente.nombre|title }}</strong>
+                <span style="color: #475569;">Teléfono:</span> {{ cliente.telefono }}<br>
                 
                 {% if factura.es_factura %}
-                <strong>{{ cliente.get_tipo_documento_display|default:'DNI' }}:</strong> {{ cliente.documento_fiscal|default:'---' }}<br>
-                <strong>Dirección:</strong> {{ cliente.direccion_fiscal|default:'---' }}<br>
-                {{ cliente.codigo_postal_fiscal|default:'' }} {{ cliente.ciudad_fiscal|default:'' }} ({{ cliente.provincia_fiscal|default:'TARRAGONA' }})
-                <hr style="border: 0; border-top: 1px dashed #ccc; margin: 8px 0;">
+                    <span style="color: #475569;">{{ cliente.get_tipo_documento_display|default:'DNI' }}:</span> {{ cliente.documento_fiscal|default:'---' }}<br>
+                    <span style="color: #475569;">Dirección:</span> {{ cliente.direccion_fiscal|default:'---' }}<br>
+                    {{ cliente.codigo_postal_fiscal|default:'' }} {{ cliente.ciudad_fiscal|default:'' }} ({{ cliente.provincia_fiscal|default:'TARRAGONA' }})
                 {% endif %}
-                
-                <strong>Vehículo:</strong> {{ vehiculo.marca }} {{ vehiculo.modelo }} - {{ vehiculo.matricula }}<br>
-                <strong>Kilometraje:</strong> {{ vehiculo.kilometraje }} km
-            </p>
-        </div>
+            </td>
+            <td style="border-left: 5px solid #ffffff;">
+                <div class="section-title">🚗 Datos del Vehículo</div>
+                <strong style="font-size: 14px; color: #0f172a; display: block; margin-bottom: 5px;">{{ vehiculo.marca }} {{ vehiculo.modelo }}</strong>
+                <span style="color: #475569;">Matrícula:</span> <span class="matricula-badge">{{ vehiculo.matricula }}</span><br>
+                <span style="color: #475569;">Kilometraje:</span> {{ vehiculo.kilometraje }} km
+            </td>
+        </tr>
+    </table>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Descripción</th>
-                    <th style="text-align: right; width: 80px;">Cantidad</th>
-                    <th style="text-align: right; width: 100px;">Precio Unit.</th>
-                    <th style="text-align: right; width: 100px;">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for linea in lineas %}
-                <tr>
-                    <td>{{ linea.descripcion }}</td>
-                    <td style="text-align: right;">{{ linea.cantidad|floatformat:2 }}</td>
-                    <td style="text-align: right;">{{ linea.precio_unitario|floatformat:2 }} €</td>
-                    <td style="text-align: right;">{{ linea.total_linea|floatformat:2 }} €</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th>Descripción</th>
+                <th class="cant-col">Cantidad</th>
+                <th class="money">Precio Unit.</th>
+                <th class="money">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for linea in lineas %}
+            <tr>
+                <td class="desc-col">{{ linea.descripcion }}</td>
+                <td class="cant-col">{{ linea.cantidad|floatformat:2 }}</td>
+                <td class="money">{{ linea.precio_unitario|floatformat:2 }} €</td>
+                <td class="money" style="font-weight: 700;">{{ linea.total_linea|floatformat:2 }} €</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" style="text-align:center; color:#94a3b8; font-style: italic; padding: 20px;">
+                    Sin conceptos registrados.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
+    <div class="totals-wrapper">
+        
         {% if factura.notas_cliente %}
-        <div class="notas-cliente" style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; page-break-inside: avoid;">
-            <strong>Notas Adicionales:</strong>
-            <p style="font-size: 10px; white-space: pre-wrap; color: #333;">{{ factura.notas_cliente }}</p>
+        <div class="notes-box">
+            <strong style="color: #1e40af; font-size: 11px; text-transform: uppercase;">Notas Adicionales:</strong><br>
+            <span style="color: #334155; font-size: 11px; white-space: pre-wrap;">{{ factura.notas_cliente }}</span>
         </div>
         {% endif %}
-        
-        <div class="totales" style="page-break-inside: avoid;">
+
+        <table class="totals-table">
             {% if factura.es_factura %}
-                <p><strong>Subtotal:</strong> {{ factura.subtotal|floatformat:2 }} €</p>
-                <p><strong>IVA (21%):</strong> {{ factura.iva|floatformat:2 }} €</p>
-                <hr>
-                <h3 style="margin-bottom: 5px;"><strong>TOTAL FACTURA:</strong> {{ factura.total_final|floatformat:2 }} €</h3>
-            {% else %}
-                <h3 style="margin-bottom: 5px;"><strong>TOTAL RECIBO:</strong> {{ factura.total_final|floatformat:2 }} €</h3>
+                <tr>
+                    <td class="label">Subtotal:</td>
+                    <td>{{ factura.subtotal|floatformat:2 }} €</td>
+                </tr>
+                <tr>
+                    <td class="label">IVA (21%):</td>
+                    <td>{{ factura.iva|floatformat:2 }} €</td>
+                </tr>
             {% endif %}
-            <p><strong>Pagado a cuenta (Abonos):</strong> -{{ abonos|floatformat:2 }} €</p>
-            <h3 style="margin-top: 5px;"><strong style="color: #dc3545;">PENDIENTE DE PAGO:</strong> {{ pendiente|floatformat:2 }} €</h3>
-        </div>
+            
+            <tr class="grand-total">
+                <td class="label">TOTAL {% if factura.es_factura %}FACTURA{% else %}RECIBO{% endif %}:</td>
+                <td>{{ factura.total_final|floatformat:2 }} €</td>
+            </tr>
+            
+            <tr class="abonos-row">
+                <td class="label">Pagado a cuenta (Abonos):</td>
+                <td>- {{ abonos|floatformat:2 }} €</td>
+            </tr>
+            
+            <tr class="pendiente-row">
+                <td class="label">PENDIENTE DE PAGO:</td>
+                <td>{{ pendiente|floatformat:2 }} €</td>
+            </tr>
+        </table>
+        
+        <div class="clear"></div>
     </div>
+
+    <div class="footer">
+        <strong>Gracias por confiar en ServiMax Taller.</strong><br>
+       Documento emitido el {{ factura.fecha_emision|date:"d/m/Y" }}
+    </div>
+    
 </body>
 </html>
