@@ -4,7 +4,7 @@ from .models import (
     Ingreso, Gasto, Cliente, Vehiculo, OrdenDeReparacion, Empleado,
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
-    CierreTarjeta, NotaTablon # <-- NUEVO MODELO AÑADIDO
+    CierreTarjeta, NotaTablon, NotaInternaOrden
 )
 from django.db.models import Sum, F, Q
 from django.db import transaction
@@ -781,10 +781,10 @@ def lista_ordenes(request):
     return render(request, 'taller/lista_ordenes.html', context)
 
 
-# --- DETALLE ORDEN (CON WHATSAPP DIRECTO) ---
+# --- DETALLE ORDEN (CON WHATSAPP DIRECTO Y NOTAS INTERNAS) ---
 @login_required
 def detalle_orden(request, orden_id):
-    orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura'), id=orden_id)
+    orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura', 'notas_internas'), id=orden_id)
     repuestos = Gasto.objects.filter(orden=orden, categoria='Repuestos')
     gastos_otros = Gasto.objects.filter(orden=orden, categoria='Otros')
     abonos = sum(ing.importe for ing in orden.ingreso_set.all()) if hasattr(orden, 'ingreso_set') and orden.ingreso_set.exists() else Decimal('0.00')
@@ -834,14 +834,21 @@ def detalle_orden(request, orden_id):
                 if foto_campo in request.FILES:
                     FotoVehiculo.objects.create(orden=orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1])
             return redirect('detalle_orden', orden_id=orden.id)
+            
+        # NUEVA LÓGICA PARA GUARDAR NOTA INTERNA
+        elif form_type == 'nota_interna':
+            texto_nota = request.POST.get('texto_nota')
+            if texto_nota:
+                NotaInternaOrden.objects.create(orden=orden, autor=request.user, texto=texto_nota)
+            return redirect('detalle_orden', orden_id=orden.id)
 
     context = {
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
         'abonos': abonos, 'pendiente_pago': pendiente_pago, 'tipos_consumible': tipos_consumible,
         'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES, 'whatsapp_url': whatsapp_url,
+        'notas_internas': orden.notas_internas.all(), # Pasamos las notas a la pantalla
     }
     return render(request, 'taller/detalle_orden.html', context)
-
 
 # --- HISTORIAL ORDENES ---
 @login_required

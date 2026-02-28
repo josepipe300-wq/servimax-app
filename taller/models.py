@@ -352,3 +352,18 @@ class NotaTablon(models.Model):
 
     def __str__(self):
         return f"{self.autor.username} - {self.texto[:20]}"
+
+        # =========================================================
+# --- NUEVO MODELO: NOTAS INTERNAS POR VEHÍCULO ---
+# =========================================================
+class NotaInternaOrden(models.Model):
+    orden = models.ForeignKey(OrdenDeReparacion, related_name='notas_internas', on_delete=models.CASCADE)
+    autor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    texto = models.TextField()
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-fecha_creacion']
+
+    def __str__(self):
+        return f"Nota interna en Orden #{self.orden.id}"
