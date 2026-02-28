@@ -14,8 +14,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-p_%woq5*pl+-#a
 # --- CONFIGURACIÓN SEGURA PARA PRODUCCIÓN (RENDER) Y LOCAL ---
 
 # DEBUG: Será False en Render (si existe la variable RENDER) y True en tu PC.
-# DEBUG FORZADO PARA VER EL ERROR:
-DEBUG = True
+DEBUG = 'RENDER' not in os.environ
 
 ALLOWED_HOSTS = []
 
