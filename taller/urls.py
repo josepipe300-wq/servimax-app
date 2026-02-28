@@ -33,11 +33,14 @@ urlpatterns = [
     path('editar-movimiento/<str:tipo>/<int:movimiento_id>/', views.editar_movimiento, name='editar_movimiento'),
     path('informes/rentabilidad/', views.informe_rentabilidad, name='informe_rentabilidad'),
     path('orden/<int:orden_id>/ganancia/', views.detalle_ganancia_orden, name='detalle_ganancia_orden'),
+    
+    # --- LA SOLUCIÓN AL ERROR (Cambio a <path:categoria> para que acepte barras) ---
     path('informes/gastos/', views.informe_gastos, name='informe_gastos'),
-    path('informes/gastos/<str:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
-    path('informes/gastos/<str:categoria>/<str:empleado_nombre>/', views.informe_gastos_desglose, name='informe_gastos_desglose_empleado'),
+    path('informes/gastos/cat/<path:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
+    path('informes/gastos/cat/<path:categoria>/emp/<str:empleado_nombre>/', views.informe_gastos_desglose, name='informe_gastos_desglose_empleado'),
     path('informes/ingresos/', views.informe_ingresos, name='informe_ingresos'),
-    path('informes/ingresos/<str:categoria>/', views.informe_ingresos_desglose, name='informe_ingresos_desglose'),
+    path('informes/ingresos/cat/<path:categoria>/', views.informe_ingresos_desglose, name='informe_ingresos_desglose'),
+
     path('contabilidad/', views.contabilidad, name='contabilidad'),
     path('cuentas-por-cobrar/', views.cuentas_por_cobrar, name='cuentas_por_cobrar'),
     path('informe-tarjeta/', views.informe_tarjeta, name='informe_tarjeta'),
