@@ -754,32 +754,31 @@ def editar_presupuesto(request, presupuesto_id):
 # --- LISTA ORDENES ---
 @login_required
 def lista_ordenes(request):
-    ordenes_qs = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('cliente', 'vehiculo').order_by('-fecha_entrada')
-    anos_y_meses_data = get_anos_y_meses_con_datos()
-    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
-    ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
+    # Si hacemos clic en el botón de mover de lista
+    if request.method == 'POST':
+        orden_id = request.POST.get('orden_id')
+        accion = request.POST.get('accion')
+        if orden_id and accion:
+            from django.shortcuts import get_object_or_404
+            orden = get_object_or_404(OrdenDeReparacion, id=orden_id)
+            if accion == 'hacer_interno':
+                orden.trabajo_interno = True
+            elif accion == 'hacer_cliente':
+                orden.trabajo_interno = False
+            orden.save()
+        return redirect('lista_ordenes')
+
+    # Traemos las órdenes que no estén "Entregadas"
+    ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente')
     
-    matricula_buscada = request.GET.get('matricula', '').strip()
-    if matricula_buscada: ordenes_qs = ordenes_qs.filter(vehiculo__matricula__icontains=matricula_buscada)
+    # Las separamos en dos grupos y las ordenamos por las más antiguas primero
+    ordenes_clientes = ordenes_activas.filter(trabajo_interno=False).order_by('id')
+    ordenes_taller = ordenes_activas.filter(trabajo_interno=True).order_by('id')
 
-    if ano_seleccionado:
-        try: ano_int = int(ano_seleccionado); ordenes_qs = ordenes_qs.filter(fecha_entrada__year=ano_int)
-        except (ValueError, TypeError): ano_seleccionado = None
-    if mes_seleccionado:
-         try:
-            mes_int = int(mes_seleccionado)
-            if 1 <= mes_int <= 12: ordenes_qs = ordenes_qs.filter(fecha_entrada__month=mes_int)
-            else: mes_seleccionado = None
-         except (ValueError, TypeError): mes_seleccionado = None
-    
-    ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None; mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
-
-    context = { 
-        'ordenes': ordenes_qs, 'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13), 'matricula_buscada': matricula_buscada
-    }
-    return render(request, 'taller/lista_ordenes.html', context)
-
+    return render(request, 'taller/lista_ordenes.html', {
+        'ordenes_clientes': ordenes_clientes,
+        'ordenes_taller': ordenes_taller
+    })
 
 # --- DETALLE ORDEN (CON WHATSAPP DIRECTO Y NOTAS INTERNAS) ---
 @login_required

@@ -79,11 +79,6 @@ class Presupuesto(models.Model):
         super(Presupuesto, self).save(*args, **kwargs)
 
 class OrdenDeReparacion(models.Model):
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
-    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.CASCADE)
-    fecha_entrada = models.DateTimeField(auto_now_add=True)
-    problema = models.TextField()
-    presupuesto_origen = models.OneToOneField(Presupuesto, on_delete=models.SET_NULL, null=True, blank=True, related_name='orden_generada')
     ESTADO_CHOICES = [
         ('Recibido', 'Recibido'),
         ('En Diagnostico', 'En Diagnóstico'),
@@ -92,14 +87,27 @@ class OrdenDeReparacion(models.Model):
         ('Listo para Recoger', 'Listo para Recoger'),
         ('Entregado', 'Entregado'),
     ]
-    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='Recibido')
     
+    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.CASCADE)
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
+    presupuesto_origen = models.ForeignKey('Presupuesto', null=True, blank=True, on_delete=models.SET_NULL)
+    problema = models.TextField()
+    estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='Recibido')
+    fecha_entrada = models.DateTimeField(auto_now_add=True)
+    
+    # --- LO NUEVO ---
+    trabajo_interno = models.BooleanField(default=False, verbose_name="Vehículo del Taller")
+
+    @property
+    def dias_en_taller(self):
+        from django.utils import timezone
+        if self.fecha_entrada:
+            return (timezone.now().date() - self.fecha_entrada.date()).days
+        return 0
+    # ----------------
+
     def __str__(self):
-        return f"Orden #{self.id} - {self.vehiculo.matricula} ({self.cliente.nombre})"
-        
-    def save(self, *args, **kwargs):
-        self.problema = self.problema.upper()
-        super(OrdenDeReparacion, self).save(*args, **kwargs)
+        return f"Orden #{self.id} - {self.vehiculo.matricula}"
 
 class Empleado(models.Model):
     nombre = models.CharField(max_length=100)
@@ -364,6 +372,19 @@ class NotaInternaOrden(models.Model):
 
     class Meta:
         ordering = ['-fecha_creacion']
+
+        # Añadimos un interruptor para saber si es del taller o de cliente
+    trabajo_interno = models.BooleanField(default=False, verbose_name="Vehículo del Taller")
+
+    # Esta función calcula los días automáticamente
+    @property
+    def dias_en_taller(self):
+        from django.utils import timezone
+        # Busca automáticamente el nombre de tu campo de fecha (fecha_creacion, fecha_ingreso, etc)
+        fecha_base = getattr(self, 'fecha_creacion', None) or getattr(self, 'fecha_ingreso', None) or getattr(self, 'fecha', None)
+        if fecha_base:
+            return (timezone.now().date() - fecha_base.date()).days
+        return 0
 
     def __str__(self):
         return f"Nota interna en Orden #{self.orden.id}"

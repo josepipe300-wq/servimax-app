@@ -5,96 +5,129 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Órdenes Activas - ServiMax</title>
-    
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
-    <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 1400px !important; margin: 0 auto; padding: 30px 20px; }
+        
+        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        
+        .section-title { font-size: 1.4em; font-weight: 800; color: #0f172a; margin-top: 40px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+        
+        .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+        
+        .card-orden { background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); transition: all 0.2s ease; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;}
+        .card-orden:hover { transform: translateY(-4px); box-shadow: 0 10px 20px -5px rgba(0,0,0,0.08); border-color: #cbd5e1; }
+        
+        /* Semáforo de días */
+        .badge-dias { position: absolute; top: 20px; right: 20px; padding: 6px 12px; border-radius: 9999px; font-weight: 800; font-size: 0.85em; letter-spacing: 0.05em; }
+        .dias-verde { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .dias-naranja { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+        .dias-rojo { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; animation: pulso 2s infinite; }
+        
+        @keyframes pulso {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
 
+        .matricula { font-size: 1.4em; font-weight: 800; color: #0f172a; margin: 0 0 10px 0; }
+        .vehiculo-info { color: #475569; font-weight: 500; margin: 0 0 15px 0; font-size: 0.95em; }
+        .cliente-info { color: #64748b; font-size: 0.9em; margin-bottom: 20px; }
+        
+        .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #0f172a; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 0.95em; cursor: pointer; transition: all 0.2s ease; text-decoration: none; width: 100%; box-sizing: border-box;}
+        .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); filter: brightness(1.1); }
+        .btn-primary { background-color: #3b82f6; }
+        
+        .btn-move { background: none; border: none; color: #64748b; font-size: 0.8em; font-weight: 600; cursor: pointer; text-decoration: underline; margin-top: 15px; width: 100%; text-align: center; transition: color 0.2s; }
+        .btn-move:hover { color: #0f172a; }
+
+        .empty-state { text-align: center; padding: 40px; background: #ffffff; border-radius: 16px; border: 1px dashed #cbd5e1; color: #64748b; font-weight: 500; }
+    </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Órdenes de Reparación Activas</h1>
-            <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
+        <div style="margin-bottom: 30px;">
+            <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em;">← Volver al Inicio</a>
+            <h1 class="header-title">Taller en Vivo</h1>
+            <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Controla el tiempo que lleva cada vehículo en el taller.</p>
         </div>
-        <hr>
 
-        <form method="get" action="{% url 'lista_ordenes' %}">
-            <div class="filters" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; margin-bottom: 20px;">
-                <div>
-                    <label for="matricula" style="display: block; margin-bottom: 5px; font-weight: bold;">Matrícula:</label>
-                    <input type="text" name="matricula" id="matricula" value="{{ matricula_buscada }}" placeholder="Ej: 1234ABC" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 160px;">
-                </div>
-
-                <div>
-                    <label for="ano" style="display: block; margin-bottom: 5px; font-weight: bold;">Año:</label>
-                    <select name="ano" id="ano" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-                        <option value="">Todos</option>
-                        {% for ano in anos_disponibles %}
-                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label for="mes" style="display: block; margin-bottom: 5px; font-weight: bold;">Mes:</label>
-                    <select name="mes" id="mes" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-                        <option value="">Todos</option>
-                        {% for i in meses_del_ano %}
-                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+        <h2 class="section-title">👤 Vehículos de Clientes</h2>
+        
+        <div class="grid-cards">
+            {% for orden in ordenes_clientes %}
+            <div class="card-orden">
                 
-                <div style="display: flex; gap: 10px;">
-                    <button type="submit" style="padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Filtrar</button>
-                    
-                    {% if matricula_buscada or ano_seleccionado or mes_seleccionado %}
-                        <a href="{% url 'lista_ordenes' %}" style="padding: 8px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Limpiar</a>
-                    {% endif %}
+                {% if orden.dias_en_taller > 15 %}
+                    <div class="badge-dias dias-rojo">⚠️ {{ orden.dias_en_taller }} DÍAS</div>
+                {% elif orden.dias_en_taller > 7 %}
+                    <div class="badge-dias dias-naranja">⏳ {{ orden.dias_en_taller }} DÍAS</div>
+                {% else %}
+                    <div class="badge-dias dias-verde">✅ {{ orden.dias_en_taller }} DÍAS</div>
+                {% endif %}
+
+                <div>
+                    <h3 class="matricula">{{ orden.vehiculo.matricula }}</h3>
+                    <p class="vehiculo-info">🚗 {{ orden.vehiculo.marca }} {{ orden.vehiculo.modelo }}</p>
+                    <p class="cliente-info">👤 Cliente: <strong>{{ orden.cliente.nombre }}</strong></p>
+                    <div style="background: #f1f5f9; padding: 8px 12px; border-radius: 8px; font-size: 0.85em; font-weight: 700; color: #475569; display: inline-block; margin-bottom: 20px;">
+                        Estado: {{ orden.get_estado_display }}
+                    </div>
+                </div>
+
+                <div>
+                    <a href="{% url 'detalle_orden' orden.id %}" class="btn-modern btn-primary">Ver Ficha Completa ➔</a>
+                    <form method="post" style="margin: 0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="orden_id" value="{{ orden.id }}">
+                        <input type="hidden" name="accion" value="hacer_interno">
+                        <button type="submit" class="btn-move">↳ Es un vehículo del taller (Mover abajo)</button>
+                    </form>
                 </div>
             </div>
-        </form>
+            {% empty %}
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <span style="font-size: 3em; display: block; margin-bottom: 10px;">🎉</span>
+                    No hay vehículos de clientes pendientes en el taller. ¡Buen trabajo!
+                </div>
+            {% endfor %}
+        </div>
 
-        {% if matricula_buscada %}
-            <p style="margin-bottom: 15px; color: #555;">Resultados para la matrícula: <strong style="color: #000;">"{{ matricula_buscada }}"</strong></p>
-        {% endif %}
+        <h2 class="section-title" style="margin-top: 60px;">🔧 Flota Interna / Vehículos del Taller</h2>
+        
+        <div class="grid-cards">
+            {% for orden in ordenes_taller %}
+            <div class="card-orden" style="border-top: 4px solid #94a3b8; background: #f8fafc;">
+                
+                <div class="badge-dias" style="background: #e2e8f0; color: #475569; border: 1px solid #cbd5e1;">
+                    {{ orden.dias_en_taller }} DÍAS
+                </div>
 
-        <table class="order-table">
-            <thead>
-                <tr>
-                    <th># Orden</th>
-                    <th>Fecha Entrada</th>
-                    <th>Cliente</th>
-                    <th>Vehículo</th>
-                    <th>Problema</th>
-                    <th>Estado</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for orden in ordenes %}
-                    <tr data-url="{% url 'detalle_orden' orden.id %}">
-                        <td>{{ orden.id }}</td>
-                        <td>{{ orden.fecha_entrada|date:"d/m/Y H:i" }}</td>
-                        <td>{{ orden.cliente.nombre }}</td>
-                        <td>{{ orden.vehiculo }}</td>
-                        <td>{{ orden.problema }}</td>
-                        <td>{{ orden.estado }}</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="6" style="text-align: center; padding: 20px;">¡No hay trabajos pendientes que coincidan con los filtros!</td> 
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                <div>
+                    <h3 class="matricula">{{ orden.vehiculo.matricula }}</h3>
+                    <p class="vehiculo-info">🚗 {{ orden.vehiculo.marca }} {{ orden.vehiculo.modelo }}</p>
+                    <p class="cliente-info" style="color: #94a3b8; font-style: italic;">Uso interno del taller</p>
+                </div>
+
+                <div>
+                    <a href="{% url 'detalle_orden' orden.id %}" class="btn-modern" style="background: #64748b;">Trabajar en este vehículo ➔</a>
+                    <form method="post" style="margin: 0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="orden_id" value="{{ orden.id }}">
+                        <input type="hidden" name="accion" value="hacer_cliente">
+                        <button type="submit" class="btn-move">↳ Me equivoqué, es de un cliente (Mover arriba)</button>
+                    </form>
+                </div>
+            </div>
+            {% empty %}
+                <div class="empty-state" style="grid-column: 1 / -1; background: transparent;">
+                    No hay proyectos internos activos en este momento.
+                </div>
+            {% endfor %}
+        </div>
+
     </div>
-
-    <script>
-        document.querySelectorAll('tr[data-url]').forEach(row => {
-            row.addEventListener('click', () => {
-                window.location.href = row.dataset.url;
-            });
-        });
-    </script>
-
 </body>
 </html>
