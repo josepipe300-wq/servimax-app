@@ -4,7 +4,7 @@ from .models import (
     Ingreso, Gasto, Cliente, Vehiculo, OrdenDeReparacion, Empleado,
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
-    CierreTarjeta
+    CierreTarjeta, NotaTablon # <-- NUEVO MODELO AÑADIDO
 )
 from django.db.models import Sum, F, Q
 from django.db import transaction
@@ -227,6 +227,9 @@ def home(request):
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
 
+    # --- Cargar las notas del tablón (SOLO LAS NO COMPLETADAS) ---
+    notas_tablon = NotaTablon.objects.filter(completada=False).order_by('-fecha_creacion')[:20]
+
     context = {
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
@@ -241,15 +244,16 @@ def home(request):
         'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_actual,
         'mes_seleccionado': mes_actual,
-        'meses_del_ano': range(1, 13)
+        'meses_del_ano': range(1, 13),
+        'notas_tablon': notas_tablon, # Pasamos las notas a la pantalla
     }
     return render(request, 'taller/home.html', context)
 
 
 # --- REGISTRAR PAGO Y AJUSTAR INTERESES ---
 @login_required
+@bloquear_lectura # CANDADO
 def registrar_pago_tarjeta(request):
-    # BLOQUEO ABSOLUTO: SOLO JEFES
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo el administrador puede registrar pagos de tarjeta.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
@@ -276,6 +280,7 @@ def registrar_pago_tarjeta(request):
 
 # --- ELIMINAR CIERRE DE TARJETA ---
 @login_required
+@bloquear_lectura # CANDADO
 def eliminar_cierre_tarjeta(request, cierre_id):
     if not request.user.is_superuser:
         return HttpResponseForbidden("Acceso Denegado")
@@ -293,9 +298,8 @@ def eliminar_cierre_tarjeta(request, cierre_id):
 
 # --- INGRESAR VEHÍCULO ---
 @login_required
-@bloquear_lectura # Candado para el padre
+@bloquear_lectura # CANDADO
 def ingresar_vehiculo(request):
-    # Aquí SÍ dejamos entrar al mecánico si tiene el permiso asignado o es superusuario
     if not (request.user.is_superuser or request.user.has_perm('taller.add_ordendereparacion')):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para ingresar vehículos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
@@ -368,10 +372,10 @@ def ingresar_vehiculo(request):
 
 # --- AÑADIR GASTO ---
 @login_required
+@bloquear_lectura # CANDADO
 def anadir_gasto(request):
-    # BLOQUEO ABSOLUTO: SOLO EL JEFE PUEDE AÑADIR GASTOS, SIN IMPORTAR LOS PERMISOS
-    if not request.user.is_superuser:
-        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede añadir gastos o compras.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+    if not (request.user.is_superuser or request.user.has_perm('taller.add_gasto') or request.user.has_perm('taller.add_compraconsumible')):
+        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para acceder a la gestión de gastos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
     if request.method == 'POST':
         categoria = request.POST.get('categoria', '')
@@ -449,10 +453,10 @@ def anadir_gasto(request):
 
 # --- REGISTRAR INGRESO ---
 @login_required
+@bloquear_lectura # CANDADO
 def registrar_ingreso(request):
-    # BLOQUEO ABSOLUTO: SOLO EL JEFE PUEDE REGISTRAR INGRESOS
-    if not request.user.is_superuser:
-        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede registrar cobros o ingresos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+    if not (request.user.is_superuser or request.user.has_perm('taller.add_ingreso')):
+        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para acceder a la gestión de ingresos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
     if request.method == 'POST':
         categoria = request.POST['categoria']; importe_str = request.POST.get('importe')
@@ -491,10 +495,10 @@ def registrar_ingreso(request):
 
 # --- STOCK INICIAL CONSUMIBLES ---
 @login_required
+@bloquear_lectura # CANDADO
 def stock_inicial_consumible(request):
-    # BLOQUEO ABSOLUTO: SOLO EL JEFE PUEDE REGISTRAR COMPRAS DE INVENTARIO INICIAL
-    if not request.user.is_superuser:
-        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede acceder al inventario.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+    if not (request.user.is_superuser or request.user.has_perm('taller.add_compraconsumible')):
+        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para registrar compras de stock.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
     if request.method == 'POST':
         tipo_id = request.POST['tipo_consumible']; cantidad_str = request.POST.get('cantidad'); coste_total_str = request.POST.get('coste_total')
@@ -513,10 +517,10 @@ def stock_inicial_consumible(request):
 
 # --- CREAR PRESUPUESTO ---
 @login_required
+@bloquear_lectura # CANDADO
 def crear_presupuesto(request):
-    # BLOQUEO ABSOLUTO: SOLO EL JEFE PUEDE CREAR PRESUPUESTOS (Precios)
-    if not request.user.is_superuser:
-        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede crear presupuestos con precios.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+    if not (request.user.is_superuser or request.user.has_perm('taller.add_presupuesto')):
+        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para crear presupuestos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
     if request.method == 'POST':
         cliente_id = request.POST.get('cliente_existente')
@@ -637,11 +641,9 @@ def detalle_presupuesto(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo__cliente').prefetch_related('lineas'), id=presupuesto_id)
 
     if request.method == 'POST' and 'nuevo_estado' in request.POST:
-        # BLOQUEO INTERNO PARA EL PADRE
         if request.user.groups.filter(name='Solo Ver').exists():
             return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'. No tienes permiso para modificar datos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
-        # LOS MECANICOS PUEDEN ACEPTAR EL PRESUPUESTO
         nuevo_estado = request.POST['nuevo_estado']; estados_validos_cambio = ['Aceptado', 'Rechazado', 'Pendiente']
         if nuevo_estado in estados_validos_cambio and presupuesto.estado != 'Convertido':
             presupuesto.estado = nuevo_estado; presupuesto.save()
@@ -655,10 +657,10 @@ def detalle_presupuesto(request, presupuesto_id):
 
 # --- EDITAR PRESUPUESTO ---
 @login_required
+@bloquear_lectura # CANDADO
 def editar_presupuesto(request, presupuesto_id):
-    # BLOQUEO ABSOLUTO: SOLO JEFES
-    if not request.user.is_superuser:
-        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede editar presupuestos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+    if not (request.user.is_superuser or request.user.has_perm('taller.change_presupuesto')):
+        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para editar presupuestos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
     if presupuesto.estado == 'Convertido': return redirect('detalle_presupuesto', presupuesto_id=presupuesto.id)
@@ -790,7 +792,6 @@ def detalle_orden(request, orden_id):
     
     factura = None; pendiente_pago = Decimal('0.00'); whatsapp_url = None 
     
-    # NUEVA LÓGICA DE SEGURIDAD: Solo Jefes pueden cargar la factura
     if request.user.is_superuser:
         try: 
             factura = orden.factura
@@ -888,6 +889,7 @@ def historial_movimientos(request):
 
 # --- EDITAR MOVIMIENTO ---
 @login_required
+@bloquear_lectura # CANDADO
 def editar_movimiento(request, tipo, movimiento_id):
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para editar movimientos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -900,8 +902,8 @@ def editar_movimiento(request, tipo, movimiento_id):
 
 # --- GENERAR FACTURA ---
 @login_required
+@bloquear_lectura # CANDADO
 def generar_factura(request, orden_id):
-    # BLOQUEO ABSOLUTO EN GET Y POST
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede generar facturas.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
@@ -1002,8 +1004,8 @@ def ver_factura_publica(request, signed_id):
 
 
 @login_required
+@bloquear_lectura # CANDADO
 def editar_factura(request, factura_id):
-    # BLOQUEO ABSOLUTO EN GET Y POST
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede editar facturas.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
@@ -1422,6 +1424,7 @@ def informe_tarjeta(request):
 def ver_presupuesto_pdf(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
     
+    # NUEVA LÓGICA DE SEGURIDAD: Solo Jefes pueden ver el PDF con los precios
     if not request.user.is_superuser:
          return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para ver los precios ni descargar el PDF del presupuesto.</p>")
 
@@ -1511,3 +1514,29 @@ def historial_cuenta(request, cuenta_nombre):
         'meses_del_ano': range(1, 13), 'anos_disponibles': range(hoy.year - 2, hoy.year + 2),
     }
     return render(request, 'taller/historial_cuenta.html', context)
+
+# ==============================================================
+# --- VISTAS PARA EL TABLÓN DE ANUNCIOS E HISTORIAL ---
+# ==============================================================
+@login_required
+def agregar_nota(request):
+    if request.method == 'POST':
+        texto = request.POST.get('texto')
+        if texto:
+            NotaTablon.objects.create(autor=request.user, texto=texto)
+    return redirect('home')
+
+@login_required
+def completar_nota(request, nota_id):
+    nota = get_object_or_404(NotaTablon, id=nota_id)
+    # Solo el autor o el jefe pueden marcarla como completada
+    if request.user == nota.autor or request.user.is_superuser:
+        nota.completada = True
+        nota.save()
+    return redirect('home')
+
+@login_required
+def historial_notas(request):
+    # Muestra todas las notas que ya están completadas
+    notas = NotaTablon.objects.filter(completada=True).order_by('-fecha_creacion')
+    return render(request, 'taller/historial_notas.html', {'notas': notas})

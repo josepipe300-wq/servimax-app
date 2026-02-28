@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Tareas - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
+    <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <style>
+        .nota-box { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 10px; border: 1px solid #dee2e6; color: #333;}
+        .nota-autor { font-weight: bold; color: #28a745; font-size: 0.9em; margin-bottom: 8px; display: block; border-bottom: 1px solid #e9ecef; padding-bottom: 5px;}
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 800px;">
+        <div class="header">
+            <h1>Historial de Tareas Completadas</h1>
+            <a href="{% url 'home' %}" class="back-btn">← Volver al Inicio</a>
+        </div>
+        <hr>
+        
+        <div style="margin-top: 20px;">
+            {% for nota in notas %}
+                <div class="nota-box">
+                    <span class="nota-autor">✅ Completada | Creada por: {{ nota.autor.username|title }} el {{ nota.fecha_creacion|date:"d/m/Y H:i" }}</span>
+                    
+                    <span style="font-size: 1.05em; display: block; padding-top: 5px;">{{ nota.texto }}</span>
+                    
+                </div>
+            {% empty %}
+                <p style="text-align: center; color: #999; font-style: italic; padding: 20px;">Aún no hay tareas completadas en el historial.</p>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>

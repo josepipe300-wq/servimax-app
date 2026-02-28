@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Sum
+from django.contrib.auth.models import User # <-- IMPORTACIÓN AÑADIDA PARA EL TABLÓN
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
@@ -47,7 +48,6 @@ class Vehiculo(models.Model):
         self.modelo = self.modelo.upper()
         super(Vehiculo, self).save(*args, **kwargs)
 
-# SOLUCIÓN: Movemos la clase Presupuesto ARRIBA de OrdenDeReparacion
 class Presupuesto(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
@@ -120,14 +120,14 @@ class Gasto(models.Model):
         ('Gasolina/Diesel', 'Gasolina/Diesel'),
         ('Otros', 'Otros'),
         ('Compra de Consumibles', 'Compra de Consumibles'),
-        ('COMISIONES_INTERESES', 'Comisiones e Intereses Bancarios'), # NUEVA CATEGORÍA
+        ('COMISIONES_INTERESES', 'Comisiones e Intereses Bancarios'),
     ]
     
     METODO_PAGO_CHOICES = [
         ('EFECTIVO', 'Efectivo (Caja)'),
         ('CUENTA_TALLER', 'Cuenta Taller (Banco)'),
-        ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'), # La Revolving de 150€
-        ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'), # La de Pago Total
+        ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
+        ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'),
         ('CUENTA_ERIKA', 'Cuenta Erika (Antigua)'),
     ]
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
@@ -159,7 +159,7 @@ class Ingreso(models.Model):
         ('Taller', 'Pago de Cliente (Taller)'),
         ('Grua', 'Servicio de Grúa'),
         ('Otras Ganancias', 'Otras Ganancias'),
-        ('ABONO_TARJETA', 'Abono/Pago a Tarjeta'), # NUEVA CATEGORÍA
+        ('ABONO_TARJETA', 'Abono/Pago a Tarjeta'),
         ('Otros', 'Otros Ingresos'),
     ]
     
@@ -309,7 +309,6 @@ class AjusteStockConsumible(models.Model):
         self.motivo = self.motivo.upper()
         super().save(*args, **kwargs)
 
-# --- NUEVO MODELO PARA CONTROLAR LOS PAGOS E INTERESES DE TARJETA ---
 class CierreTarjeta(models.Model):
     TARJETA_CHOICES = [
         ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
@@ -337,8 +336,19 @@ class TipoConsumibleStock(TipoConsumible):
         total_ajustado = AjusteStockConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_ajustada'))['total'] or Decimal('0.00')
         return (total_comprado - total_usado_ordenes + total_ajustado).quantize(Decimal('0.01'))
 
-    # SOLUCIÓN: Agregada la propiedad alerta_stock que faltaba
     @property
     def alerta_stock(self):
         if self.nivel_minimo_stock is not None and self.stock_actual <= self.nivel_minimo_stock: return "⚠️ BAJO"
         return "✅ OK" if self.nivel_minimo_stock is not None else "N/A"
+
+# =========================================================
+# --- NUEVO MODELO: TABLÓN DE NOTAS DEL TALLER ---
+# =========================================================
+class NotaTablon(models.Model):
+    autor = models.ForeignKey(User, on_delete=models.CASCADE)
+    texto = models.TextField()
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    completada = models.BooleanField(default=False) # <-- NUEVO CAMPO
+
+    def __str__(self):
+        return f"{self.autor.username} - {self.texto[:20]}"
