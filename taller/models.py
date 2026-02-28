@@ -388,3 +388,23 @@ class NotaInternaOrden(models.Model):
 
     def __str__(self):
         return f"Nota interna en Orden #{self.orden.id}"
+
+        # =========================================================
+# --- SEÑALES AUTOMÁTICAS PARA EL INVENTARIO ---
+# =========================================================
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
+
+@receiver(pre_delete, sender=CompraConsumible)
+def revertir_stock_al_borrar_compra(sender, instance, **kwargs):
+    """Si se borra un Gasto de consumible, RESTAMOS ese stock que había entrado."""
+    if instance.tipo_consumible:
+        instance.tipo_consumible.stock_actual -= instance.cantidad
+        instance.tipo_consumible.save()
+
+@receiver(pre_delete, sender=UsoConsumible)
+def revertir_stock_al_borrar_uso(sender, instance, **kwargs):
+    """Si se borra una factura u orden que usó consumibles, SUMAMOS (devolvemos) el stock."""
+    if instance.tipo_consumible:
+        instance.tipo_consumible.stock_actual += instance.cantidad
+        instance.tipo_consumible.save()

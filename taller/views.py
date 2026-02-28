@@ -880,18 +880,63 @@ def historial_ordenes(request):
 # --- HISTORIAL MOVIMIENTOS ---
 @login_required
 def historial_movimientos(request):
-    periodo = request.GET.get('periodo', 'semana'); hoy = timezone.now().date()
-    gastos_qs = Gasto.objects.all(); ingresos_qs = Ingreso.objects.all()
-    if periodo == 'semana':
-        inicio_semana = hoy - timedelta(days=hoy.weekday())
-        gastos_qs = gastos_qs.filter(fecha__gte=inicio_semana); ingresos_qs = ingresos_qs.filter(fecha__gte=inicio_semana)
-    elif periodo == 'mes':
-        gastos_qs = gastos_qs.filter(fecha__year=hoy.year, fecha__month=hoy.month)
-        ingresos_qs = ingresos_qs.filter(fecha__year=hoy.year, fecha__month=hoy.month)
-    movimientos = sorted(list(gastos_qs) + list(ingresos_qs), key=lambda x: (x.fecha, -x.id if hasattr(x, 'id') else 0), reverse=True)
-    context = { 'movimientos': movimientos, 'periodo_seleccionado': periodo }
-    return render(request, 'taller/historial_movimientos.html', context)
+    from django.utils import timezone
+    from django.db.models.functions import ExtractYear
+    
+    tipo_seleccionado = request.GET.get('tipo', '')
+    ano_seleccionado = request.GET.get('ano', '')
+    mes_seleccionado = request.GET.get('mes', '')
+    matricula_seleccionada = request.GET.get('matricula', '') # <--- NUEVO: Capturamos la matrícula
 
+    gastos_qs = Gasto.objects.select_related('orden', 'orden__vehiculo').all()
+    ingresos_qs = Ingreso.objects.select_related('orden', 'orden__vehiculo').all()
+
+    # Filtros de fecha
+    if ano_seleccionado and ano_seleccionado.isdigit():
+        gastos_qs = gastos_qs.filter(fecha__year=int(ano_seleccionado))
+        ingresos_qs = ingresos_qs.filter(fecha__year=int(ano_seleccionado))
+        
+    if mes_seleccionado and mes_seleccionado.isdigit():
+        gastos_qs = gastos_qs.filter(fecha__month=int(mes_seleccionado))
+        ingresos_qs = ingresos_qs.filter(fecha__month=int(mes_seleccionado))
+
+    # --- NUEVO: Filtro por matrícula ---
+    if matricula_seleccionada:
+        # Busca si la matrícula contiene el texto (ignorando mayúsculas/minúsculas)
+        gastos_qs = gastos_qs.filter(orden__vehiculo__matricula__icontains=matricula_seleccionada)
+        ingresos_qs = ingresos_qs.filter(orden__vehiculo__matricula__icontains=matricula_seleccionada)
+
+    # Etiquetar y combinar
+    movimientos = []
+    if tipo_seleccionado in ['', 'gasto']:
+        for g in gastos_qs:
+            g.tipo = 'gasto'
+            movimientos.append(g)
+            
+    if tipo_seleccionado in ['', 'ingreso']:
+        for i in ingresos_qs:
+            i.tipo = 'ingreso'
+            movimientos.append(i)
+
+    # Ordenar
+    movimientos.sort(key=lambda x: (x.fecha, x.id), reverse=True)
+
+    # Extraer años
+    anos_gastos = Gasto.objects.annotate(year=ExtractYear('fecha')).values_list('year', flat=True).distinct()
+    anos_ingresos = Ingreso.objects.annotate(year=ExtractYear('fecha')).values_list('year', flat=True).distinct()
+    anos_disponibles = sorted(list(set(list(anos_gastos) + list(anos_ingresos))), reverse=True)
+    if not anos_disponibles:
+        anos_disponibles = [timezone.now().year]
+
+    context = {
+        'movimientos': movimientos,
+        'tipo_seleccionado': tipo_seleccionado,
+        'ano_seleccionado': int(ano_seleccionado) if ano_seleccionado.isdigit() else '',
+        'mes_seleccionado': str(mes_seleccionado),
+        'matricula_seleccionada': matricula_seleccionada, # <--- NUEVO: Lo pasamos a la web
+        'anos_disponibles': anos_disponibles,
+    }
+    return render(request, 'taller/historial_movimientos.html', context)
 
 # --- EDITAR MOVIMIENTO ---
 @login_required
@@ -904,6 +949,22 @@ def editar_movimiento(request, tipo, movimiento_id):
     admin_url_name = f'admin:taller_{tipo}_change'
     try: admin_url = reverse(admin_url_name, args=[movimiento_id]); return redirect(admin_url)
     except Exception as e: return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
+
+    # --- ELIMINAR MOVIMIENTOS DESDE EL HISTORIAL ---
+@login_required
+def eliminar_movimiento(request, tipo, movimiento_id):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("🔒 Acceso denegado.")
+        
+    if request.method == 'POST':
+        if tipo == 'gasto':
+            movimiento = get_object_or_404(Gasto, id=movimiento_id)
+            movimiento.delete() # Esto disparará la alarma de models.py automáticamente
+        elif tipo == 'ingreso':
+            movimiento = get_object_or_404(Ingreso, id=movimiento_id)
+            movimiento.delete()
+            
+    return redirect('historial_movimientos')
 
 
 # --- GENERAR FACTURA ---

@@ -31,6 +31,7 @@ urlpatterns = [
     # Informes y Contabilidad
     path('historial-movimientos/', views.historial_movimientos, name='historial_movimientos'),
     path('editar-movimiento/<str:tipo>/<int:movimiento_id>/', views.editar_movimiento, name='editar_movimiento'),
+    path('eliminar-movimiento/<str:tipo>/<int:movimiento_id>/', views.eliminar_movimiento, name='eliminar_movimiento'),
     path('informes/rentabilidad/', views.informe_rentabilidad, name='informe_rentabilidad'),
     path('orden/<int:orden_id>/ganancia/', views.detalle_ganancia_orden, name='detalle_ganancia_orden'),
     

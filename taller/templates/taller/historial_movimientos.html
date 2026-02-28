@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 {% load static %}
-{% load taller_extras %}
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -8,56 +7,181 @@
     <title>Historial de Movimientos - ServiMax</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ========================================= */
+        /* ESTILO MINIMALISTA Y LIMPIO               */
+        /* ========================================= */
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 1300px !important; margin: 0 auto; padding: 30px 20px; }
+        
+        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        
+        /* Paneles y Tarjetas */
+        .section-panel { background: #ffffff; padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03), 0 2px 4px -1px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; margin-bottom: 24px; }
+        
+        /* Formularios y Botones */
+        .modern-select { padding: 10px 16px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; font-family: 'Inter', sans-serif; font-weight: 500; outline: none; cursor: pointer; color: #334155; transition: 0.2s; }
+        .modern-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); background: white;}
+        
+        .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #0f172a; color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 600; font-size: 0.95em; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-decoration: none; }
+        .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); filter: brightness(1.1); }
+        
+        /* Tabla Elegante */
+        .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; background: white; }
+        .table-modern th, .table-modern td { padding: 16px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .table-modern th { background-color: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0;}
+        .table-modern tr:last-child td { border-bottom: none; }
+        .table-modern tr:hover { background-color: #f8fafc; }
+        
+        /* Etiquetas de Estado (Badges) */
+        .badge { padding: 6px 12px; border-radius: 9999px; font-weight: 700; font-size: 0.8em; letter-spacing: 0.02em; display: inline-block; }
+        .badge-ingreso { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .badge-gasto { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        .badge-metodo { background-color: #f1f5f9; color: #475569; font-size: 0.75em; border: 1px solid #cbd5e1; margin-top: 4px; font-weight: 600;}
+
+        /* Botones de Acción (Editar / Eliminar) */
+        .action-buttons { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+        .btn-action { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; transition: 0.2s; border: none; cursor: pointer; font-size: 1.1em; }
+        .btn-edit { background-color: #fef3c7; color: #d97706; border: 1px solid #fde68a; }
+        .btn-edit:hover { background-color: #fde68a; transform: scale(1.05); }
+        .btn-delete { background-color: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+        .btn-delete:hover { background-color: #fecaca; transform: scale(1.05); }
+
+        .empty-state { text-align: center; padding: 60px 20px; background: #ffffff; border-radius: 16px; border: 1px dashed #cbd5e1; color: #64748b; font-weight: 500; margin-top: 20px;}
+    </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Historial Completo de Movimientos</h1>
-            <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
+        
+        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em; transition: color 0.2s;">← Volver al Inicio</a>
+                <h1 class="header-title">Historial de Movimientos</h1>
+                <p style="color: #64748b; font-weight: 500; margin: 5px 0 0 0;">Registro completo de ingresos y gastos del taller.</p>
+            </div>
+            
+            {% if request.user.is_superuser %}
+            <div style="display: flex; gap: 10px;">
+                <a href="{% url 'registrar_ingreso' %}" class="btn-modern" style="background: #10b981; box-shadow: 0 4px 6px rgba(16,185,129,0.2);">💰 + Ingreso</a>
+                <a href="{% url 'anadir_gasto' %}" class="btn-modern" style="background: #ef4444; box-shadow: 0 4px 6px rgba(239,68,68,0.2);">💸 - Gasto</a>
+            </div>
+            {% endif %}
         </div>
         
-        <div class="filters">
-            <a href="?periodo=semana" class="{% if periodo_seleccionado == 'semana' %}active{% endif %}">Esta Semana</a>
-            <a href="?periodo=mes" class="{% if periodo_seleccionado == 'mes' %}active{% endif %}">Este Mes</a>
-            <a href="?periodo=todo" class="{% if periodo_seleccionado == 'todo' %}active{% endif %}">Ver Todo</a>
-        </div>
-        <hr>
+        <div class="section-panel" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; padding: 20px 24px;">
+            <span style="font-weight: 700; color: #0f172a; font-size: 1.05em;">🔍 Filtrar Movimientos:</span>
+            <form method="get" action="{% url 'historial_movimientos' %}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+             <form method="get" action="{% url 'historial_movimientos' %}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                
+                <input type="text" name="matricula" class="modern-select" placeholder="Buscar Matrícula..." value="{{ matricula_seleccionada }}" style="width: 160px; background: #ffffff;">
 
-        <table class="history-table">
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Descripción</th>
-                    <th style="text-align: right;">Importe</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for movimiento in movimientos %}
-                    {% with es_gasto=movimiento|get_class_name|is_gasto %}
-                    <tr class="{% if es_gasto %}gasto-row{% else %}ingreso-row{% endif %}">
-                        <td>{{ movimiento.fecha|date:"d/m/Y" }}</td>
-                        <td>{{ movimiento.get_categoria_display }}</td>
-                        <td>{{ movimiento.descripcion }}</td>
-                        <td style="text-align: right;">
-                            {% if es_gasto %}-{% endif %}
-                            {{ movimiento.importe|floatformat:2 }} €
-                        </td>
-                        <td>
-                            {% if es_gasto %}
-                                <a href="{% url 'editar_movimiento' 'gasto' movimiento.id %}" class="edit-btn">Editar</a>
-                            {% else %}
-                                <a href="{% url 'editar_movimiento' 'ingreso' movimiento.id %}" class="edit-btn">Editar</a>
+                <select name="tipo" class="modern-select">
+                    <option value="">-- Todos los Tipos --</option>   
+                <select name="tipo" class="modern-select">
+                    <option value="">-- Todos los Tipos --</option>
+                    <option value="ingreso" {% if tipo_seleccionado == 'ingreso' %}selected{% endif %}>🟢 Solo Ingresos</option>
+                    <option value="gasto" {% if tipo_seleccionado == 'gasto' %}selected{% endif %}>🔴 Solo Gastos</option>
+                </select>
+
+                <select name="ano" class="modern-select">
+                    <option value="">-- Todos los Años --</option>
+                    {% for ano in anos_disponibles %}
+                        <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
+                    {% endfor %}
+                </select>
+                
+                <select name="mes" class="modern-select">
+                    <option value="">-- Todos los Meses --</option>
+                    {% for i in "123456789012"|make_list %}
+                        <option value="{{ forloop.counter }}" {% if mes_seleccionado == forloop.counter|stringformat:"i" %}selected{% endif %}>Mes {{ forloop.counter }}</option>
+                    {% endfor %}
+                </select>
+                
+                <button type="submit" class="btn-modern">Aplicar Filtros</button>
+                <a href="{% url 'historial_movimientos' %}" class="btn-modern" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; box-shadow: none;">Limpiar</a>
+            </form>
+        </div>
+
+        {% if movimientos %}
+            <div style="overflow-x: auto;">
+                <table class="table-modern">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Tipo</th>
+                            <th>Categoría</th>
+                            <th>Descripción / Detalles</th>
+                            <th style="text-align: right;">Importe</th>
+                            {% if request.user.is_superuser %}
+                            <th style="text-align: right;">Acciones</th>
                             {% endif %}
-                        </td>
-                    </tr>
-                    {% endwith %}
-                {% empty %}
-                    <tr><td colspan="5" style="text-align: center; padding: 20px;">No hay movimientos en este periodo.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mov in movimientos %}
+                        <tr>
+                            <td style="color: #475569; font-weight: 500; font-size: 0.95em;">
+                                {{ mov.fecha|date:"d/m/Y" }}
+                            </td>
+                            
+                            <td>
+                                {% if mov.tipo == 'ingreso' %}
+                                    <span class="badge badge-ingreso">INGRESO</span>
+                                {% else %}
+                                    <span class="badge badge-gasto">GASTO</span>
+                                {% endif %}
+                            </td>
+                            
+                            <td style="font-weight: 600; color: #334155;">
+                                {{ mov.categoria }}
+                            </td>
+                            
+                            <td>
+                                <div style="color: #0f172a; font-weight: 500; margin-bottom: 4px;">{{ mov.descripcion }}</div>
+                                <span class="badge badge-metodo">💳 {{ mov.metodo_pago }}</span>
+                                {% if mov.orden %}
+                                    <div style="margin-top: 6px;">
+                                        <a href="{% url 'detalle_orden' mov.orden.id %}" style="display: inline-flex; align-items: center; gap: 5px; background: #eff6ff; color: #1d4ed8; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 600; text-decoration: none; border: 1px solid #bfdbfe; transition: 0.2s;">
+                                            🔗 Orden #{{ mov.orden.id }} - 🚗 {{ mov.orden.vehiculo.matricula }}
+                                        </a>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            
+                            <td style="text-align: right; font-weight: 800; font-size: 1.15em; {% if mov.tipo == 'gasto' %}color: #ef4444;{% else %}color: #10b981;{% endif %}">
+                                {% if mov.tipo == 'gasto' %}-{% else %}+{% endif %}{{ mov.importe|floatformat:2 }} €
+                            </td>
+                            
+                            {% if request.user.is_superuser %}
+                            <td>
+                                <div class="action-buttons">
+                                    <a href="{% url 'editar_movimiento' mov.tipo mov.id %}" class="btn-action btn-edit" title="Editar Movimiento">
+                                        ✏️
+                                    </a>
+                                    
+                                    <form action="{% url 'eliminar_movimiento' mov.tipo mov.id %}" method="post" style="margin: 0;" onsubmit="return confirm('⚠️ ¿Estás completamente seguro de eliminar este movimiento?\n\nSi es la compra de un consumible (aceite, líquido, etc.), el stock se restará automáticamente del almacén para cuadrar las cuentas.');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn-action btn-delete" title="Eliminar Movimiento">
+                                            🗑️
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <span style="font-size: 3em; display: block; margin-bottom: 15px;">📊</span>
+                <p style="font-size: 1.2em; color: #0f172a; margin: 0 0 10px 0;">No se encontraron movimientos.</p>
+                <p style="margin: 0;">Prueba a cambiar los filtros de fecha o añade un nuevo ingreso/gasto.</p>
+            </div>
+        {% endif %}
+        
     </div>
 </body>
 </html>
