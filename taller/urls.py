@@ -34,10 +34,11 @@ urlpatterns = [
     path('informes/rentabilidad/', views.informe_rentabilidad, name='informe_rentabilidad'),
     path('orden/<int:orden_id>/ganancia/', views.detalle_ganancia_orden, name='detalle_ganancia_orden'),
     
-    # --- LA SOLUCIÓN AL ERROR (Cambio a <path:categoria> para que acepte barras) ---
+    # --- LA SOLUCIÓN AL EMPLEADO: La ruta larga va PRIMERO ---
     path('informes/gastos/', views.informe_gastos, name='informe_gastos'),
-    path('informes/gastos/cat/<path:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
     path('informes/gastos/cat/<path:categoria>/emp/<str:empleado_nombre>/', views.informe_gastos_desglose, name='informe_gastos_desglose_empleado'),
+    path('informes/gastos/cat/<path:categoria>/', views.informe_gastos_desglose, name='informe_gastos_desglose'),
+    
     path('informes/ingresos/', views.informe_ingresos, name='informe_ingresos'),
     path('informes/ingresos/cat/<path:categoria>/', views.informe_ingresos_desglose, name='informe_ingresos_desglose'),
 
