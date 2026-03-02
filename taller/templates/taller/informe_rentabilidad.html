@@ -7,166 +7,201 @@
     <title>Informe de Rentabilidad - ServiMax</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* Estilos inline para asegurar consistencia si faltan en el CSS global */
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            text-align: center;
-            border: 1px solid #e0e0e0;
-        }
-        .card h3 {
-            margin-top: 0;
-            font-size: 1.1em;
-            color: #666;
-        }
-        .card .amount {
-            font-size: 1.8em;
-            font-weight: bold;
-            margin: 10px 0 0 0;
-        }
-        .total-card {
-            background-color: #f0fff4; /* Verde muy suave */
-            border: 2px solid #28a745;
-        }
-        .ingresos { color: #28a745; }
-        .clickable-row { cursor: pointer; transition: background 0.1s; }
-        .clickable-row:hover { background-color: #f9f9f9; }
+        /* ========================================= */
+        /* ESTILO MINIMALISTA Y LIMPIO               */
+        /* ========================================= */
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 1300px !important; margin: 0 auto; padding: 30px 20px; }
+        
+        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        
+        /* Paneles y Tarjetas */
+        .section-panel { background: #ffffff; padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03), 0 2px 4px -1px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; margin-bottom: 24px; }
+        .section-title { font-size: 1.2em; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 20px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; }
+        
+        /* Filtros */
+        .modern-select { padding: 10px 16px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; font-family: 'Inter', sans-serif; font-weight: 500; outline: none; cursor: pointer; color: #334155; transition: 0.2s; }
+        .modern-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); background: white;}
+        
+        .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #0f172a; color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 600; font-size: 0.95em; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-decoration: none; }
+        .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); filter: brightness(1.1); }
+        
+        /* Grid de Cajas 4 Columnas */
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .card { background: white; border: 1px solid #e2e8f0; padding: 24px; border-radius: 16px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-5px); }
+        .card h4 { color: #64748b; font-size: 0.85em; font-weight: 700; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 0.05em; }
+        .card .amount { font-size: 2.2em; font-weight: 900; margin: 5px 0 0 0; }
+        .card .desc { font-size: 0.85em; color: #94a3b8; margin: 8px 0 0 0; font-weight: 500; }
+        
+        /* Colores Cajas */
+        .card-mo .amount { color: #0f172a; }
+        .card-piezas .amount { color: #3b82f6; }
+        .card-grua .amount { color: #f59e0b; }
+        .card-total { background: #10b981; border: none; box-shadow: 0 10px 25px -5px rgba(16,185,129,0.4); color: white; }
+        .card-total h4 { color: #d1fae5; }
+        .card-total .amount { color: white; }
+        .card-total .desc { color: #a7f3d0; }
+
+        /* Tabla Elegante */
+        .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; background: white; }
+        .table-modern th, .table-modern td { padding: 16px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .table-modern th { background-color: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0;}
+        .table-modern tr:last-child td { border-bottom: none; }
+        .table-modern tbody tr { transition: background-color 0.2s; cursor: pointer; }
+        .table-modern tbody tr:hover { background-color: #f8fafc; }
+        
+        .badge-grua { background-color: #fef3c7; color: #b45309; padding: 4px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 700; border: 1px solid #fde68a; }
+        .money-col { text-align: right; font-weight: 700; color: #0f172a; }
+        .money-success { color: #10b981 !important; font-size: 1.1em; }
+        
+        .empty-state { text-align: center; padding: 60px 20px; background: #ffffff; border-radius: 16px; border: 1px dashed #cbd5e1; color: #64748b; font-weight: 500;}
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Informe de Rentabilidad</h1>
-            <a href="{% url 'home' %}" class="back-btn">← Volver al Inicio</a>
-        </div>
-
-        <form method="get" action="{% url 'informe_rentabilidad' %}">
-            <div class="filters">
-                <div>
-                    <label for="ano">Año:</label>
-                    <select name="ano" id="ano">
-                        <option value="">Todos</option>
-                        {% for ano in anos_disponibles %}
-                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label for="mes">Mes:</label>
-                    <select name="mes" id="mes">
-                        <option value="">Todo el Año</option>
-                        {% for i in meses_del_ano %}
-                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit">Filtrar</button>
-            </div>
-        </form>
-        <hr>
-
-        <h2>Resumen de Ganancias</h2>
-        <div class="summary-grid">
-            <div class="card">
-                <h3>Ganancia Neta (Taller)</h3>
-                <p class="amount ingresos">{{ ganancia_trabajos|floatformat:2 }} €</p>
-                <small style="color: #888;">Facturado - (Piezas + Gastos)</small>
-            </div>
-
-            <div class="card">
-                <h3>Servicios Directos (Grúa/Otros)</h3>
-                <p class="amount" style="color: #17a2b8;">
-                    {{ ganancia_grua|add:ganancia_otras|floatformat:2 }} €
-                </p>
-                <small style="color: #888;">Ingresos sin coste directo</small>
-            </div>
-
-            <div class="card total-card">
-                <h3 style="color: #28a745;">Rentabilidad Total</h3>
-                <p class="amount ingresos" style="font-size: 2.2em;">
-                    {{ total_ganancia_general|floatformat:2 }} €
-                </p>
+        
+        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em; transition: color 0.2s;">← Volver al Inicio</a>
+                <h1 class="header-title">Informe de Rentabilidad</h1>
+                <p style="color: #64748b; font-weight: 500; margin: 5px 0 0 0;">Análisis financiero avanzado de ServiMax.</p>
             </div>
         </div>
 
-        <h2 style="margin-top: 40px;">Desglose por Órdenes de Reparación</h2>
-        <div class="table-responsive">
-            <table class="report-table">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Nº Factura</th>
-                        <th>Vehículo</th>
-                        <th>Cliente</th>
-                        <th style="text-align: right;">Total Factura</th>
-                        <th style="text-align: right;">Ganancia Real</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in reporte %}
-                    <tr class="clickable-row" onclick="window.location.href='{% url 'detalle_ganancia_orden' item.orden.id %}'">
-                        <td>{{ item.factura.fecha_emision|date:"d/m/Y" }}</td>
-                        <td>
-                            {% if item.factura.numero_factura %}
-                                {{ item.factura.numero_factura }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>
-                            {{ item.orden.vehiculo.marca }} {{ item.orden.vehiculo.modelo }}
-                            <br><small style="color: #666;">{{ item.orden.vehiculo.matricula }}</small>
-                        </td>
-                        <td>{{ item.orden.cliente.nombre }}</td>
-                        <td style="text-align: right;">
-                            {% if item.factura.es_factura %}
-                                {{ item.factura.subtotal }} € <small>(Base)</small>
-                            {% else %}
-                                {{ item.factura.total_final }} €
-                            {% endif %}
-                        </td>
-                        <td style="text-align: right; font-weight: bold; color: #28a745; background-color: #f9fff9;">
-                            {{ item.ganancia_total|floatformat:2 }} €
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="6" style="text-align: center; padding: 20px;">No hay facturas registradas en este periodo.</td>
-                    </tr>
+        <div class="section-panel" style="display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 15px; padding: 20px 24px;">
+            <span style="font-weight: 700; color: #0f172a; font-size: 1.05em;">📅 Filtrar Periodo:</span>
+            
+            <form method="get" action="{% url 'informe_rentabilidad' %}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                <select name="ano" class="modern-select" onchange="this.form.submit();">
+                    <option value="">-- Todos los Años --</option>
+                    {% for ano in anos_disponibles %}
+                        <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
                     {% endfor %}
-                </tbody>
-            </table>
+                </select>
+                
+                <select name="mes" class="modern-select" onchange="this.form.submit();">
+                    <option value="">-- Todos los Meses --</option>
+                    {% for i in meses_del_ano %}
+                        <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>Mes {{ i }}</option>
+                    {% endfor %}
+                </select>
+                
+                <a href="{% url 'informe_rentabilidad' %}" class="btn-modern" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; box-shadow: none;">Limpiar Filtros</a>
+            </form>
         </div>
+
+        <div class="summary-grid">
+            <div class="card card-mo">
+                <h4>Mano de Obra</h4>
+                <p class="amount">{{ ganancia_mo|floatformat:2 }} €</p>
+                <p class="desc">Ingreso 100% limpio por trabajo</p>
+            </div>
+
+            <div class="card card-piezas">
+                <h4>Margen Comercial</h4>
+                <p class="amount">{{ ganancia_piezas|floatformat:2 }} €</p>
+                <p class="desc">Beneficio por venta de piezas</p>
+            </div>
+
+            <div class="card card-grua">
+                <h4>Grúa y Otros</h4>
+                <p class="amount">{{ ganancia_grua|add:ganancia_otras|floatformat:2 }} €</p>
+                <p class="desc">Servicios directos y traslados</p>
+            </div>
+
+            <div class="card card-total">
+                <h4>Rentabilidad Total</h4>
+                <p class="amount">{{ total_ganancia_general|floatformat:2 }} €</p>
+                <p class="desc">Beneficio Global Real del Taller</p>
+            </div>
+        </div>
+
+        <h2 class="section-title">Desglose por Órdenes de Reparación</h2>
+        {% if reporte %}
+            <div style="overflow-x: auto; margin-bottom: 40px;">
+                <table class="table-modern">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Nº Doc.</th>
+                            <th>Vehículo y Cliente</th>
+                            <th class="money-col">Total Cobrado al Cliente</th>
+                            <th class="money-col">Aportación de Grúa</th>
+                            <th class="money-col">Mano de Obra</th>
+                            <th class="money-col">Margen Piezas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in reporte %}
+                        <tr onclick="window.location.href='{% url 'detalle_ganancia_orden' item.orden.id %}'">
+                            <td style="color: #64748b; font-weight: 500;">{{ item.factura.fecha_emision|date:"d/m/Y" }}</td>
+                            <td>
+                                <strong style="color: #0f172a;">
+                                    {% if item.factura.numero_factura %}{{ item.factura.numero_factura }}{% else %}<span style="color:#94a3b8; font-style:italic;">Recibo #{{ item.factura.id }}</span>{% endif %}
+                                </strong>
+                            </td>
+                            <td>
+                                <div style="font-weight: 700; color: #1e40af; margin-bottom: 4px;">{{ item.orden.vehiculo.matricula }}</div>
+                                <div style="font-size: 0.85em; color: #475569;">{{ item.orden.cliente.nombre|title }}</div>
+                            </td>
+                            <td class="money-col">
+                                {% if item.factura.es_factura %}
+                                    {{ item.factura.subtotal }} € <span style="font-size: 0.8em; color: #94a3b8; font-weight: 500;">(Base)</span>
+                                {% else %}
+                                    {{ item.factura.total_final }} €
+                                {% endif %}
+                            </td>
+                            <td class="money-col">
+                                {% if item.grua_facturada > 0 %}
+                                    <span class="badge-grua">+ {{ item.grua_facturada|floatformat:2 }} €</span>
+                                {% else %}
+                                    <span style="color: #cbd5e1;">-</span>
+                                {% endif %}
+                            </td>
+                            
+                            <td class="money-col" style="color: #0f172a;">
+                                {{ item.ganancia_mo|floatformat:2 }} €
+                            </td>
+                            
+                            <td class="money-col" style="color: #3b82f6;">
+                                {{ item.ganancia_piezas|floatformat:2 }} €
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <span style="font-size: 3em; display: block; margin-bottom: 15px;">📊</span>
+                <p style="font-size: 1.2em; color: #0f172a; margin: 0 0 10px 0;">No hay órdenes finalizadas en este periodo.</p>
+                <p style="margin: 0;">Los trabajos terminados aparecerán aquí para desglosar sus ganancias.</p>
+            </div>
+        {% endif %}
 
         {% if ganancias_directas_desglose %}
-        <h2 style="margin-top: 40px;">Otros Ingresos Directos</h2>
-        <div class="table-responsive">
-            <table class="report-table">
+        <h2 class="section-title">Otros Ingresos Directos (Caja Fuerte)</h2>
+        <div style="overflow-x: auto; margin-bottom: 40px;">
+            <table class="table-modern">
                 <thead>
                     <tr>
                         <th>Fecha</th>
                         <th>Categoría</th>
                         <th>Descripción</th>
-                        <th style="text-align: right;">Importe</th>
+                        <th class="money-col">Importe Neto</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for ingreso in ganancias_directas_desglose %}
                     <tr>
-                        <td>{{ ingreso.fecha|date:"d/m/Y" }}</td>
-                        <td>{{ ingreso.categoria }}</td>
-                        <td>{{ ingreso.descripcion }}</td>
-                        <td style="text-align: right; font-weight: bold; color: #17a2b8;">
-                            +{{ ingreso.importe|floatformat:2 }} €
+                        <td style="color: #64748b; font-weight: 500;">{{ ingreso.fecha|date:"d/m/Y" }}</td>
+                        <td><span style="background: #f1f5f9; padding: 4px 10px; border-radius: 6px; font-weight: 700; color: #475569; font-size: 0.85em;">{{ ingreso.categoria|upper }}</span></td>
+                        <td style="font-weight: 500; color: #0f172a;">{{ ingreso.descripcion }}</td>
+                        <td class="money-col" style="color: #f59e0b;">
+                            + {{ ingreso.importe|floatformat:2 }} €
                         </td>
                     </tr>
                     {% endfor %}
@@ -174,6 +209,7 @@
             </table>
         </div>
         {% endif %}
+
     </div>
 </body>
 </html>

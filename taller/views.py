@@ -1043,6 +1043,20 @@ def generar_factura(request, orden_id):
                         if importe <= 0: continue
                         subtotal += importe; LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
                     except: pass
+
+                    # --- NUEVO: SERVICIO DE GRÚA ---
+            descripciones_grua = request.POST.getlist('grua_desc')
+            importes_grua = request.POST.getlist('grua_importe')
+            for desc, importe_str in zip(descripciones_grua, importes_grua):
+                if desc and importe_str:
+                    try:
+                        importe = Decimal(importe_str)
+                        if importe <= 0: continue
+                        subtotal += importe
+                        # Lo guardamos con el tipo exacto "Grúa"
+                        LineaFactura.objects.create(factura=factura, tipo='Grúa', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
+                    except: pass
+            # -------------------------------
             
             iva_calculado = Decimal('0.00'); subtotal_positivo = max(subtotal, Decimal('0.00'))
             if es_factura: iva_calculado = (subtotal_positivo * Decimal('0.21')).quantize(Decimal('0.01'))
@@ -1076,6 +1090,7 @@ def editar_factura(request, factura_id):
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede editar facturas.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
+    import json
     factura = get_object_or_404(Factura.objects.prefetch_related('lineas'), id=factura_id)
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo__cliente'), id=factura.orden_id)
 
@@ -1092,10 +1107,19 @@ def editar_factura(request, factura_id):
     repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
     gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
     tipos_consumible = TipoConsumible.objects.all()
+    
     lineas_existentes_list = []
     for linea in factura.lineas.all():
-        linea_data = { 'tipo': linea.tipo, 'descripcion': linea.descripcion, 'cantidad': float(linea.cantidad), 'precio_unitario': float(linea.precio_unitario),
-                       'tipo_consumible_id': None, 'repuesto_id': None, 'externo_id': None }
+        linea_data = { 
+            'tipo': linea.tipo, 
+            'descripcion': linea.descripcion, 
+            'cantidad': float(linea.cantidad), 
+            'precio_unitario': float(linea.precio_unitario),
+            'tipo_consumible_id': None, 
+            'repuesto_id': None, 
+            'externo_id': None 
+        }
+        
         if linea.tipo == 'Consumible':
             tipo_obj = TipoConsumible.objects.filter(nombre__iexact=linea.descripcion).first()
             linea_data['tipo_consumible_id'] = tipo_obj.id if tipo_obj else None
@@ -1105,8 +1129,21 @@ def editar_factura(request, factura_id):
         elif linea.tipo == 'Externo':
             gasto_obj = gastos_otros_qs.filter(descripcion__iexact=linea.descripcion).first()
             linea_data['externo_id'] = gasto_obj.id if gasto_obj else None
+            
+        # ¡NUEVO! La vista ahora entiende la Grúa y la manda al HTML
+        elif linea.tipo == 'Grúa':
+            linea_data['tipo'] = 'Grúa'
+            
         lineas_existentes_list.append(linea_data)
-    context = { 'orden': orden, 'factura_existente': factura, 'repuestos': repuestos_qs, 'gastos_otros': gastos_otros_qs, 'tipos_consumible': tipos_consumible, 'lineas_existentes_json': json.dumps(lineas_existentes_list) }
+        
+    context = { 
+        'orden': orden, 
+        'factura_existente': factura, 
+        'repuestos': repuestos_qs, 
+        'gastos_otros': gastos_otros_qs, 
+        'tipos_consumible': tipos_consumible, 
+        'lineas_existentes_json': json.dumps(lineas_existentes_list) 
+    }
     return render(request, 'taller/editar_factura.html', context)
 
 
@@ -1116,6 +1153,10 @@ def informe_rentabilidad(request):
     if not request.user.is_superuser:
         return redirect('home')
 
+    from django.db.models import Sum
+    from decimal import Decimal
+    from django.utils import timezone
+
     hoy = timezone.now().date()
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
@@ -1123,7 +1164,7 @@ def informe_rentabilidad(request):
     ano_seleccionado = request.GET.get('ano')
     mes_seleccionado = request.GET.get('mes')
 
-    facturas_qs = Factura.objects.select_related('orden__vehiculo').prefetch_related('lineas', 'orden__vehiculo__gasto_set')
+    facturas_qs = Factura.objects.select_related('orden__vehiculo').prefetch_related('lineas')
     ingresos_grua_qs = Ingreso.objects.filter(categoria='Grua')
     otras_ganancias_qs = Ingreso.objects.filter(categoria='Otras Ganancias')
 
@@ -1151,7 +1192,10 @@ def informe_rentabilidad(request):
     ingresos_grua = ingresos_grua_qs.order_by('-fecha')
     otras_ganancias = otras_ganancias_qs.order_by('-fecha')
     
-    ganancia_trabajos = Decimal('0.00')
+    # ACUMULADORES GLOBALES (El cerebro de las 4 cajas)
+    total_ganancia_mo = Decimal('0.00')
+    total_ganancia_piezas = Decimal('0.00')
+    ganancia_grua_facturada = Decimal('0.00')
     reporte = []
     
     compras_consumibles = CompraConsumible.objects.order_by('tipo_id', '-fecha_compra')
@@ -1165,38 +1209,71 @@ def informe_rentabilidad(request):
         orden = factura.orden
         if not orden: continue 
         
-        gastos_orden_qs = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros'])
-        coste_piezas_externos_factura = gastos_orden_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        gastos_orden_qs = Gasto.objects.filter(orden=orden)
+        coste_repuestos = gastos_orden_qs.filter(categoria='Repuestos').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        coste_externos = gastos_orden_qs.filter(categoria='Otros').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
         coste_consumibles_factura = Decimal('0.00')
         
+        pvp_mo = Decimal('0.00')
+        pvp_piezas = Decimal('0.00')
+        grua_en_esta_factura = Decimal('0.00')
+        
         for linea in factura.lineas.all():
-            if linea.tipo == 'Consumible':
-                tipo_obj = tipos_consumible_dict.get(linea.descripcion.upper())
-                if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo:
+            if linea.tipo == 'Mano de Obra':
+                pvp_mo += linea.total_linea
+            elif linea.tipo == 'Grúa':
+                grua_en_esta_factura += linea.total_linea
+                ganancia_grua_facturada += linea.total_linea
+            elif linea.tipo in ['Repuesto', 'Consumible', 'Externo']:
+                pvp_piezas += linea.total_linea
+                if linea.tipo == 'Consumible':
+                    tipo_obj = tipos_consumible_dict.get(linea.descripcion.upper())
+                    if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo:
                         compra_relevante = ultimas_compras_por_tipo[tipo_obj.id]
                         if compra_relevante.fecha_compra <= factura.fecha_emision:
-                            coste_linea = (compra_relevante.coste_por_unidad or Decimal('0.00')) * linea.cantidad
-                            coste_consumibles_factura += coste_linea
+                            coste_consumibles_factura += (compra_relevante.coste_por_unidad or Decimal('0.00')) * linea.cantidad
         
-        coste_total_directo = coste_piezas_externos_factura + coste_consumibles_factura
-        base_cobrada = factura.subtotal if factura.es_factura else factura.total_final
-        ganancia_total_orden = base_cobrada - coste_total_directo
+        # CÁLCULOS SEPARADOS DE ESTA ORDEN
+        coste_total_piezas = coste_repuestos + coste_externos + coste_consumibles_factura
+        ganancia_piezas_orden = pvp_piezas - coste_total_piezas
+        ganancia_total_taller = pvp_mo + ganancia_piezas_orden
         
-        ganancia_trabajos += ganancia_total_orden
-        reporte.append({ 'orden': orden, 'factura': factura, 'ganancia_total': ganancia_total_orden })
+        # SUMAMOS AL GLOBAL
+        total_ganancia_mo += pvp_mo
+        total_ganancia_piezas += ganancia_piezas_orden
+        
+        reporte.append({ 
+            'orden': orden, 
+            'factura': factura, 
+            'ganancia_mo': pvp_mo,
+            'ganancia_piezas': ganancia_piezas_orden,
+            'grua_facturada': grua_en_esta_factura,
+            'ganancia_total_taller': ganancia_total_taller
+        })
     
-    ganancia_grua_total = ingresos_grua.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    ganancia_grua_directa = ingresos_grua.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     ganancia_otras_total = otras_ganancias.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    total_ganancia_general = ganancia_trabajos + ganancia_grua_total + ganancia_otras_total
+    
+    ganancia_grua_total = ganancia_grua_directa + ganancia_grua_facturada
+    total_ganancia_general = total_ganancia_mo + total_ganancia_piezas + ganancia_grua_total + ganancia_otras_total
+    
     ganancias_directas_desglose = sorted(list(ingresos_grua) + list(otras_ganancias), key=lambda x: x.fecha, reverse=True)
     
     context = { 
-        'reporte': reporte, 'ganancia_trabajos': ganancia_trabajos, 'ganancia_grua': ganancia_grua_total, 
-        'ganancia_otras': ganancia_otras_total, 'ganancias_directas_desglose': ganancias_directas_desglose, 
-        'total_ganancia_general': total_ganancia_general, 'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13)
+        'reporte': reporte, 
+        'ganancia_mo': total_ganancia_mo,
+        'ganancia_piezas': total_ganancia_piezas,
+        'ganancia_grua': ganancia_grua_total, 
+        'ganancia_otras': ganancia_otras_total, 
+        'ganancias_directas_desglose': ganancias_directas_desglose, 
+        'total_ganancia_general': total_ganancia_general, 
+        'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int, 
+        'mes_seleccionado': mes_sel_int, 
+        'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/informe_rentabilidad.html', context)
+
 
 @login_required
 def detalle_ganancia_orden(request, orden_id):
@@ -1204,45 +1281,99 @@ def detalle_ganancia_orden(request, orden_id):
         return redirect('home')
 
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo', 'cliente'), id=orden_id)
-    try: factura = Factura.objects.prefetch_related('lineas', 'orden__ingreso_set').get(orden=orden)
-    except Factura.DoesNotExist: return redirect('detalle_orden', orden_id=orden.id)
-    desglose_agrupado = {}; gastos_usados_ids = set()
+    try: 
+        factura = Factura.objects.prefetch_related('lineas', 'orden__ingreso_set').get(orden=orden)
+    except Factura.DoesNotExist: 
+        return redirect('detalle_orden', orden_id=orden.id)
+    
+    desglose_agrupado = {}
+    gastos_usados_ids = set()
     
     gastos_asociados = Gasto.objects.filter(orden=orden, categoria__in=['Repuestos', 'Otros']).order_by('id')
     compras_consumibles = CompraConsumible.objects.filter(fecha_compra__lte=factura.fecha_emision).order_by('tipo_id', '-fecha_compra')
-    ultimas_compras_por_tipo = {};
+    
+    ultimas_compras_por_tipo = {}
     for compra in compras_consumibles:
-        if compra.tipo_id not in ultimas_compras_por_tipo: ultimas_compras_por_tipo[compra.tipo_id] = compra
+        if compra.tipo_id not in ultimas_compras_por_tipo: 
+            ultimas_compras_por_tipo[compra.tipo_id] = compra
+            
     tipos_consumible_dict = {tipo.nombre.upper(): tipo for tipo in TipoConsumible.objects.all()}
     
     for linea in factura.lineas.all():
-        pvp_linea = linea.total_linea; coste_linea = Decimal('0.00'); descripcion_limpia = linea.descripcion.strip().upper(); key = (linea.tipo, descripcion_limpia)
-        desglose_agrupado.setdefault(key, {'descripcion': f"{linea.get_tipo_display()}: {linea.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
+        pvp_linea = linea.total_linea
+        coste_linea = Decimal('0.00')
+        descripcion_limpia = linea.descripcion.strip().upper()
+        key = (linea.tipo, descripcion_limpia)
+        
+        # --- MEJORA PARA LA GRÚA Y NOMBRES ---
+        try:
+            tipo_nombre = linea.get_tipo_display()
+        except:
+            tipo_nombre = linea.tipo
+            
+        if linea.tipo == 'Grúa':
+            tipo_nombre = '🚛 Servicio de Grúa'
+        # -------------------------------------
+
+        desglose_agrupado.setdefault(key, {'descripcion': f"{tipo_nombre}: {linea.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
         desglose_agrupado[key]['pvp'] += pvp_linea
+        
         if linea.tipo in ['Repuesto', 'Externo']:
-            categoria_gasto = 'Repuestos' if linea.tipo == 'Repuesto' else 'Otros'; gasto_encontrado = None
+            categoria_gasto = 'Repuestos' if linea.tipo == 'Repuesto' else 'Otros'
+            gasto_encontrado = None
             for gasto in gastos_asociados:
-                if (gasto.id not in gastos_usados_ids and gasto.categoria == categoria_gasto and gasto.descripcion.strip().upper() == descripcion_limpia): gasto_encontrado = gasto; break
-            if gasto_encontrado: coste_linea = gasto_encontrado.importe or Decimal('0.00'); gastos_usados_ids.add(gasto_encontrado.id)
+                if (gasto.id not in gastos_usados_ids and gasto.categoria == categoria_gasto and gasto.descripcion.strip().upper() == descripcion_limpia): 
+                    gasto_encontrado = gasto
+                    break
+            if gasto_encontrado: 
+                coste_linea = gasto_encontrado.importe or Decimal('0.00')
+                gastos_usados_ids.add(gasto_encontrado.id)
+                
         elif linea.tipo == 'Consumible':
-             tipo_obj = tipos_consumible_dict.get(descripcion_limpia)
-             if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo: coste_unitario = ultimas_compras_por_tipo[tipo_obj.id].coste_por_unidad or Decimal('0.00'); coste_linea = coste_unitario * linea.cantidad
+            tipo_obj = tipos_consumible_dict.get(descripcion_limpia)
+            if tipo_obj and tipo_obj.id in ultimas_compras_por_tipo: 
+                coste_unitario = ultimas_compras_por_tipo[tipo_obj.id].coste_por_unidad or Decimal('0.00')
+                coste_linea = coste_unitario * linea.cantidad
+                
         desglose_agrupado[key]['coste'] += coste_linea
         
     for gasto in gastos_asociados:
         if gasto.id not in gastos_usados_ids:
-             descripcion_limpia = gasto.descripcion.strip().upper(); tipo_gasto_map = {'Repuestos': 'Repuesto', 'Otros': 'Externo'}; tipo_para_key = tipo_gasto_map.get(gasto.categoria, 'Externo'); key = (tipo_para_key, descripcion_limpia)
-             desglose_agrupado.setdefault(key, {'descripcion': f"{gasto.get_categoria_display()}: {gasto.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
-             desglose_agrupado[key]['coste'] += gasto.importe or Decimal('0.00')
+            descripcion_limpia = gasto.descripcion.strip().upper()
+            tipo_gasto_map = {'Repuestos': 'Repuesto', 'Otros': 'Externo'}
+            tipo_para_key = tipo_gasto_map.get(gasto.categoria, 'Externo')
+            key = (tipo_para_key, descripcion_limpia)
+            
+            try: tipo_nombre = gasto.get_categoria_display()
+            except: tipo_nombre = gasto.categoria
+
+            desglose_agrupado.setdefault(key, {'descripcion': f"{tipo_nombre} (No facturado): {gasto.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
+            desglose_agrupado[key]['coste'] += gasto.importe or Decimal('0.00')
              
-    desglose_final_list = []; ganancia_total_calculada = Decimal('0.00')
+    desglose_final_list = []
+    ganancia_total_calculada = Decimal('0.00')
+    
     for item_agrupado in desglose_agrupado.values():
-        ganancia = item_agrupado['pvp'] - item_agrupado['coste']; item_agrupado['ganancia'] = ganancia; desglose_final_list.append(item_agrupado); ganancia_total_calculada += ganancia
+        ganancia = item_agrupado['pvp'] - item_agrupado['coste']
+        item_agrupado['ganancia'] = ganancia
+        desglose_final_list.append(item_agrupado)
+        ganancia_total_calculada += ganancia
+        
     desglose_final_list.sort(key=lambda x: x['descripcion'])
     
     abonos = sum(ing.importe for ing in factura.orden.ingreso_set.all()) if hasattr(factura.orden, 'ingreso_set') else Decimal('0.00')
-    saldo_cliente = abonos - factura.total_final; saldo_cliente_abs = abs(saldo_cliente)
-    context = { 'orden': orden, 'factura': factura, 'desglose': desglose_final_list, 'ganancia_total': ganancia_total_calculada, 'abonos_totales': abonos, 'saldo_cliente': saldo_cliente, 'saldo_cliente_abs': saldo_cliente_abs }
+    saldo_cliente = abonos - factura.total_final
+    saldo_cliente_abs = abs(saldo_cliente)
+    
+    context = { 
+        'orden': orden, 
+        'factura': factura, 
+        'desglose': desglose_final_list, 
+        'ganancia_total': ganancia_total_calculada, 
+        'abonos_totales': abonos, 
+        'saldo_cliente': saldo_cliente, 
+        'saldo_cliente_abs': saldo_cliente_abs 
+    }
     return render(request, 'taller/detalle_ganancia_orden.html', context)
 
 @login_required

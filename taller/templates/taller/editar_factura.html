@@ -4,98 +4,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
     <title>Editar {% if factura_existente.es_factura %}Factura Nº {{ factura_existente.numero_factura }}{% else %}Recibo Nº {{ factura_existente.id }}{% endif %} - ServiMax</title>
     
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* Estilos específicos para alinear mejor los items en esta pantalla */
-        .item-row {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 10px;
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 900px !important; margin: 40px auto; padding: 30px; background: white; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        
+        .header-title { font-size: 2em; font-weight: 800; color: #1e40af; margin-bottom: 5px; }
+        .subtitle { color: #64748b; margin-bottom: 25px; }
+        
+        .modern-input, .modern-select { 
+            border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 14px; 
+            font-family: 'Inter', sans-serif; font-size: 0.95em; outline: none; 
+            transition: all 0.2s; background: #ffffff; width: 100%; box-sizing: border-box; color: #0f172a;
         }
-        .item-row input, .item-row select {
-            margin-bottom: 0 !important; /* Quitar margen inferior por defecto */
-        }
-        .btn-remove-line {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            width: 30px;
-            height: 38px; /* Misma altura que los inputs */
-            cursor: pointer;
-            font-weight: bold;
-            flex-shrink: 0;
-        }
-        .btn-remove-line:hover {
-            background-color: #c82333;
-        }
-        @media (max-width: 600px) {
-            .item-row {
-                flex-wrap: wrap;
-            }
-            .item-row input[name$="desc"] {
-                width: 100%;
-                order: 1;
-            }
-            .item-row input[type="number"] {
-                flex-grow: 1;
-                order: 2;
-            }
-            .btn-remove-line {
-                order: 3;
-            }
-        }
+        .modern-input:focus, .modern-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        
+        .builder-row { display: flex; gap: 15px; margin-bottom: 12px; align-items: center; }
+        .builder-row input[type="text"] { flex-grow: 1; }
+        .builder-row input[type="number"] { width: 140px; }
+        
+        .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #0f172a; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 0.95em; cursor: pointer; transition: all 0.2s ease; text-decoration: none; }
+        .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); filter: brightness(1.1); }
+        .btn-success { background-color: #10b981; }
+        .btn-warning { background-color: #f59e0b; color: white; }
+        
+        .add-row-btn { background: none; border: none; color: #3b82f6; cursor: pointer; font-weight: 600; margin-top: 8px; padding: 5px 0; transition: color 0.2s; font-size: 0.9em;}
+        .add-row-btn:hover { color: #2563eb; }
+        
+        .section-box { background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+        .section-box h4 { margin: 0 0 15px 0; color: #0f172a; font-size: 1.1em; }
     </style>
 </head>
 <body>
-    <div class="form-container"> 
-        <div class="header">
-            <h1>Editando {% if factura_existente.es_factura %}Factura Nº {{ factura_existente.numero_factura }}{% else %}Recibo Nº {{ factura_existente.id }}{% endif %}</h1>
-            <a href="{% url 'detalle_orden' orden.id %}" class="back-btn">← Cancelar y Volver</a>
+    <div class="container"> 
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h1 class="header-title">✏️ Editando Documento</h1>
+            <a href="{% url 'detalle_orden' orden.id %}" class="btn-modern" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; box-shadow: none;">← Cancelar</a>
         </div>
-        <hr>
+        <p class="subtitle">Orden #{{ orden.id }} - Vehículo: <strong>{{ orden.vehiculo.matricula }}</strong></p>
 
         <form id="factura-form" action="{% url 'editar_factura' factura_existente.id %}" method="post">
             {% csrf_token %}
             
-            {% if repuestos %}
-            <h4>Repuestos</h4>
-            {% for repuesto in repuestos %}
-                <label>{{ repuesto.descripcion }} (Coste: {{ repuesto.importe|floatformat:2 }}€)</label>
-                <input type="number" step="0.01" name="pvp_repuesto_{{ repuesto.id }}" class="pvp-input" data-coste="{{ repuesto.importe }}" placeholder="PVP Repuesto">
-            {% endfor %}
-            {% endif %}
+            <div class="section-box">
+                <h4>1. REPUESTOS A COBRAR</h4>
+                {% if repuestos %}
+                    {% for repuesto in repuestos %}
+                        <div class="builder-row">
+                            <span style="display:inline-block; width: 110px; color: #ef4444; font-size:0.85em; font-weight: 600;">(Coste: {{ repuesto.importe|floatformat:2 }}€)</span>
+                            <input type="text" class="modern-input" value="{{ repuesto.descripcion }}" readonly style="background: #e2e8f0; color: #475569; font-weight: 500;">
+                            <input type="number" step="0.01" name="pvp_repuesto_{{ repuesto.id }}" class="modern-input pvp-input" data-coste="{{ repuesto.importe }}" placeholder="PVP (€)">
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="font-size: 0.9em; color: #94a3b8; font-style: italic;">Sin repuestos.</p>
+                {% endif %}
+            </div>
 
-            {% if gastos_otros %}
-            <h4>Trabajos Externos</h4>
-            {% for gasto in gastos_otros %}
-                <label>{{ gasto.descripcion }} (Coste: {{ gasto.importe|floatformat:2 }}€)</label>
-                <input type="number" step="0.01" name="pvp_otro_{{ gasto.id }}" class="pvp-input" data-coste="{{ gasto.importe }}" placeholder="PVP Trabajo Externo">
-            {% endfor %}
-            {% endif %}
+            <div class="section-box">
+                <h4>2. TRABAJOS EXTERNOS</h4>
+                {% if gastos_otros %}
+                    {% for gasto in gastos_otros %}
+                        <div class="builder-row">
+                            <span style="display:inline-block; width: 110px; color: #f97316; font-size:0.85em; font-weight: 600;">(Coste: {{ gasto.importe|floatformat:2 }}€)</span>
+                            <input type="text" class="modern-input" value="{{ gasto.descripcion }}" readonly style="background: #e2e8f0; color: #475569; font-weight: 500;">
+                            <input type="number" step="0.01" name="pvp_otro_{{ gasto.id }}" class="modern-input pvp-input" data-coste="{{ gasto.importe }}" placeholder="PVP (€)">
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="font-size: 0.9em; color: #94a3b8; font-style: italic;">Sin trabajos externos.</p>
+                {% endif %}
+            </div>
 
-            <h4>Consumibles</h4>
-            <div id="consumibles-container">
+            <div class="section-box">
+                <h4>3. LÍQUIDOS Y CONSUMIBLES</h4>
+                <div id="consumibles-container"></div>
+                <button type="button" id="add-consumible-btn" class="add-row-btn">+ Añadir consumible</button>
             </div>
-            <button type="button" id="add-consumible-btn" class="btn-add" style="margin-bottom: 20px;">+ Añadir Consumible</button>
             
-            <h4 style="margin-top: 20px;">Mano de Obra</h4>
-            <div id="mano-de-obra-container">
+            <div class="section-box">
+                <h4>4. MANO DE OBRA</h4>
+                <div id="mano-de-obra-container"></div>
+                <button type="button" id="add-mano-obra" class="add-row-btn">+ Añadir línea de trabajo</button>
             </div>
-            <button type="button" id="add-mano-obra" class="btn-add">+ Añadir línea de trabajo</button>
+
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                <h4 style="margin: 0 0 15px 0; color: #0f172a; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">
+                    5. 🚛 SERVICIO DE GRÚA
+                </h4>
+                <div id="grua-container"></div>
+                <button type="button" id="add-grua-btn" class="add-row-btn">+ Añadir línea de grúa</button>
+            </div>
+
+            <div style="margin-top: 30px; background: #dbeafe; padding: 20px; border-radius: 12px; border: 1px solid #bfdbfe;">
+                <label style="display: flex; align-items: center; gap: 12px; font-weight: 700; cursor: pointer; font-size: 1.1em; color: #1e40af;">
+                    <input type="checkbox" id="aplicar_iva" name="aplicar_iva" style="width: 22px; height: 22px; cursor: pointer;" {% if factura_existente.es_factura %}checked{% endif %}>
+                    ES FACTURA OFICIAL (Aplicar 21% IVA al total)
+                </label>
+                <p style="margin: 8px 0 0 34px; font-size: 0.9em; color: #3b82f6;">Desmarca la casilla para convertir este documento en un Recibo Interno sin IVA.</p>
+            </div>
             
-            <h4 style="margin-top: 20px;">Finalizar</h4>
-            <div class="checkbox-container">
-                <input type="checkbox" id="aplicar_iva" name="aplicar_iva" {% if factura_existente.es_factura %}checked{% endif %}>
-                <label for="aplicar_iva" style="margin-bottom: 0; font-weight: normal;">Generar FACTURA (Aplicar IVA 21%)</label>
+            <div style="margin-top: 25px;">
+                <label style="font-weight: 700; color: #0f172a; display: block; margin-bottom: 10px;">Notas para el Cliente:</label>
+                <textarea name="notas_cliente" class="modern-input" style="height: 80px; resize: vertical;">{{ factura_existente.notas_cliente }}</textarea>
             </div>
-            <hr>
-            <button type="submit" class="btn-submit-yellow">Guardar Cambios</button>
+
+            <button type="submit" class="btn-modern btn-warning" style="width: 100%; margin-top: 25px; padding: 18px; font-size: 1.2em; border-radius: 12px;">💾 Sobrescribir Documento</button>
         </form>
     </div>
     
@@ -105,12 +123,23 @@
         function addManoDeObra(lineaData = null) {
             const container = document.getElementById('mano-de-obra-container');
             const newItem = document.createElement('div');
-            newItem.classList.add('item-row'); // Usamos clase flex
-            
+            newItem.className = 'builder-row';
             newItem.innerHTML = `
-                <input type="text" name="mano_obra_desc" placeholder="Descripción del trabajo" value="${lineaData ? lineaData.descripcion : ''}" required style="flex-grow: 2;">
-                <input type="number" step="0.01" name="mano_obra_importe" placeholder="Importe (€)" value="${lineaData ? lineaData.precio_unitario : ''}" required style="flex-grow: 1;">
-                <button type="button" class="btn-remove-line" onclick="this.parentElement.remove()" title="Eliminar línea">X</button>
+                <input type="text" name="mano_obra_desc" class="modern-input" placeholder="Descripción del trabajo" value="${lineaData ? lineaData.descripcion : ''}" required>
+                <input type="number" step="0.01" name="mano_obra_importe" class="modern-input" placeholder="PVP (€)" value="${lineaData ? lineaData.precio_unitario : ''}" required>
+                <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:800; font-size:1.4em; padding: 0 5px;">×</button>
+            `;
+            container.appendChild(newItem);
+        }
+
+        function addGrua(lineaData = null) {
+            const container = document.getElementById('grua-container');
+            const newItem = document.createElement('div');
+            newItem.className = 'builder-row';
+            newItem.innerHTML = `
+                <input type="text" name="grua_desc" class="modern-input" placeholder="Ruta / Descripción del traslado" value="${lineaData ? lineaData.descripcion : ''}" required>
+                <input type="number" step="0.01" name="grua_importe" class="modern-input" placeholder="PVP (€)" value="${lineaData ? lineaData.precio_unitario : ''}" required>
+                <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:800; font-size:1.4em; padding: 0 5px;">×</button>
             `;
             container.appendChild(newItem);
         }
@@ -118,7 +147,7 @@
         function addConsumible(lineaData = null) {
             const container = document.getElementById('consumibles-container');
             const newItem = document.createElement('div');
-            newItem.classList.add('consumible-item');
+            newItem.className = 'builder-row';
             
             let pvpTotal = '';
             if (lineaData) {
@@ -129,57 +158,50 @@
                 }
             }
             
-            let optionsHTML = '<option value="">--- Selecciona tipo ---</option>';
+            let optionsHTML = '<option value="">-- Selecciona --</option>';
             {% for tipo in tipos_consumible %}
                 optionsHTML += `<option value="{{ tipo.id }}" ${ (lineaData && lineaData.tipo_consumible_id === {{ tipo.id }}) ? 'selected' : '' }>{{ tipo.nombre }}</option>`;
             {% endfor %}
             
-            // Estructura: Fila 1 (Select + Botón Borrar), Fila 2 (Inputs)
             newItem.innerHTML = `
-                <div class="item-row">
-                    <select name="tipo_consumible" required style="flex-grow: 1;">${optionsHTML}</select>
-                    <button type="button" class="btn-remove-line" onclick="this.closest('.consumible-item').remove()" title="Eliminar consumible">X</button>
-                </div>
-                <div class="item-row">
-                    <input type="number" step="0.01" name="consumible_cantidad" placeholder="Cant. Usada" value="${lineaData ? lineaData.cantidad : ''}" required style="flex-grow: 1;">
-                    <input type="number" step="0.01" name="consumible_pvp_total" placeholder="Total a Cobrar (€)" value="${pvpTotal}" required style="flex-grow: 1;">
-                </div>
-                <hr style="margin-top: 5px; margin-bottom: 15px; border-top: 1px dashed #ccc;">
+                <select name="tipo_consumible" class="modern-select" required>${optionsHTML}</select>
+                <input type="number" step="0.01" name="consumible_cantidad" class="modern-input" placeholder="Cant." value="${lineaData ? lineaData.cantidad : ''}" required style="width: 100px;">
+                <input type="number" step="0.01" name="consumible_pvp_total" class="modern-input" placeholder="Total (€)" value="${pvpTotal}" required>
+                <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:800; font-size:1.4em; padding: 0 5px;">×</button>
             `;
             container.appendChild(newItem);
         }
 
         document.getElementById('add-mano-obra').addEventListener('click', () => addManoDeObra());
         document.getElementById('add-consumible-btn').addEventListener('click', () => addConsumible());
+        document.getElementById('add-grua-btn').addEventListener('click', () => addGrua());
 
         document.addEventListener('DOMContentLoaded', () => {
             let hasManoDeObra = false;
+            let hasGrua = false;
             
             if (lineasExistentes && lineasExistentes.length > 0) {
                 lineasExistentes.forEach(linea => {
                     if (linea.tipo === 'Repuesto' && linea.repuesto_id) {
                         const input = document.querySelector(`input[name="pvp_repuesto_${linea.repuesto_id}"]`);
-                        if (input) {
-                            input.value = linea.precio_unitario;
-                        }
+                        if (input) input.value = linea.precio_unitario;
                     } else if (linea.tipo === 'Externo' && linea.externo_id) {
                         const input = document.querySelector(`input[name="pvp_otro_${linea.externo_id}"]`);
-                        if (input) {
-                            input.value = linea.precio_unitario;
-                        }
+                        if (input) input.value = linea.precio_unitario;
                     } else if (linea.tipo === 'Consumible') {
                         addConsumible(linea);
                     } else if (linea.tipo === 'Mano de Obra') {
                         addManoDeObra(linea);
                         hasManoDeObra = true;
+                    } else if (linea.tipo === 'Grúa') {
+                        addGrua(linea);
+                        hasGrua = true;
                     }
                 });
             }
 
-            // Si no hay mano de obra registrada, añadir una línea vacía por defecto para facilitar
-            if (!hasManoDeObra) {
-                addManoDeObra();
-            }
+            if (!hasManoDeObra) addManoDeObra();
+            if (!hasGrua) addGrua();
 
             const facturaForm = document.getElementById('factura-form');
             if (facturaForm) {
@@ -190,30 +212,14 @@
                     pvpInputs.forEach(input => {
                         const pvp = parseFloat(input.value);
                         const coste = parseFloat(input.dataset.coste);
-                        // Solo validar si el usuario ha escrito un precio
                         if (!isNaN(pvp) && pvp < coste) {
                             preciosInvalidos = true;
-                            const labelText = input.previousElementSibling.textContent.split('(')[0].trim();
+                            const labelText = input.previousElementSibling.value;
                             alert(`El PVP de "${labelText}" no puede ser menor que su coste de ${coste.toFixed(2)}€.`);
                         }
                     });
 
-                    if (preciosInvalidos) {
-                        event.preventDefault();
-                    }
-                });
-
-                // Evitar enviar formulario al pulsar Enter en inputs
-                facturaForm.addEventListener('keydown', function(event) {
-                    if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') {
-                        event.preventDefault();
-                        const formElements = Array.from(this.elements).filter(el => el.offsetParent !== null && !el.disabled);
-                        const currentIndex = formElements.indexOf(event.target);
-                        const nextElement = formElements[currentIndex + 1];
-                        if (nextElement) {
-                            nextElement.focus();
-                        }
-                    }
+                    if (preciosInvalidos) event.preventDefault();
                 });
             }
         });
