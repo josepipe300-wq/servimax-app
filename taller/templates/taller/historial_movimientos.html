@@ -71,34 +71,33 @@
         
         <div class="section-panel" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; padding: 20px 24px;">
             <span style="font-weight: 700; color: #0f172a; font-size: 1.05em;">🔍 Filtrar Movimientos:</span>
+            
             <form method="get" action="{% url 'historial_movimientos' %}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-             <form method="get" action="{% url 'historial_movimientos' %}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
                 
                 <input type="text" name="matricula" class="modern-select" placeholder="Buscar Matrícula..." value="{{ matricula_seleccionada }}" style="width: 160px; background: #ffffff;">
 
-                <select name="tipo" class="modern-select">
-                    <option value="">-- Todos los Tipos --</option>   
-                <select name="tipo" class="modern-select">
+                <select name="tipo" class="modern-select" onchange="this.form.submit();">
                     <option value="">-- Todos los Tipos --</option>
                     <option value="ingreso" {% if tipo_seleccionado == 'ingreso' %}selected{% endif %}>🟢 Solo Ingresos</option>
                     <option value="gasto" {% if tipo_seleccionado == 'gasto' %}selected{% endif %}>🔴 Solo Gastos</option>
                 </select>
 
-                <select name="ano" class="modern-select">
+                <select name="ano" class="modern-select" onchange="this.form.submit();">
                     <option value="">-- Todos los Años --</option>
                     {% for ano in anos_disponibles %}
                         <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
                     {% endfor %}
                 </select>
                 
-                <select name="mes" class="modern-select">
+                <select name="mes" class="modern-select" onchange="this.form.submit();">
                     <option value="">-- Todos los Meses --</option>
                     {% for i in "123456789012"|make_list %}
                         <option value="{{ forloop.counter }}" {% if mes_seleccionado == forloop.counter|stringformat:"i" %}selected{% endif %}>Mes {{ forloop.counter }}</option>
                     {% endfor %}
                 </select>
                 
-                <button type="submit" class="btn-modern">Aplicar Filtros</button>
+                <button type="submit" style="display: none;"></button>
+                
                 <a href="{% url 'historial_movimientos' %}" class="btn-modern" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; box-shadow: none;">Limpiar</a>
             </form>
         </div>
