@@ -638,21 +638,34 @@ def lista_presupuestos(request):
 # --- DETALLE PRESUPUESTO ---
 @login_required
 def detalle_presupuesto(request, presupuesto_id):
-    presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo__cliente').prefetch_related('lineas'), id=presupuesto_id)
+    presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
 
     if request.method == 'POST' and 'nuevo_estado' in request.POST:
         if request.user.groups.filter(name='Solo Ver').exists():
             return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'. No tienes permiso para modificar datos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
-        nuevo_estado = request.POST['nuevo_estado']; estados_validos_cambio = ['Aceptado', 'Rechazado', 'Pendiente']
+        nuevo_estado = request.POST['nuevo_estado']
+        estados_validos_cambio = ['Aceptado', 'Rechazado', 'Pendiente']
         if nuevo_estado in estados_validos_cambio and presupuesto.estado != 'Convertido':
-            presupuesto.estado = nuevo_estado; presupuesto.save()
+            presupuesto.estado = nuevo_estado
+            presupuesto.save()
             return redirect('detalle_presupuesto', presupuesto_id=presupuesto.id)
 
-    orden_generada = None
-    try: orden_generada = presupuesto.orden_generada
-    except OrdenDeReparacion.DoesNotExist: pass
-    context = { 'presupuesto': presupuesto, 'lineas': presupuesto.lineas.all(), 'estados_posibles': Presupuesto.ESTADO_CHOICES, 'orden_generada': orden_generada }
+    # FORMA A PRUEBA DE BALAS PARA BUSCAR LA ORDEN
+    orden_generada = OrdenDeReparacion.objects.filter(presupuesto_origen=presupuesto).first()
+    
+    # Prevenir errores si ESTADO_CHOICES no está accesible directamente
+    try:
+        estados_posibles = Presupuesto.ESTADO_CHOICES
+    except AttributeError:
+        estados_posibles = [('Pendiente', 'Pendiente'), ('Aceptado', 'Aceptado'), ('Rechazado', 'Rechazado'), ('Convertido', 'Convertido')]
+
+    context = { 
+        'presupuesto': presupuesto, 
+        'lineas': presupuesto.lineas.all(), 
+        'estados_posibles': estados_posibles, 
+        'orden_generada': orden_generada 
+    }
     return render(request, 'taller/detalle_presupuesto.html', context)
 
 # --- EDITAR PRESUPUESTO ---
