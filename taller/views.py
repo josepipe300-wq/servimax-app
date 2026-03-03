@@ -22,7 +22,6 @@ from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from functools import wraps
 
-# --- NUEVOS IMPORTS PARA WHATSAPP Y SEGURIDAD ---
 from django.core.signing import Signer, BadSignature
 from urllib.parse import quote
 
@@ -37,7 +36,6 @@ def bloquear_lectura(view_func):
         return view_func(request, *args, **kwargs)
     return _wrapped_view
 
-# --- FUNCIÓN AUXILIAR PARA LOS FILTROS DE FECHA ---
 def get_anos_y_meses_con_datos():
     fechas_gastos = Gasto.objects.values_list('fecha', flat=True)
     fechas_ingresos = Ingreso.objects.values_list('fecha', flat=True)
@@ -45,7 +43,6 @@ def get_anos_y_meses_con_datos():
     fechas_presupuestos = Presupuesto.objects.values_list('fecha_creacion', flat=True)
 
     fechas_presupuestos_date = [dt.date() for dt in fechas_presupuestos if dt]
-
     fechas_combinadas = set(fechas_gastos) | set(fechas_ingresos) | set(fechas_facturas) | set(fechas_presupuestos_date)
     fechas_combinadas = {f for f in fechas_combinadas if f is not None}
     fechas = sorted(list(fechas_combinadas), reverse=True)
@@ -67,7 +64,6 @@ def get_anos_y_meses_con_datos():
 
     return anos_y_meses_ordenado
 
-# --- FUNCIÓN AUXILIAR PARA OBTENER ÓRDENES RELEVANTES ---
 def obtener_ordenes_relevantes():
     ordenes_no_entregadas = OrdenDeReparacion.objects.exclude(estado='Entregado')
     ordenes_entregadas_con_saldo = []
@@ -88,7 +84,6 @@ def obtener_ordenes_relevantes():
     ids_relevantes = list(ordenes_no_entregadas.values_list('id', flat=True)) + ordenes_entregadas_con_saldo
     return OrdenDeReparacion.objects.filter(id__in=list(set(ids_relevantes))).select_related('vehiculo', 'cliente')
 
-# --- FUNCIÓN AUXILIAR PARA GENERAR PDF DE FACTURA ---
 def generar_pdf_response(factura):
     cliente = factura.orden.cliente
     vehiculo = factura.orden.vehiculo
@@ -171,14 +166,12 @@ def home(request):
         except (ValueError, TypeError): mes_actual = hoy.month
     else: mes_actual = hoy.month
     
-    # Totales del Mes seleccionado (Globales)
     ingresos_mes = Ingreso.objects.filter(fecha__month=mes_actual, fecha__year=ano_actual)
     gastos_mes = Gasto.objects.filter(fecha__month=mes_actual, fecha__year=ano_actual)
     
     total_ingresos = ingresos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastos = gastos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
 
-    # Balances de cuentas
     ing_efectivo = Ingreso.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_efectivo = Gasto.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_efectivo = ing_efectivo - gas_efectivo
@@ -227,7 +220,6 @@ def home(request):
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
 
-    # --- Cargar las notas del tablón (SOLO LAS NO COMPLETADAS) ---
     notas_tablon = NotaTablon.objects.filter(completada=False).order_by('-fecha_creacion')[:20]
 
     context = {
@@ -245,14 +237,12 @@ def home(request):
         'ano_seleccionado': ano_actual,
         'mes_seleccionado': mes_actual,
         'meses_del_ano': range(1, 13),
-        'notas_tablon': notas_tablon, # Pasamos las notas a la pantalla
+        'notas_tablon': notas_tablon,
     }
     return render(request, 'taller/home.html', context)
 
-
-# --- REGISTRAR PAGO Y AJUSTAR INTERESES ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def registrar_pago_tarjeta(request):
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo el administrador puede registrar pagos de tarjeta.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -278,9 +268,8 @@ def registrar_pago_tarjeta(request):
         return redirect('informe_tarjeta')
     return render(request, 'taller/registrar_pago_tarjeta.html')
 
-# --- ELIMINAR CIERRE DE TARJETA ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def eliminar_cierre_tarjeta(request, cierre_id):
     if not request.user.is_superuser:
         return HttpResponseForbidden("Acceso Denegado")
@@ -295,10 +284,8 @@ def eliminar_cierre_tarjeta(request, cierre_id):
             cierre.delete()
     return redirect('informe_tarjeta')
 
-
-# --- INGRESAR VEHÍCULO ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def ingresar_vehiculo(request):
     if not (request.user.is_superuser or request.user.has_perm('taller.add_ordendereparacion')):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para ingresar vehículos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -370,7 +357,6 @@ def ingresar_vehiculo(request):
     return render(request, 'taller/ingresar_vehiculo.html', context)
 
 
-# --- GASTOS ---
 @login_required
 def anadir_gasto(request):
     if request.user.groups.filter(name='Solo Ver').exists():
@@ -408,7 +394,6 @@ def anadir_gasto(request):
             except (ValueError, TypeError, TipoConsumible.DoesNotExist):
                 return HttpResponse("Error en los datos de la compra de consumible.")
             
-            # --- CAMBIO AQUÍ ---
             return redirect('home') 
 
         else:
@@ -427,7 +412,7 @@ def anadir_gasto(request):
             
             orden = None
             vehiculo = None
-            if (categoria in ['Repuestos', 'Otros']) and orden_id:
+            if (categoria in ['Repuestos', 'Otros', 'Pago de Deuda']) and orden_id:
                 try:
                     orden = OrdenDeReparacion.objects.get(id=orden_id)
                     vehiculo = orden.vehiculo
@@ -454,7 +439,6 @@ def anadir_gasto(request):
                 orden=orden, vehiculo=vehiculo, empleado=empleado, deuda_asociada=deuda_taller
             )
             
-            # --- Y CAMBIO AQUÍ ---
             return redirect('home')
 
     ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado')
@@ -473,9 +457,8 @@ def anadir_gasto(request):
     return render(request, 'taller/anadir_gasto.html', context)
 
 
-# --- REGISTRAR INGRESO ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def registrar_ingreso(request):
     if not (request.user.is_superuser or request.user.has_perm('taller.add_ingreso')):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para acceder a la gestión de ingresos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -515,9 +498,8 @@ def registrar_ingreso(request):
     return render(request, 'taller/registrar_ingreso.html', context)
 
 
-# --- STOCK INICIAL CONSUMIBLES ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def stock_inicial_consumible(request):
     if not (request.user.is_superuser or request.user.has_perm('taller.add_compraconsumible')):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para registrar compras de stock.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -537,9 +519,8 @@ def stock_inicial_consumible(request):
     context = { 'tipos_consumible': tipos_consumible }
     return render(request, 'taller/stock_inicial_consumible.html', context)
 
-# --- CREAR PRESUPUESTO ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def crear_presupuesto(request):
     if not (request.user.is_superuser or request.user.has_perm('taller.add_presupuesto')):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para crear presupuestos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -630,8 +611,6 @@ def crear_presupuesto(request):
     context = { 'clientes_data': clientes_con_datos_fiscales, 'vehiculos': vehiculos, 'tipos_linea': tipos_linea }
     return render(request, 'taller/crear_presupuesto.html', context)
 
-
-# --- LISTA PRESUPUESTOS ---
 @login_required
 def lista_presupuestos(request):
     estado_filtro = request.GET.get('estado'); ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
@@ -656,8 +635,6 @@ def lista_presupuestos(request):
     }
     return render(request, 'taller/lista_presupuestos.html', context)
 
-
-# --- DETALLE PRESUPUESTO ---
 @login_required
 def detalle_presupuesto(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
@@ -673,10 +650,8 @@ def detalle_presupuesto(request, presupuesto_id):
             presupuesto.save()
             return redirect('detalle_presupuesto', presupuesto_id=presupuesto.id)
 
-    # FORMA A PRUEBA DE BALAS PARA BUSCAR LA ORDEN
     orden_generada = OrdenDeReparacion.objects.filter(presupuesto_origen=presupuesto).first()
     
-    # Prevenir errores si ESTADO_CHOICES no está accesible directamente
     try:
         estados_posibles = Presupuesto.ESTADO_CHOICES
     except AttributeError:
@@ -690,9 +665,8 @@ def detalle_presupuesto(request, presupuesto_id):
     }
     return render(request, 'taller/detalle_presupuesto.html', context)
 
-# --- EDITAR PRESUPUESTO ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def editar_presupuesto(request, presupuesto_id):
     if not (request.user.is_superuser or request.user.has_perm('taller.change_presupuesto')):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para editar presupuestos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -786,10 +760,8 @@ def editar_presupuesto(request, presupuesto_id):
     return render(request, 'taller/editar_presupuesto.html', context)
 
 
-# --- LISTA ORDENES ---
 @login_required
 def lista_ordenes(request):
-    # Si hacemos clic en el botón de mover de lista
     if request.method == 'POST':
         orden_id = request.POST.get('orden_id')
         accion = request.POST.get('accion')
@@ -803,10 +775,7 @@ def lista_ordenes(request):
             orden.save()
         return redirect('lista_ordenes')
 
-    # Traemos las órdenes que no estén "Entregadas"
     ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente')
-    
-    # Las separamos en dos grupos y las ordenamos por las más antiguas primero
     ordenes_clientes = ordenes_activas.filter(trabajo_interno=False).order_by('id')
     ordenes_taller = ordenes_activas.filter(trabajo_interno=True).order_by('id')
 
@@ -815,13 +784,17 @@ def lista_ordenes(request):
         'ordenes_taller': ordenes_taller
     })
 
-# --- DETALLE ORDEN (CON WHATSAPP DIRECTO Y NOTAS INTERNAS) ---
 @login_required
 def detalle_orden(request, orden_id):
-    orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'factura', 'notas_internas'), id=orden_id)
-    repuestos = Gasto.objects.filter(orden=orden, categoria='Repuestos')
-    gastos_otros = Gasto.objects.filter(orden=orden, categoria='Otros')
-    abonos = sum(ing.importe for ing in orden.ingreso_set.all()) if hasattr(orden, 'ingreso_set') and orden.ingreso_set.exists() else Decimal('0.00')
+    orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo', 'presupuesto_origen').prefetch_related('fotos', 'ingreso_set', 'gastos', 'factura', 'notas_internas'), id=orden_id)
+    repuestos = orden.gastos.filter(categoria='Repuestos')
+    gastos_otros = orden.gastos.filter(categoria='Otros')
+    
+    # SUMAMOS INGRESOS NORMALES + DEUDAS COMPENSADAS
+    abonos_ingresos = sum(ing.importe for ing in orden.ingreso_set.all()) if hasattr(orden, 'ingreso_set') and orden.ingreso_set.exists() else Decimal('0.00')
+    abonos_deuda = sum(g.importe for g in orden.gastos.all() if g.categoria == 'Pago de Deuda')
+    abonos = abonos_ingresos + abonos_deuda
+    
     tipos_consumible = TipoConsumible.objects.all()
     
     factura = None; pendiente_pago = Decimal('0.00'); whatsapp_url = None 
@@ -843,7 +816,7 @@ def detalle_orden(request, orden_id):
 
     if request.method == 'POST':
         if request.user.groups.filter(name='Solo Ver').exists():
-            return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+            return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2>")
 
         form_type = request.POST.get('form_type')
 
@@ -869,22 +842,51 @@ def detalle_orden(request, orden_id):
                     FotoVehiculo.objects.create(orden=orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1])
             return redirect('detalle_orden', orden_id=orden.id)
             
-        # NUEVA LÓGICA PARA GUARDAR NOTA INTERNA
         elif form_type == 'nota_interna':
             texto_nota = request.POST.get('texto_nota')
             if texto_nota:
                 NotaInternaOrden.objects.create(orden=orden, autor=request.user, texto=texto_nota)
             return redirect('detalle_orden', orden_id=orden.id)
+            
+        # --- NUEVO: LÓGICA DE COBRO AUTOMÁTICO ---
+        elif form_type == 'registrar_pago':
+            importe = Decimal(request.POST.get('importe_pago', '0'))
+            metodo = request.POST.get('metodo_pago')
+            deuda_id = request.POST.get('deuda_id')
+            
+            if importe > 0:
+                with transaction.atomic():
+                    # 1. El coche nos paga (Ingreso)
+                    Ingreso.objects.create(
+                        fecha=timezone.now().date(), categoria='Taller', importe=importe,
+                        descripcion=f"COBRO FACTURA {orden.vehiculo.matricula}", metodo_pago=metodo,
+                        orden=orden, es_tpv=(metodo not in ['EFECTIVO', 'COMPENSACION'])
+                    )
+                    # 2. Si es compensación, matamos la deuda de tu hermano (Gasto)
+                    if metodo == 'COMPENSACION' and deuda_id:
+                        try:
+                            deuda_taller = DeudaTaller.objects.get(id=deuda_id)
+                            Gasto.objects.create(
+                                fecha=timezone.now().date(), categoria='Pago de Deuda', importe=importe,
+                                descripcion=f"COMPENSACIÓN POR REPARACIÓN {orden.vehiculo.matricula}",
+                                metodo_pago='COMPENSACION', orden=orden, deuda_asociada=deuda_taller
+                            )
+                        except DeudaTaller.DoesNotExist: pass
+            return redirect('detalle_orden', orden_id=orden.id)
+
+    # Datos para el formulario de pago
+    metodos_pago = Ingreso.METODO_PAGO_CHOICES
+    deudas_pendientes = [d for d in DeudaTaller.objects.all() if d.estado == 'Pendiente']
 
     context = {
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
         'abonos': abonos, 'pendiente_pago': pendiente_pago, 'tipos_consumible': tipos_consumible,
         'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES, 'whatsapp_url': whatsapp_url,
-        'notas_internas': orden.notas_internas.all(), # Pasamos las notas a la pantalla
+        'notas_internas': orden.notas_internas.all(),
+        'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes # <-- Variables nuevas
     }
     return render(request, 'taller/detalle_orden.html', context)
-
-# --- HISTORIAL ORDENES ---
+    
 @login_required
 def historial_ordenes(request):
     ordenes_qs = OrdenDeReparacion.objects.filter(estado='Entregado').select_related('cliente', 'vehiculo', 'factura')
@@ -912,7 +914,6 @@ def historial_ordenes(request):
     return render(request, 'taller/historial_ordenes.html', context)
 
 
-# --- HISTORIAL MOVIMIENTOS ---
 @login_required
 def historial_movimientos(request):
     from django.utils import timezone
@@ -921,12 +922,11 @@ def historial_movimientos(request):
     tipo_seleccionado = request.GET.get('tipo', '')
     ano_seleccionado = request.GET.get('ano', '')
     mes_seleccionado = request.GET.get('mes', '')
-    matricula_seleccionada = request.GET.get('matricula', '') # <--- NUEVO: Capturamos la matrícula
+    matricula_seleccionada = request.GET.get('matricula', '')
 
     gastos_qs = Gasto.objects.select_related('orden', 'orden__vehiculo').all()
     ingresos_qs = Ingreso.objects.select_related('orden', 'orden__vehiculo').all()
 
-    # Filtros de fecha
     if ano_seleccionado and ano_seleccionado.isdigit():
         gastos_qs = gastos_qs.filter(fecha__year=int(ano_seleccionado))
         ingresos_qs = ingresos_qs.filter(fecha__year=int(ano_seleccionado))
@@ -935,13 +935,10 @@ def historial_movimientos(request):
         gastos_qs = gastos_qs.filter(fecha__month=int(mes_seleccionado))
         ingresos_qs = ingresos_qs.filter(fecha__month=int(mes_seleccionado))
 
-    # --- NUEVO: Filtro por matrícula ---
     if matricula_seleccionada:
-        # Busca si la matrícula contiene el texto (ignorando mayúsculas/minúsculas)
         gastos_qs = gastos_qs.filter(orden__vehiculo__matricula__icontains=matricula_seleccionada)
         ingresos_qs = ingresos_qs.filter(orden__vehiculo__matricula__icontains=matricula_seleccionada)
 
-    # Etiquetar y combinar
     movimientos = []
     if tipo_seleccionado in ['', 'gasto']:
         for g in gastos_qs:
@@ -953,10 +950,8 @@ def historial_movimientos(request):
             i.tipo = 'ingreso'
             movimientos.append(i)
 
-    # Ordenar
     movimientos.sort(key=lambda x: (x.fecha, x.id), reverse=True)
 
-    # Extraer años
     anos_gastos = Gasto.objects.annotate(year=ExtractYear('fecha')).values_list('year', flat=True).distinct()
     anos_ingresos = Ingreso.objects.annotate(year=ExtractYear('fecha')).values_list('year', flat=True).distinct()
     anos_disponibles = sorted(list(set(list(anos_gastos) + list(anos_ingresos))), reverse=True)
@@ -968,14 +963,13 @@ def historial_movimientos(request):
         'tipo_seleccionado': tipo_seleccionado,
         'ano_seleccionado': int(ano_seleccionado) if ano_seleccionado.isdigit() else '',
         'mes_seleccionado': str(mes_seleccionado),
-        'matricula_seleccionada': matricula_seleccionada, # <--- NUEVO: Lo pasamos a la web
+        'matricula_seleccionada': matricula_seleccionada,
         'anos_disponibles': anos_disponibles,
     }
     return render(request, 'taller/historial_movimientos.html', context)
 
-# --- EDITAR MOVIMIENTO ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def editar_movimiento(request, tipo, movimiento_id):
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para editar movimientos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -985,8 +979,8 @@ def editar_movimiento(request, tipo, movimiento_id):
     try: admin_url = reverse(admin_url_name, args=[movimiento_id]); return redirect(admin_url)
     except Exception as e: return redirect(f'/admin/taller/{tipo}/{movimiento_id}/change/')
 
-    # --- ELIMINAR MOVIMIENTOS DESDE EL HISTORIAL ---
 @login_required
+@bloquear_lectura
 def eliminar_movimiento(request, tipo, movimiento_id):
     if not request.user.is_superuser:
         return HttpResponseForbidden("🔒 Acceso denegado.")
@@ -994,7 +988,7 @@ def eliminar_movimiento(request, tipo, movimiento_id):
     if request.method == 'POST':
         if tipo == 'gasto':
             movimiento = get_object_or_404(Gasto, id=movimiento_id)
-            movimiento.delete() # Esto disparará la alarma de models.py automáticamente
+            movimiento.delete() 
         elif tipo == 'ingreso':
             movimiento = get_object_or_404(Ingreso, id=movimiento_id)
             movimiento.delete()
@@ -1002,9 +996,8 @@ def eliminar_movimiento(request, tipo, movimiento_id):
     return redirect('historial_movimientos')
 
 
-# --- GENERAR FACTURA ---
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def generar_factura(request, orden_id):
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede generar facturas.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -1079,7 +1072,6 @@ def generar_factura(request, orden_id):
                         subtotal += importe; LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
                     except: pass
 
-                    # --- NUEVO: SERVICIO DE GRÚA ---
             descripciones_grua = request.POST.getlist('grua_desc')
             importes_grua = request.POST.getlist('grua_importe')
             for desc, importe_str in zip(descripciones_grua, importes_grua):
@@ -1088,10 +1080,8 @@ def generar_factura(request, orden_id):
                         importe = Decimal(importe_str)
                         if importe <= 0: continue
                         subtotal += importe
-                        # Lo guardamos con el tipo exacto "Grúa"
                         LineaFactura.objects.create(factura=factura, tipo='Grúa', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
                     except: pass
-            # -------------------------------
             
             iva_calculado = Decimal('0.00'); subtotal_positivo = max(subtotal, Decimal('0.00'))
             if es_factura: iva_calculado = (subtotal_positivo * Decimal('0.21')).quantize(Decimal('0.01'))
@@ -1120,7 +1110,7 @@ def ver_factura_publica(request, signed_id):
 
 
 @login_required
-@bloquear_lectura # CANDADO
+@bloquear_lectura 
 def editar_factura(request, factura_id):
     if not request.user.is_superuser:
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Solo Administración puede editar facturas.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
@@ -1165,7 +1155,6 @@ def editar_factura(request, factura_id):
             gasto_obj = gastos_otros_qs.filter(descripcion__iexact=linea.descripcion).first()
             linea_data['externo_id'] = gasto_obj.id if gasto_obj else None
             
-        # ¡NUEVO! La vista ahora entiende la Grúa y la manda al HTML
         elif linea.tipo == 'Grúa':
             linea_data['tipo'] = 'Grúa'
             
@@ -1182,7 +1171,6 @@ def editar_factura(request, factura_id):
     return render(request, 'taller/editar_factura.html', context)
 
 
-# --- INFORMES Y CONTABILIDAD (VISTAS DE LECTURA) ---
 @login_required
 def informe_rentabilidad(request):
     if not request.user.is_superuser:
@@ -1227,7 +1215,6 @@ def informe_rentabilidad(request):
     ingresos_grua = ingresos_grua_qs.order_by('-fecha')
     otras_ganancias = otras_ganancias_qs.order_by('-fecha')
     
-    # ACUMULADORES GLOBALES (El cerebro de las 4 cajas)
     total_ganancia_mo = Decimal('0.00')
     total_ganancia_piezas = Decimal('0.00')
     ganancia_grua_facturada = Decimal('0.00')
@@ -1268,22 +1255,25 @@ def informe_rentabilidad(request):
                         if compra_relevante.fecha_compra <= factura.fecha_emision:
                             coste_consumibles_factura += (compra_relevante.coste_por_unidad or Decimal('0.00')) * linea.cantidad
         
-        # CÁLCULOS SEPARADOS DE ESTA ORDEN
         coste_total_piezas = coste_repuestos + coste_externos + coste_consumibles_factura
         ganancia_piezas_orden = pvp_piezas - coste_total_piezas
         ganancia_total_taller = pvp_mo + ganancia_piezas_orden
         
-        # SUMAMOS AL GLOBAL
         total_ganancia_mo += pvp_mo
         total_ganancia_piezas += ganancia_piezas_orden
         
+        # NUEVO: Comprobar si se pagó con Trueque (Compensación)
+        metodos = list(orden.ingreso_set.values_list('metodo_pago', flat=True))
+        es_compensado = 'COMPENSACION' in metodos
+
         reporte.append({ 
             'orden': orden, 
             'factura': factura, 
             'ganancia_mo': pvp_mo,
             'ganancia_piezas': ganancia_piezas_orden,
             'grua_facturada': grua_en_esta_factura,
-            'ganancia_total_taller': ganancia_total_taller
+            'ganancia_total_taller': ganancia_total_taller,
+            'es_compensado': es_compensado # <-- Enviado al HTML para poner la etiqueta
         })
     
     ganancia_grua_directa = ingresos_grua.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
@@ -1340,7 +1330,6 @@ def detalle_ganancia_orden(request, orden_id):
         descripcion_limpia = linea.descripcion.strip().upper()
         key = (linea.tipo, descripcion_limpia)
         
-        # --- MEJORA PARA LA GRÚA Y NOMBRES ---
         try:
             tipo_nombre = linea.get_tipo_display()
         except:
@@ -1348,7 +1337,6 @@ def detalle_ganancia_orden(request, orden_id):
             
         if linea.tipo == 'Grúa':
             tipo_nombre = '🚛 Servicio de Grúa'
-        # -------------------------------------
 
         desglose_agrupado.setdefault(key, {'descripcion': f"{tipo_nombre}: {linea.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
         desglose_agrupado[key]['pvp'] += pvp_linea
@@ -1397,6 +1385,7 @@ def detalle_ganancia_orden(request, orden_id):
     desglose_final_list.sort(key=lambda x: x['descripcion'])
     
     abonos = sum(ing.importe for ing in factura.orden.ingreso_set.all()) if hasattr(factura.orden, 'ingreso_set') else Decimal('0.00')
+    
     saldo_cliente = abonos - factura.total_final
     saldo_cliente_abs = abs(saldo_cliente)
     
@@ -1572,6 +1561,7 @@ def cuentas_por_cobrar(request):
 
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
+    
     facturas_qs = Factura.objects.select_related('orden__cliente', 'orden__vehiculo').prefetch_related('orden__ingreso_set')
     
     if ano_seleccionado:
@@ -1587,6 +1577,7 @@ def cuentas_por_cobrar(request):
     facturas_pendientes = []; total_pendiente = Decimal('0.00')
     for factura in facturas_qs.order_by('fecha_emision', 'id'):
         abonos = sum(ing.importe for ing in factura.orden.ingreso_set.all()) if hasattr(factura.orden, 'ingreso_set') and factura.orden.ingreso_set.exists() else Decimal('0.00')
+        
         pendiente = factura.total_final - abonos
         if pendiente > Decimal('0.01'):
             facturas_pendientes.append({'factura': factura, 'orden': factura.orden, 'cliente': factura.orden.cliente, 'vehiculo': factura.orden.vehiculo, 'pendiente': pendiente})
@@ -1657,7 +1648,6 @@ def informe_tarjeta(request):
 def ver_presupuesto_pdf(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
     
-    # NUEVA LÓGICA DE SEGURIDAD: Solo Jefes pueden ver el PDF con los precios
     if not request.user.is_superuser:
          return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para ver los precios ni descargar el PDF del presupuesto.</p>")
 
@@ -1694,7 +1684,6 @@ def ver_presupuesto_pdf(request, presupuesto_id):
     if pisa_status.err: return HttpResponse('Error al generar PDF: <pre>' + html + '</pre>')
     return response
 
-# --- VISTA PARA EL HISTORIAL DETALLADO POR CUENTA ---
 @login_required
 def historial_cuenta(request, cuenta_nombre):
     if not request.user.is_superuser:
@@ -1748,9 +1737,6 @@ def historial_cuenta(request, cuenta_nombre):
     }
     return render(request, 'taller/historial_cuenta.html', context)
 
-# ==============================================================
-# --- VISTAS PARA EL TABLÓN DE ANUNCIOS E HISTORIAL ---
-# ==============================================================
 @login_required
 def agregar_nota(request):
     if request.method == 'POST':
@@ -1762,7 +1748,6 @@ def agregar_nota(request):
 @login_required
 def completar_nota(request, nota_id):
     nota = get_object_or_404(NotaTablon, id=nota_id)
-    # Solo el autor o el jefe pueden marcarla como completada
     if request.user == nota.autor or request.user.is_superuser:
         nota.completada = True
         nota.save()
@@ -1770,11 +1755,9 @@ def completar_nota(request, nota_id):
 
 @login_required
 def historial_notas(request):
-    # Muestra todas las notas que ya están completadas
     notas = NotaTablon.objects.filter(completada=True).order_by('-fecha_creacion')
     return render(request, 'taller/historial_notas.html', {'notas': notas})
 
-# --- DEUDAS DEL TALLER ---
 @login_required
 def lista_deudas(request):
     if request.method == 'POST':
@@ -1793,9 +1776,7 @@ def lista_deudas(request):
             )
             return redirect('lista_deudas')
             
-    # Obtenemos todas las deudas y las separamos por estado
     todas_las_deudas = DeudaTaller.objects.all().order_by('-fecha_creacion', '-id')
-    
     deudas_pendientes = [d for d in todas_las_deudas if d.estado == 'Pendiente']
     deudas_pagadas = [d for d in todas_las_deudas if d.estado == 'Pagada']
     
@@ -1805,13 +1786,12 @@ def lista_deudas(request):
     }
     return render(request, 'taller/lista_deudas.html', context)
 
+    
 @login_required
 def detalle_deuda(request, deuda_id):
     deuda = get_object_or_404(DeudaTaller, id=deuda_id)
-    # Buscamos todos los gastos asociados a esta deuda concreta
     pagos = deuda.gastos_pagados.all().order_by('-fecha', '-id')
     
-    # Calculamos el porcentaje pagado para la barra de progreso
     porcentaje = 0
     if deuda.importe_inicial > 0:
         porcentaje = (deuda.importe_pagado / deuda.importe_inicial) * 100
@@ -1825,12 +1805,8 @@ def detalle_deuda(request, deuda_id):
     }
     return render(request, 'taller/detalle_deuda.html', context)
 
-    # =========================================================
-# --- MÓDULO DE INVENTARIO Y STOCK ---
-# =========================================================
 @login_required
 def inventario_lista(request):
-    # Traemos todos los tipos de consumibles ordenados alfabéticamente
     tipos = TipoConsumible.objects.all().order_by('nombre')
     context = {'tipos': tipos}
     return render(request, 'taller/inventario.html', context)
@@ -1879,26 +1855,21 @@ def ajustar_stock(request, tipo_id):
     context = {'tipo': tipo}
     return render(request, 'taller/ajustar_stock.html', context)
 
-    # --- HISTORIAL DETALLADO DE UN CONSUMIBLE (KARDEX) ---
 @login_required
 def detalle_consumible(request, tipo_id):
     tipo = get_object_or_404(TipoConsumible, id=tipo_id)
-    
-    # Recopilamos todos los movimientos de este artículo
     movimientos = []
     
-    # 1. Compras
     for compra in CompraConsumible.objects.filter(tipo=tipo):
         movimientos.append({
             'fecha': compra.fecha_compra,
             'accion': 'COMPRA',
             'cantidad': compra.cantidad,
             'descripcion': f"Compra de stock. Coste: {compra.coste_total}€",
-            'color': '#10b981', # Verde
+            'color': '#10b981', 
             'signo': '+'
         })
         
-    # 2. Usos en Órdenes
     for uso in UsoConsumible.objects.filter(tipo=tipo):
         movimientos.append({
             'fecha': uso.fecha_uso,
@@ -1906,22 +1877,20 @@ def detalle_consumible(request, tipo_id):
             'cantidad': uso.cantidad_usada,
             'descripcion': f"Vehículo: {uso.orden.vehiculo.matricula} (Orden #{uso.orden.id})",
             'url_orden': reverse('detalle_orden', args=[uso.orden.id]),
-            'color': '#ef4444', # Rojo
+            'color': '#ef4444', 
             'signo': '-'
         })
         
-    # 3. Ajustes Manuales
     for ajuste in AjusteStockConsumible.objects.filter(tipo=tipo):
         movimientos.append({
             'fecha': ajuste.fecha_ajuste,
             'accion': 'AJUSTE MANUAL',
             'cantidad': abs(ajuste.cantidad_ajustada),
             'descripcion': f"Motivo: {ajuste.motivo}",
-            'color': '#f59e0b', # Naranja
+            'color': '#f59e0b', 
             'signo': '+' if ajuste.cantidad_ajustada > 0 else '-'
         })
         
-    # Ordenamos todo por fecha, de lo más nuevo a lo más viejo
     movimientos.sort(key=lambda x: x['fecha'], reverse=True)
     
     context = {
@@ -1930,7 +1899,6 @@ def detalle_consumible(request, tipo_id):
     }
     return render(request, 'taller/detalle_consumible.html', context)
 
-    # --- EDITAR UN CONSUMIBLE (Y FORZAR PRECIO MEDIO) ---
 @login_required
 def editar_consumible(request, tipo_id):
     if request.user.groups.filter(name='Solo Ver').exists():
@@ -1948,8 +1916,6 @@ def editar_consumible(request, tipo_id):
             tipo.nombre = nombre
             tipo.unidad_medida = unidad
             tipo.nivel_minimo_stock = Decimal(minimo.replace(',', '.')) if minimo else None
-            
-            # Aquí forzamos el nuevo precio medio inicial
             if precio:
                 tipo.precio_coste_medio = Decimal(precio.replace(',', '.'))
                 

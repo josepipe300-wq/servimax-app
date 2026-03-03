@@ -7,131 +7,187 @@
     <title>Añadir Gasto - ServiMax</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 800px !important; margin: 0 auto; padding: 40px 20px; }
+        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        
+        .section-panel { background: #ffffff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; margin-bottom: 24px; }
+        
+        .form-group { display: flex; flex-direction: column; margin-bottom: 20px; }
+        .form-group label { font-size: 0.85em; font-weight: 700; color: #64748b; margin-bottom: 8px; text-transform: uppercase; }
+        .form-control { padding: 12px 15px; border-radius: 8px; border: 1px solid #cbd5e1; font-family: 'Inter'; outline: none; transition: border 0.2s; font-size: 1em; background-color: white;}
+        .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        
+        .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #ef4444; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; font-size: 1.1em; width: 100%; margin-top: 10px;}
+        .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(239,68,68,0.2); filter: brightness(1.1); }
+    </style>
 </head>
 <body>
-    <div class="form-container" style="max-width: 700px;">
-        <div class="header">
-            <h1>Añadir Nuevo Gasto</h1>
-            <a href="{% url 'home' %}" class="back-btn">← Volver</a>
+    <div class="container">
+        <div style="margin-bottom: 30px;">
+            <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver al Inicio</a>
+            <h1 class="header-title">➖ Añadir Nuevo Gasto</h1>
+            <p style="color: #64748b; font-weight: 500; margin: 0;">Registra una salida de dinero de caja o banco.</p>
         </div>
-        <hr>
 
-        <form action="" method="post">
-            {% csrf_token %}
-            
-            <label for="metodo_pago" style="color: #0056b3;">¿De dónde sale el dinero?</label>
-            <select id="metodo_pago" name="metodo_pago" style="background-color: #e8f0fe; font-weight: bold;">
-                {% for value, name in metodos_pago %}
-                    <option value="{{ value }}">{{ name }}</option>
-                {% endfor %}
-            </select>
-            <hr>
-
-            <label for="categoria">Categoría:</label>
-            <select id="categoria" name="categoria" required>
-                {% for value, name in categorias_gasto %}
-                    <option value="{{ value }}">{{ name }}</option>
-                {% endfor %}
-            </select>
-
-            <div id="campos-gasto-normal">
-                <label for="importe">Importe (€):</label>
-                <input type="number" step="0.01" id="importe" name="importe">
-
-                <label for="fecha_gasto">Fecha del Gasto (Opcional):</label>
-                <input type="date" id="fecha_gasto" name="fecha_gasto">
-
-                <label for="descripcion">Descripción:</label>
-                <textarea id="descripcion" name="descripcion"></textarea>
-
-                <div id="campo-orden" style="display: none;">
-                    <label for="orden">Asociar a Orden Activa (Vehículo):</label>
-                    <select id="orden" name="orden">
-                        <option value="">--- Selecciona el Vehículo/Orden ---</option>
-                        {% for orden in ordenes_activas %}
-                            <option value="{{ orden.id }}">
-                                {{ orden.vehiculo.matricula }} - {{ orden.vehiculo.modelo }} ({{ orden.cliente.nombre }})
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <p style="font-size: 0.8em; color: #666;">Solo aparecen vehículos con órdenes abiertas (No entregados).</p>
-                </div>
-
-                <div id="campo-empleado" style="display: none;">
-                    <label for="empleado">Asociar a Empleado:</label>
-                    <select id="empleado" name="empleado">
-                        <option value="">--- Ninguno ---</option>
-                        {% for empleado in empleados %}
-                            <option value="{{ empleado.id }}">{{ empleado.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+        <div class="section-panel" style="border-top: 4px solid #ef4444;">
+            <form method="POST">
+                {% csrf_token %}
                 
-                <div id="campo-deuda" style="display: none;">
-                    <label for="deuda" style="color: #ef4444; font-weight: bold;">Pagar deuda a:</label>
-                    <select id="deuda" name="deuda" style="border-color: #ef4444;">
-                        <option value="">--- Selecciona la deuda a pagar ---</option>
-                        {% for deuda in deudas_pendientes %}
-                            <option value="{{ deuda.id }}">
-                                {{ deuda.acreedor }} (Resta: {{ deuda.importe_pendiente|floatformat:2 }}€)
-                            </option>
+                <div class="form-group">
+                    <label>¿De dónde sale el dinero?</label>
+                    <select name="metodo_pago" class="form-control" required>
+                        {% for value, label in metodos_pago %}
+                            <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
                     </select>
                 </div>
-            </div>
 
-            <div id="campos-consumible" style="display: none;">
-                <label for="tipo_consumible">Tipo de Consumible:</label>
-                <select id="tipo_consumible" name="tipo_consumible">
-                    <option value="">--- Selecciona el tipo ---</option>
-                    {% for tipo in tipos_consumible %}
-                        <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
-                    {% endfor %}
-                </select>
-                <label for="fecha_compra">Fecha de la Compra:</label>
-                <input type="date" id="fecha_compra" name="fecha_compra">
-                <label for="cantidad">Cantidad Comprada:</label>
-                <input type="number" step="0.01" id="cantidad" name="cantidad">
-                <label for="coste_total">Coste Total (€):</label>
-                <input type="number" step="0.01" id="coste_total" name="coste_total">
-            </div>
+                <div class="form-group">
+                    <label>Categoría del Gasto:</label>
+                    <select name="categoria" id="categoria-select" class="form-control" required>
+                        <option value="">-- Selecciona una categoría --</option>
+                        {% for value, label in categorias_gasto %}
+                            <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-            <button type="submit">Guardar Gasto</button>
-        </form>
+                <div id="bloque-consumibles" style="display: none; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px dashed #cbd5e1; margin-bottom: 20px;">
+                    <h4 style="margin-top: 0; color: #3b82f6; margin-bottom: 15px;">📦 Detalles del Consumible</h4>
+                    
+                    <div class="form-group">
+                        <label>¿Qué consumible estás comprando?</label>
+                        <select name="tipo_consumible" class="form-control">
+                            <option value="">-- Elige un artículo --</option>
+                            {% for tipo in tipos_consumible %}
+                                <option value="{{ tipo.id }}">{{ tipo.nombre }} ({{ tipo.unidad_medida }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Cantidad adquirida:</label>
+                        <input type="number" step="0.01" name="cantidad" class="form-control" placeholder="Ej: 200">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Coste Total de la compra (€):</label>
+                        <input type="number" step="0.01" name="coste_total" class="form-control" placeholder="Ej: 700.00">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Fecha de la Compra:</label>
+                        <input type="date" name="fecha_compra" class="form-control">
+                    </div>
+                </div>
+
+                <div id="bloque-normal" style="display: none;">
+                    
+                    <div id="campo-deuda" class="form-group" style="display: none; background: #fff5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #ef4444;">
+                        <label style="color: #ef4444;">🚨 Pagar deuda a:</label>
+                        <select name="deuda" class="form-control" style="border-color: #fca5a5;">
+                            <option value="">-- Selecciona la Deuda --</option>
+                            {% for deuda in deudas_pendientes %}
+                                <option value="{{ deuda.id }}">{{ deuda.acreedor }} - Resta: {{ deuda.importe_pendiente }}€</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div id="campo-empleado" class="form-group" style="display: none;">
+                        <label>Empleado:</label>
+                        <select name="empleado" class="form-control">
+                            <option value="">-- Selecciona Empleado --</option>
+                            {% for emp in empleados %}
+                                <option value="{{ emp.id }}">{{ emp.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div id="campo-orden" class="form-group" style="display: none; background: #eff6ff; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                        <label style="color: #1e40af;">🚗 Asociar a Orden (Vehículo en taller):</label>
+                        <select name="orden" class="form-control" style="border-color: #93c5fd;">
+                            <option value="">-- Ninguna / Opcional --</option>
+                            {% for orden in ordenes_activas %}
+                                <option value="{{ orden.id }}">{{ orden.vehiculo.matricula }} ({{ orden.cliente.nombre }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Importe (€):</label>
+                        <input type="number" step="0.01" name="importe" id="importe-input" class="form-control" placeholder="0.00">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Fecha del Gasto:</label>
+                        <input type="date" name="fecha_gasto" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Descripción / Concepto:</label>
+                        <input type="text" name="descripcion" id="descripcion-input" class="form-control" placeholder="Ej: Factura luz, Repuesto filtro...">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-modern">Guardar Gasto</button>
+            </form>
+        </div>
     </div>
 
     <script>
-        const categoriaSelect = document.getElementById('categoria');
-        const camposGastoNormal = document.getElementById('campos-gasto-normal');
-        const camposConsumible = document.getElementById('campos-consumible');
-        const campoOrden = document.getElementById('campo-orden');
-        const campoEmpleado = document.getElementById('campo-empleado');
-        const campoDeuda = document.getElementById('campo-deuda'); // Añadido
+        document.addEventListener('DOMContentLoaded', function() {
+            const selectCat = document.getElementById('categoria-select');
+            const bloqueConsumibles = document.getElementById('bloque-consumibles');
+            const bloqueNormal = document.getElementById('bloque-normal');
+            
+            const campoDeuda = document.getElementById('campo-deuda');
+            const campoEmpleado = document.getElementById('campo-empleado');
+            const campoOrden = document.getElementById('campo-orden');
+            
+            const inputImporte = document.getElementById('importe-input');
+            const inputDesc = document.getElementById('descripcion-input');
 
-        function actualizarFormulario() {
-            const selectedValue = categoriaSelect.value;
-            camposGastoNormal.style.display = 'none';
-            camposConsumible.style.display = 'none';
-            campoOrden.style.display = 'none';
-            campoEmpleado.style.display = 'none';
-            campoDeuda.style.display = 'none'; // Añadido
+            function actualizarCampos() {
+                const cat = selectCat.value;
+                
+                // 1. Ocultar todo por defecto
+                bloqueConsumibles.style.display = 'none';
+                bloqueNormal.style.display = 'none';
+                campoDeuda.style.display = 'none';
+                campoEmpleado.style.display = 'none';
+                campoOrden.style.display = 'none';
+                
+                // 2. Quitar el 'required' para que no bloquee el formulario si están ocultos
+                inputImporte.required = false;
+                inputDesc.required = false;
 
-            if (selectedValue === 'Compra de Consumibles') {
-                camposConsumible.style.display = 'block';
-            } else {
-                camposGastoNormal.style.display = 'block';
+                if (!cat) return;
 
-                if (selectedValue === 'Repuestos' || selectedValue === 'Otros') {
-                    campoOrden.style.display = 'block'; 
-                } else if (selectedValue === 'Sueldos') {
-                    campoEmpleado.style.display = 'block';
-                } else if (selectedValue === 'Pago de Deuda') {
-                    campoDeuda.style.display = 'block'; // Añadido
+                // 3. Mostrar según la categoría elegida
+                if (cat === 'Compra de Consumibles') {
+                    bloqueConsumibles.style.display = 'block';
+                } else {
+                    bloqueNormal.style.display = 'block';
+                    inputImporte.required = true;
+                    inputDesc.required = true;
+                    
+                    if (cat === 'Repuestos' || cat === 'Otros') {
+                        campoOrden.style.display = 'block';
+                    } else if (cat === 'Sueldos') {
+                        campoEmpleado.style.display = 'block';
+                    } else if (cat === 'Pago de Deuda') {
+                        campoDeuda.style.display = 'block';
+                        campoOrden.style.display = 'block'; 
+                    }
                 }
             }
-        }
-        actualizarFormulario();
-        categoriaSelect.addEventListener('change', actualizarFormulario);
+
+            selectCat.addEventListener('change', actualizarCampos);
+            actualizarCampos(); // Ejecutar al cargar la página
+        });
     </script>
 </body>
 </html>

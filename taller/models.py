@@ -120,9 +120,13 @@ class DeudaTaller(models.Model):
     motivo = models.CharField(max_length=255)
     importe_inicial = models.DecimalField(max_digits=10, decimal_places=2)
     fecha_creacion = models.DateField(default=timezone.now)
+    
+    # --- NUEVA LÍNEA AÑADIDA AQUÍ ---
+    orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True, help_text="Orden de trabajo asociada")
 
     @property
     def importe_pagado(self):
+    # ... (el resto del código sigue igual)
         total = self.gastos_pagados.aggregate(total=Sum('importe'))['total']
         return total or Decimal('0.00')
 
@@ -162,6 +166,7 @@ class Gasto(models.Model):
         ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
         ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'),
         ('CUENTA_ERIKA', 'Cuenta Erika (Antigua)'),
+        ('COMPENSACION', '🤝 Compensación (Trueque / Sin dinero)'), # <-- LÍNEA NUEVA
     ]
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
     

@@ -34,9 +34,6 @@
         .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 700; }
         .badge-pendiente { background-color: #fee2e2; color: #b91c1c; }
         .badge-pagada { background-color: #d1fae5; color: #047857; }
-        
-        .progress-bar { width: 100%; background-color: #e2e8f0; border-radius: 999px; height: 8px; overflow: hidden; margin-top: 5px; }
-        .progress-fill { background-color: #10b981; height: 100%; border-radius: 999px; }
     </style>
 </head>
 <body>
@@ -57,9 +54,19 @@
                         <label>¿A quién se le debe?</label>
                         <input type="text" name="acreedor" class="form-control" placeholder="Ej: Hermano, Cliente Juan..." required>
                     </div>
+                    
+                    <div class="form-group">
+                        <label>Asociar a Orden (Opcional)</label>
+                        <select name="orden" class="form-control" style="background-color: white;">
+                            <option value="">--- Ninguna ---</option>
+                            {% for orden in ordenes_activas %}
+                                <option value="{{ orden.id }}">{{ orden.vehiculo.matricula }} ({{ orden.cliente.nombre }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     <div class="form-group" style="flex-grow: 2;">
                         <label>Motivo de la deuda</label>
-                        <input type="text" name="motivo" class="form-control" placeholder="Ej: Devolución coche matricula 1234ABC" required>
+                        <input type="text" name="motivo" class="form-control" placeholder="Ej: Devolución, Pieza..." required>
                     </div>
                     <div class="form-group">
                         <label>Importe (€)</label>
@@ -69,11 +76,7 @@
                         <button type="submit" class="btn-modern">Guardar Deuda</button>
                     </div>
                 </div>
-            </form>
-        </div>
-        {% endif %}
-
-        <div class="section-panel" style="border-top: 4px solid #ef4444;">
+            </form> </div> {% endif %} <div class="section-panel" style="border-top: 4px solid #ef4444;">
             <h3 style="margin-top: 0; color: #0f172a; display: flex; align-items: center; gap: 8px;">
                 🚨 Deudas Activas (Pendientes)
             </h3>
@@ -95,6 +98,9 @@
                             <td>
                                 <strong style="color: #0f172a;">{{ deuda.acreedor }}</strong><br>
                                 <span style="color: #64748b; font-size: 0.85em;">{{ deuda.motivo }}</span>
+                                {% if deuda.orden %}
+                                    <br><a href="{% url 'detalle_orden' deuda.orden.id %}" style="font-size: 0.85em; color: #3b82f6; text-decoration: none; font-weight: 600;">🚗 {{ deuda.orden.vehiculo.matricula }}</a>
+                                {% endif %}
                             </td>
                             <td class="money-col" style="color: #64748b;">{{ deuda.importe_inicial|floatformat:2 }} €</td>
                             <td class="money-col" style="color: #10b981;">{{ deuda.importe_pagado|floatformat:2 }} €</td>
@@ -137,6 +143,9 @@
                             <td>
                                 <strong style="color: #475569;">{{ deuda.acreedor }}</strong><br>
                                 <span style="color: #94a3b8; font-size: 0.85em;">{{ deuda.motivo }}</span>
+                                {% if deuda.orden %}
+                                    <br><a href="{% url 'detalle_orden' deuda.orden.id %}" style="font-size: 0.85em; color: #3b82f6; text-decoration: none; font-weight: 600;">🚗 {{ deuda.orden.vehiculo.matricula }}</a>
+                                {% endif %}
                             </td>
                             <td class="money-col" style="color: #047857; font-weight: 700;">{{ deuda.importe_inicial|floatformat:2 }} €</td>
                             <td style="text-align: center;">
