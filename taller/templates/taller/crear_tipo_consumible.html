@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Nuevo Consumible - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; padding: 40px; }
+        .form-panel { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .input-box { width: 100%; padding: 12px; margin-top: 5px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #cbd5e1; box-sizing: border-box; }
+        .btn-modern { background-color: #3b82f6; color: white; padding: 12px; border-radius: 8px; font-weight: 700; border: none; width: 100%; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="form-panel">
+        <a href="{% url 'inventario' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver</a>
+        <h2 style="color: #0f172a;">➕ Registrar Consumible</h2>
+        <form method="POST">
+            {% csrf_token %}
+            <label style="font-weight: 600; color: #475569;">Nombre del Artículo:</label>
+            <input type="text" name="nombre" class="input-box" placeholder="Ej: Aceite Motor 5W30" required>
+            
+            <label style="font-weight: 600; color: #475569;">Unidad de Medida:</label>
+            <input type="text" name="unidad_medida" class="input-box" placeholder="Ej: Litros, Unidades, Botes..." required>
+            
+            <label style="font-weight: 600; color: #475569;">Alerta Nivel Mínimo (Opcional):</label>
+            <input type="number" step="0.01" name="nivel_minimo_stock" class="input-box" placeholder="Avisar si quedan menos de...">
+            
+            <button type="submit" class="btn-modern">Guardar Artículo</button>
+        </form>
+    </div>
+</body>
+</html>

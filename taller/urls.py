@@ -11,6 +11,11 @@ urlpatterns = [
     path('stock-inicial/', views.stock_inicial_consumible, name='stock_inicial_consumible'),
     path('deudas/', views.lista_deudas, name='lista_deudas'),
     path('deuda/<int:deuda_id>/', views.detalle_deuda, name='detalle_deuda'),
+    path('inventario/', views.inventario_lista, name='inventario'),
+    path('inventario/nuevo/', views.crear_tipo_consumible, name='crear_tipo_consumible'),
+    path('inventario/ajustar/<int:tipo_id>/', views.ajustar_stock, name='ajustar_stock'),
+    path('inventario/articulo/<int:tipo_id>/', views.detalle_consumible, name='detalle_consumible'),
+    path('inventario/editar/<int:tipo_id>/', views.editar_consumible, name='editar_consumible'),
 
     # Presupuestos
     path('presupuestos/crear/', views.crear_presupuesto, name='crear_presupuesto'),

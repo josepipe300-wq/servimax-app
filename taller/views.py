@@ -1824,3 +1824,137 @@ def detalle_deuda(request, deuda_id):
         'porcentaje_pagado': porcentaje
     }
     return render(request, 'taller/detalle_deuda.html', context)
+
+    # =========================================================
+# --- MÓDULO DE INVENTARIO Y STOCK ---
+# =========================================================
+@login_required
+def inventario_lista(request):
+    # Traemos todos los tipos de consumibles ordenados alfabéticamente
+    tipos = TipoConsumible.objects.all().order_by('nombre')
+    context = {'tipos': tipos}
+    return render(request, 'taller/inventario.html', context)
+
+@login_required
+def crear_tipo_consumible(request):
+    if request.user.groups.filter(name='Solo Ver').exists():
+        return HttpResponseForbidden("No tienes permiso para modificar el inventario.")
+        
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre')
+        unidad = request.POST.get('unidad_medida')
+        minimo = request.POST.get('nivel_minimo_stock')
+        
+        if nombre and unidad:
+            minimo_val = Decimal(minimo.replace(',', '.')) if minimo else None
+            TipoConsumible.objects.create(
+                nombre=nombre,
+                unidad_medida=unidad,
+                nivel_minimo_stock=minimo_val
+            )
+            return redirect('inventario')
+            
+    return render(request, 'taller/crear_tipo_consumible.html')
+
+@login_required
+def ajustar_stock(request, tipo_id):
+    if request.user.groups.filter(name='Solo Ver').exists():
+        return HttpResponseForbidden("No tienes permiso para modificar el inventario.")
+        
+    tipo = get_object_or_404(TipoConsumible, id=tipo_id)
+    
+    if request.method == 'POST':
+        cantidad = request.POST.get('cantidad')
+        motivo = request.POST.get('motivo')
+        
+        if cantidad and motivo:
+            cantidad_val = Decimal(cantidad.replace(',', '.'))
+            AjusteStockConsumible.objects.create(
+                tipo=tipo,
+                cantidad_ajustada=cantidad_val,
+                motivo=motivo
+            )
+            return redirect('inventario')
+            
+    context = {'tipo': tipo}
+    return render(request, 'taller/ajustar_stock.html', context)
+
+    # --- HISTORIAL DETALLADO DE UN CONSUMIBLE (KARDEX) ---
+@login_required
+def detalle_consumible(request, tipo_id):
+    tipo = get_object_or_404(TipoConsumible, id=tipo_id)
+    
+    # Recopilamos todos los movimientos de este artículo
+    movimientos = []
+    
+    # 1. Compras
+    for compra in CompraConsumible.objects.filter(tipo=tipo):
+        movimientos.append({
+            'fecha': compra.fecha_compra,
+            'accion': 'COMPRA',
+            'cantidad': compra.cantidad,
+            'descripcion': f"Compra de stock. Coste: {compra.coste_total}€",
+            'color': '#10b981', # Verde
+            'signo': '+'
+        })
+        
+    # 2. Usos en Órdenes
+    for uso in UsoConsumible.objects.filter(tipo=tipo):
+        movimientos.append({
+            'fecha': uso.fecha_uso,
+            'accion': 'USO EN TALLER',
+            'cantidad': uso.cantidad_usada,
+            'descripcion': f"Vehículo: {uso.orden.vehiculo.matricula} (Orden #{uso.orden.id})",
+            'url_orden': reverse('detalle_orden', args=[uso.orden.id]),
+            'color': '#ef4444', # Rojo
+            'signo': '-'
+        })
+        
+    # 3. Ajustes Manuales
+    for ajuste in AjusteStockConsumible.objects.filter(tipo=tipo):
+        movimientos.append({
+            'fecha': ajuste.fecha_ajuste,
+            'accion': 'AJUSTE MANUAL',
+            'cantidad': abs(ajuste.cantidad_ajustada),
+            'descripcion': f"Motivo: {ajuste.motivo}",
+            'color': '#f59e0b', # Naranja
+            'signo': '+' if ajuste.cantidad_ajustada > 0 else '-'
+        })
+        
+    # Ordenamos todo por fecha, de lo más nuevo a lo más viejo
+    movimientos.sort(key=lambda x: x['fecha'], reverse=True)
+    
+    context = {
+        'tipo': tipo,
+        'movimientos': movimientos
+    }
+    return render(request, 'taller/detalle_consumible.html', context)
+
+    # --- EDITAR UN CONSUMIBLE (Y FORZAR PRECIO MEDIO) ---
+@login_required
+def editar_consumible(request, tipo_id):
+    if request.user.groups.filter(name='Solo Ver').exists():
+        return HttpResponseForbidden("No tienes permiso para modificar el inventario.")
+        
+    tipo = get_object_or_404(TipoConsumible, id=tipo_id)
+    
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre')
+        unidad = request.POST.get('unidad_medida')
+        minimo = request.POST.get('nivel_minimo_stock')
+        precio = request.POST.get('precio_coste_medio')
+        
+        if nombre and unidad:
+            tipo.nombre = nombre
+            tipo.unidad_medida = unidad
+            tipo.nivel_minimo_stock = Decimal(minimo.replace(',', '.')) if minimo else None
+            
+            # Aquí forzamos el nuevo precio medio inicial
+            if precio:
+                tipo.precio_coste_medio = Decimal(precio.replace(',', '.'))
+                
+            tipo.save()
+            return redirect('inventario')
+            
+    context = {'tipo': tipo}
+    return render(request, 'taller/editar_consumible.html', context)

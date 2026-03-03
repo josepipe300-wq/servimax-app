@@ -94,7 +94,6 @@ class OrdenDeReparacion(models.Model):
     problema = models.TextField()
     estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='Recibido')
     fecha_entrada = models.DateTimeField(auto_now_add=True)
-    
     trabajo_interno = models.BooleanField(default=False, verbose_name="Vehículo del Taller")
 
     @property
@@ -116,9 +115,6 @@ class Empleado(models.Model):
         self.nombre = self.nombre.upper()
         super(Empleado, self).save(*args, **kwargs)
 
-# =========================================================
-# --- NUEVO MODELO: DEUDAS DEL TALLER ---
-# =========================================================
 class DeudaTaller(models.Model):
     acreedor = models.CharField(max_length=150, help_text="A quién se le debe (Ej: Hermano, Cliente X)")
     motivo = models.CharField(max_length=255)
@@ -127,7 +123,6 @@ class DeudaTaller(models.Model):
 
     @property
     def importe_pagado(self):
-        # Suma todos los gastos que se han asociado a esta deuda
         total = self.gastos_pagados.aggregate(total=Sum('importe'))['total']
         return total or Decimal('0.00')
 
@@ -137,8 +132,7 @@ class DeudaTaller(models.Model):
 
     @property
     def estado(self):
-        if self.importe_pendiente <= 0:
-            return "Pagada"
+        if self.importe_pendiente <= 0: return "Pagada"
         return "Pendiente"
 
     def __str__(self):
@@ -154,12 +148,12 @@ class Gasto(models.Model):
         ('Repuestos', 'Repuestos'),
         ('Sueldos', 'Sueldos'),
         ('Herramientas', 'Herramientas'),
-        ('Suministros', 'Suministros'),
+        ('Suministros', 'Suministros (Agua, Café, etc.)'), # <-- Modificado para que tu hermano lo vea claro
         ('Gasolina/Diesel', 'Gasolina/Diesel'),
         ('Otros', 'Otros'),
-        ('Compra de Consumibles', 'Compra de Consumibles'),
+        ('Compra de Consumibles', 'Compra de Consumibles (Stock Taller)'), # <-- Modificado
         ('COMISIONES_INTERESES', 'Comisiones e Intereses Bancarios'),
-        ('Pago de Deuda', 'Pago de Deuda (Taller)'), # <-- NUEVA CATEGORÍA AÑADIDA
+        ('Pago de Deuda', 'Pago de Deuda (Taller)'),
     ]
     
     METODO_PAGO_CHOICES = [
@@ -179,10 +173,7 @@ class Gasto(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True, related_name='gastos')
     vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
     empleado = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True)
-    
-    # --- CONEXIÓN CON LA DEUDA ---
-    deuda_asociada = models.ForeignKey(DeudaTaller, on_delete=models.SET_NULL, null=True, blank=True, related_name='gastos_pagados', help_text="Si es un pago de deuda, elige a quién se le paga")
-    
+    deuda_asociada = models.ForeignKey(DeudaTaller, on_delete=models.SET_NULL, null=True, blank=True, related_name='gastos_pagados')
     pagado_con_tarjeta = models.BooleanField(default=False)
 
     def __str__(self):
@@ -190,10 +181,8 @@ class Gasto(models.Model):
         return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€"
 
     def save(self, *args, **kwargs):
-        if self.descripcion:
-            self.descripcion = self.descripcion.upper()
-        if self.metodo_pago in ['TARJETA_1', 'TARJETA_2']:
-            self.pagado_con_tarjeta = True
+        if self.descripcion: self.descripcion = self.descripcion.upper()
+        if self.metodo_pago in ['TARJETA_1', 'TARJETA_2']: self.pagado_con_tarjeta = True
         super(Gasto, self).save(*args, **kwargs)
 
 class Ingreso(models.Model):
@@ -204,11 +193,8 @@ class Ingreso(models.Model):
         ('ABONO_TARJETA', 'Abono/Pago a Tarjeta'),
         ('Otros', 'Otros Ingresos'),
     ]
-    
     METODO_PAGO_CHOICES = Gasto.METODO_PAGO_CHOICES 
-
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
-
     fecha = models.DateField(default=timezone.now)
     categoria = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     importe = models.DecimalField(max_digits=10, decimal_places=2)
@@ -234,14 +220,11 @@ class Factura(models.Model):
     notas_cliente = models.TextField(null=True, blank=True, help_text="Notas adicionales para el cliente")
 
     def __str__(self):
-        if self.es_factura:
-            return f"Factura Nº {self.numero_factura} para Orden #{self.orden.id}"
-        else:
-            return f"Recibo #{self.id} para Orden #{self.orden.id}"
+        if self.es_factura: return f"Factura Nº {self.numero_factura} para Orden #{self.orden.id}"
+        return f"Recibo #{self.id} para Orden #{self.orden.id}"
 
     def save(self, *args, **kwargs):
-        if self.notas_cliente:
-            self.notas_cliente = self.notas_cliente.upper()
+        if self.notas_cliente: self.notas_cliente = self.notas_cliente.upper()
         super(Factura, self).save(*args, **kwargs)
 
 class LineaFactura(models.Model):
@@ -258,21 +241,39 @@ class LineaFactura(models.Model):
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     
     @property
-    def total_linea(self):
-        return (self.cantidad or 0) * (self.precio_unitario or 0)
+    def total_linea(self): return (self.cantidad or 0) * (self.precio_unitario or 0)
         
-    def __str__(self):
-        return f"Línea de {self.tipo} para Factura #{self.factura.id}"
+    def __str__(self): return f"Línea de {self.tipo} para Factura #{self.factura.id}"
         
     def save(self, *args, **kwargs):
         self.descripcion = self.descripcion.upper()
         super(LineaFactura, self).save(*args, **kwargs)
+
+
+# =========================================================
+# --- MODULO DE INVENTARIO Y CONSUMIBLES (ACTUALIZADO) ---
+# =========================================================
 
 class TipoConsumible(models.Model):
     nombre = models.CharField(max_length=100)
     unidad_medida = models.CharField(max_length=20)
     nivel_minimo_stock = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
+    # NUEVO: Aquí guardaremos el Precio Medio Ponderado para la rentabilidad exacta
+    precio_coste_medio = models.DecimalField(max_digits=10, decimal_places=4, default=0.0000, help_text="Se calcula automáticamente con cada compra")
+    
+    @property
+    def stock_actual(self):
+        total_comprado = CompraConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad'))['total'] or Decimal('0.00')
+        total_usado_ordenes = UsoConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_usada'))['total'] or Decimal('0.00')
+        total_ajustado = AjusteStockConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_ajustada'))['total'] or Decimal('0.00')
+        return (total_comprado - total_usado_ordenes + total_ajustado).quantize(Decimal('0.01'))
+
+    @property
+    def alerta_stock(self):
+        if self.nivel_minimo_stock is not None and self.stock_actual <= self.nivel_minimo_stock: return "⚠️ BAJO"
+        return "✅ OK" if self.nivel_minimo_stock is not None else "N/A"
+
     def __str__(self):
         return self.nombre
         
@@ -289,10 +290,33 @@ class CompraConsumible(models.Model):
     coste_por_unidad = models.DecimalField(max_digits=10, decimal_places=4, editable=False)
     
     def save(self, *args, **kwargs):
+        es_nuevo = self.pk is None # Verificamos si es una compra nueva
+        
         if self.cantidad and self.cantidad > 0 and self.coste_total is not None:
             self.coste_por_unidad = self.coste_total / self.cantidad
         else:
-             self.coste_por_unidad = Decimal('0.0000')
+            self.coste_por_unidad = Decimal('0.0000')
+            
+        # --- CÁLCULO DEL PRECIO MEDIO PONDERADO (PMP) ---
+        if es_nuevo:
+            tipo_asociado = self.tipo
+            stock_previo = tipo_asociado.stock_actual
+            precio_medio_previo = tipo_asociado.precio_coste_medio
+            
+            if stock_previo <= 0:
+                # Si no había stock, el nuevo precio es directamente a lo que lo compramos hoy
+                nuevo_precio_medio = self.coste_por_unidad
+            else:
+                # Fórmula de las grandes empresas: (Valor Almacén + Valor Nueva Compra) / (Stock Total)
+                valor_inventario_previo = stock_previo * precio_medio_previo
+                valor_nueva_compra = self.coste_total
+                nuevo_stock_total = stock_previo + self.cantidad
+                nuevo_precio_medio = (valor_inventario_previo + valor_nueva_compra) / nuevo_stock_total
+            
+            tipo_asociado.precio_coste_medio = nuevo_precio_medio
+            tipo_asociado.save()
+        # ------------------------------------------------
+
         super().save(*args, **kwargs)
         
     def __str__(self):
@@ -304,16 +328,36 @@ class UsoConsumible(models.Model):
     cantidad_usada = models.DecimalField(max_digits=10, decimal_places=2)
     fecha_uso = models.DateField(default=timezone.now)
     
-    def __str__(self):
-        return f"Uso de {self.cantidad_usada} {self.tipo.unidad_medida}"
+    def __str__(self): return f"Uso de {self.cantidad_usada} {self.tipo.unidad_medida}"
+
+class AjusteStockConsumible(models.Model):
+    tipo = models.ForeignKey(TipoConsumible, on_delete=models.CASCADE)
+    cantidad_ajustada = models.DecimalField(max_digits=10, decimal_places=2, help_text="Usa negativo para restar (Ej: -5) y positivo para sumar (Ej: 5)")
+    motivo = models.CharField(max_length=255)
+    fecha_ajuste = models.DateField(default=timezone.now)
+    
+    class Meta:
+        ordering = ['-fecha_ajuste', '-id']
+        
+    def save(self, *args, **kwargs):
+        self.motivo = self.motivo.upper()
+        super().save(*args, **kwargs)
+
+# Modelo Proxy para mantener compatibilidad en el Panel de Admin si lo usabas
+class TipoConsumibleStock(TipoConsumible):
+    class Meta:
+        proxy = True
+        verbose_name = "Stock de Consumible"
+        verbose_name_plural = "Stocks de Consumibles"
+
+# =========================================================
 
 class FotoVehiculo(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, related_name='fotos', on_delete=models.CASCADE)
     imagen = models.ImageField(upload_to='fotos_vehiculos/')
     descripcion = models.CharField(max_length=50)
     
-    def __str__(self):
-        return f"Foto {self.descripcion} para Orden #{self.orden.id}"
+    def __str__(self): return f"Foto {self.descripcion} para Orden #{self.orden.id}"
         
     def save(self, *args, **kwargs):
         self.descripcion = self.descripcion.upper()
@@ -328,28 +372,14 @@ class LineaPresupuesto(models.Model):
     precio_unitario_estimado = models.DecimalField(max_digits=10, decimal_places=2)
 
     @property
-    def total_linea_estimado(self):
-        return (self.cantidad or 0) * (self.precio_unitario_estimado or 0)
+    def total_linea_estimado(self): return (self.cantidad or 0) * (self.precio_unitario_estimado or 0)
 
-    def __str__(self):
-        return f"Línea ({self.tipo}) para Presupuesto #{self.presupuesto.id}"
+    def __str__(self): return f"Línea ({self.tipo}) para Presupuesto #{self.presupuesto.id}"
 
     def save(self, *args, **kwargs):
         self.descripcion = self.descripcion.upper()
         super(LineaPresupuesto, self).save(*args, **kwargs)
 
-class AjusteStockConsumible(models.Model):
-    tipo = models.ForeignKey(TipoConsumible, on_delete=models.CASCADE)
-    cantidad_ajustada = models.DecimalField(max_digits=10, decimal_places=2)
-    motivo = models.CharField(max_length=255)
-    fecha_ajuste = models.DateField(default=timezone.now)
-    
-    class Meta:
-        ordering = ['-fecha_ajuste', '-id']
-        
-    def save(self, *args, **kwargs):
-        self.motivo = self.motivo.upper()
-        super().save(*args, **kwargs)
 
 class CierreTarjeta(models.Model):
     TARJETA_CHOICES = [
@@ -362,26 +392,7 @@ class CierreTarjeta(models.Model):
     saldo_deuda_banco = models.DecimalField(max_digits=10, decimal_places=2, help_text="Deuda real que dice el banco")
     intereses_calculados = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
-    def __str__(self):
-        return f"Cierre {self.tarjeta} - {self.fecha_cierre}"
-
-class TipoConsumibleStock(TipoConsumible):
-    class Meta:
-        proxy = True
-        verbose_name = "Stock de Consumible"
-        verbose_name_plural = "Stocks de Consumibles"
-        
-    @property
-    def stock_actual(self):
-        total_comprado = CompraConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad'))['total'] or Decimal('0.00')
-        total_usado_ordenes = UsoConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_usada'))['total'] or Decimal('0.00')
-        total_ajustado = AjusteStockConsumible.objects.filter(tipo=self).aggregate(total=Sum('cantidad_ajustada'))['total'] or Decimal('0.00')
-        return (total_comprado - total_usado_ordenes + total_ajustado).quantize(Decimal('0.01'))
-
-    @property
-    def alerta_stock(self):
-        if self.nivel_minimo_stock is not None and self.stock_actual <= self.nivel_minimo_stock: return "⚠️ BAJO"
-        return "✅ OK" if self.nivel_minimo_stock is not None else "N/A"
+    def __str__(self): return f"Cierre {self.tarjeta} - {self.fecha_cierre}"
 
 class NotaTablon(models.Model):
     autor = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -389,8 +400,7 @@ class NotaTablon(models.Model):
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     completada = models.BooleanField(default=False)
 
-    def __str__(self):
-        return f"{self.autor.username} - {self.texto[:20]}"
+    def __str__(self): return f"{self.autor.username} - {self.texto[:20]}"
 
 class NotaInternaOrden(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, related_name='notas_internas', on_delete=models.CASCADE)
@@ -401,23 +411,16 @@ class NotaInternaOrden(models.Model):
     class Meta:
         ordering = ['-fecha_creacion']
 
-    def __str__(self):
-        return f"Nota interna en Orden #{self.orden.id}"
+    def __str__(self): return f"Nota interna en Orden #{self.orden.id}"
 
-# =========================================================
 # --- SEÑALES AUTOMÁTICAS PARA EL INVENTARIO ---
-# =========================================================
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 
 @receiver(pre_delete, sender=CompraConsumible)
 def revertir_stock_al_borrar_compra(sender, instance, **kwargs):
-    if hasattr(instance, 'tipo') and instance.tipo:
-        instance.tipo.stock_actual -= instance.cantidad
-        instance.tipo.save()
+    pass # Ya no necesitamos la señal de restar stock manual porque se lee todo en tiempo real con aggregates.
 
 @receiver(pre_delete, sender=UsoConsumible)
 def revertir_stock_al_borrar_uso(sender, instance, **kwargs):
-    if hasattr(instance, 'tipo') and instance.tipo:
-        instance.tipo.stock_actual += instance.cantidad_usada
-        instance.tipo.save()
+    pass

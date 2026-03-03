@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Ajustar Stock - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; padding: 40px; }
+        .form-panel { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 5px solid #f59e0b; }
+        .input-box { width: 100%; padding: 12px; margin-top: 5px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #cbd5e1; box-sizing: border-box; }
+        .btn-modern { background-color: #f59e0b; color: white; padding: 12px; border-radius: 8px; font-weight: 700; border: none; width: 100%; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="form-panel">
+        <a href="{% url 'inventario' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Cancelar</a>
+        <h2 style="color: #0f172a; margin-bottom: 5px;">⚖️ Ajuste Manual</h2>
+        <p style="color: #64748b; font-weight: 600; margin-top: 0; margin-bottom: 25px;">Artículo: <strong style="color: #0f172a;">{{ tipo.nombre }}</strong></p>
+        
+        <div style="background: #fffbeb; padding: 15px; border-radius: 8px; color: #92400e; font-size: 0.9em; margin-bottom: 20px;">
+            <strong>ℹ️ INSTRUCCIONES:</strong><br>
+            Para <strong>quitar</strong> stock, pon un signo menos (Ej: <b>-5</b>).<br>
+            Para <strong>sumar</strong> stock regalado o encontrado (Ej: <b>2</b>).
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+            <label style="font-weight: 600; color: #475569;">Cantidad a ajustar ({{ tipo.unidad_medida }}):</label>
+            <input type="number" step="0.01" name="cantidad" class="input-box" placeholder="-5 o 5" required>
+            
+            <label style="font-weight: 600; color: #475569;">Motivo del ajuste:</label>
+            <input type="text" name="motivo" class="input-box" placeholder="Ej: Derrame en el taller, conteo manual..." required>
+            
+            <button type="submit" class="btn-modern">Aplicar Ajuste a la Base de Datos</button>
+        </form>
+    </div>
+</body>
+</html>

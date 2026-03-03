@@ -172,6 +172,7 @@
                         <p class="section-title" style="margin-top: 25px;">💸 Gestión Financiera</p>
                         <div class="nav-buttons" style="margin-bottom: 0;">
                             {% if not is_read_only_user %}
+                            <a href="{% url 'inventario' %}" class="nav-btn" style="background: #0ea5e9;">📦 Inventario y Stock</a>
                             <a href="{% url 'registrar_ingreso' %}" class="nav-btn" style="background: #10b981;">💰 Registrar Ingreso</a>
                             <a href="{% url 'anadir_gasto' %}" class="nav-btn" style="background: #ef4444;">➖ Añadir Gasto</a>
                             {% endif %}

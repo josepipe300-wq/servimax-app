@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario y Stock - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 1200px !important; margin: 0 auto; padding: 40px 20px; }
+        .section-panel { background: #ffffff; padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; margin-bottom: 24px; }
+        .table-modern { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .table-modern th, .table-modern td { padding: 14px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+        .table-modern th { background-color: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.85em; text-transform: uppercase; }
+        .btn-modern { background-color: #3b82f6; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-block; transition: 0.2s; border: none; }
+        .btn-modern:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        .btn-ajuste { background-color: #f59e0b; color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.85em; font-weight: 700; text-decoration: none; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver al Inicio</a>
+                <h1 style="font-size: 2.2em; font-weight: 800; color: #0f172a; margin: 5px 0 0 0;">📦 Inventario y Stock</h1>
+            </div>
+            <a href="{% url 'crear_tipo_consumible' %}" class="btn-modern">➕ Nuevo Consumible</a>
+        </div>
+
+        <div class="section-panel">
+            <table class="table-modern">
+                <thead>
+                    <tr>
+                        <th>Artículo (Consumible)</th>
+                        <th>Stock Actual</th>
+                        <th>Alerta</th>
+                        <th>Coste Medio (PMP)</th>
+                        <th style="text-align: right;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tipo in tipos %}
+                    <tr onclick="window.location.href='{% url 'detalle_consumible' tipo.id %}'" style="cursor: pointer; transition: background 0.2s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
+                        <td>
+                            <strong style="color: #0f172a; font-size: 1.1em;">{{ tipo.nombre }}</strong><br>
+                            <span style="color: #64748b; font-size: 0.85em;">Se mide en: {{ tipo.unidad_medida }}</span>
+                        </td>
+                        <td style="font-weight: 800; font-size: 1.2em; {% if tipo.stock_actual <= 0 %}color: #ef4444;{% else %}color: #10b981;{% endif %}">
+                            {{ tipo.stock_actual }} {{ tipo.unidad_medida }}
+                        </td>
+                        <td>
+                            <span style="padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.85em; {% if 'BAJO' in tipo.alerta_stock %}background: #fee2e2; color: #b91c1c;{% else %}background: #d1fae5; color: #047857;{% endif %}">
+                                {{ tipo.alerta_stock }}
+                            </span>
+                        </td>
+                        <td style="color: #475569; font-weight: 600;">{{ tipo.precio_coste_medio|floatformat:2 }} € / {{ tipo.unidad_medida }}</td>
+                        <td style="text-align: right;">
+                        <td style="text-align: right;">
+                            <a href="{% url 'editar_consumible' tipo.id %}" class="btn-ajuste" style="background-color: #64748b; margin-right: 5px;">✏️ Editar</a>
+                            <a href="{% url 'ajustar_stock' tipo.id %}" class="btn-ajuste">⚖️ Ajustar Stock</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">No hay consumibles registrados. ¡Añade el primero!</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
