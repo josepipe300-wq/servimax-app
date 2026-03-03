@@ -3,7 +3,7 @@ from django.db import models
 from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Sum
-from django.contrib.auth.models import User # <-- IMPORTACIÓN AÑADIDA PARA EL TABLÓN
+from django.contrib.auth.models import User
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
@@ -95,16 +95,13 @@ class OrdenDeReparacion(models.Model):
     estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='Recibido')
     fecha_entrada = models.DateTimeField(auto_now_add=True)
     
-    # --- LO NUEVO ---
     trabajo_interno = models.BooleanField(default=False, verbose_name="Vehículo del Taller")
 
     @property
     def dias_en_taller(self):
-        from django.utils import timezone
         if self.fecha_entrada:
             return (timezone.now().date() - self.fecha_entrada.date()).days
         return 0
-    # ----------------
 
     def __str__(self):
         return f"Orden #{self.id} - {self.vehiculo.matricula}"
@@ -119,6 +116,39 @@ class Empleado(models.Model):
         self.nombre = self.nombre.upper()
         super(Empleado, self).save(*args, **kwargs)
 
+# =========================================================
+# --- NUEVO MODELO: DEUDAS DEL TALLER ---
+# =========================================================
+class DeudaTaller(models.Model):
+    acreedor = models.CharField(max_length=150, help_text="A quién se le debe (Ej: Hermano, Cliente X)")
+    motivo = models.CharField(max_length=255)
+    importe_inicial = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha_creacion = models.DateField(default=timezone.now)
+
+    @property
+    def importe_pagado(self):
+        # Suma todos los gastos que se han asociado a esta deuda
+        total = self.gastos_pagados.aggregate(total=Sum('importe'))['total']
+        return total or Decimal('0.00')
+
+    @property
+    def importe_pendiente(self):
+        return self.importe_inicial - self.importe_pagado
+
+    @property
+    def estado(self):
+        if self.importe_pendiente <= 0:
+            return "Pagada"
+        return "Pendiente"
+
+    def __str__(self):
+        return f"{self.acreedor} - Resta: {self.importe_pendiente}€"
+
+    def save(self, *args, **kwargs):
+        self.acreedor = self.acreedor.upper()
+        self.motivo = self.motivo.upper()
+        super(DeudaTaller, self).save(*args, **kwargs)
+
 class Gasto(models.Model):
     CATEGORIA_CHOICES = [
         ('Repuestos', 'Repuestos'),
@@ -129,6 +159,7 @@ class Gasto(models.Model):
         ('Otros', 'Otros'),
         ('Compra de Consumibles', 'Compra de Consumibles'),
         ('COMISIONES_INTERESES', 'Comisiones e Intereses Bancarios'),
+        ('Pago de Deuda', 'Pago de Deuda (Taller)'), # <-- NUEVA CATEGORÍA AÑADIDA
     ]
     
     METODO_PAGO_CHOICES = [
@@ -147,13 +178,16 @@ class Gasto(models.Model):
     
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True, related_name='gastos')
     vehiculo = models.ForeignKey(Vehiculo, on_delete=models.SET_NULL, null=True, blank=True)
-
     empleado = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # --- CONEXIÓN CON LA DEUDA ---
+    deuda_asociada = models.ForeignKey(DeudaTaller, on_delete=models.SET_NULL, null=True, blank=True, related_name='gastos_pagados', help_text="Si es un pago de deuda, elige a quién se le paga")
+    
     pagado_con_tarjeta = models.BooleanField(default=False)
 
     def __str__(self):
         display_importe = self.importe if self.importe is not None else 0
-        return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€ [{self.get_metodo_pago_display()}]"
+        return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€"
 
     def save(self, *args, **kwargs):
         if self.descripcion:
@@ -349,21 +383,15 @@ class TipoConsumibleStock(TipoConsumible):
         if self.nivel_minimo_stock is not None and self.stock_actual <= self.nivel_minimo_stock: return "⚠️ BAJO"
         return "✅ OK" if self.nivel_minimo_stock is not None else "N/A"
 
-# =========================================================
-# --- NUEVO MODELO: TABLÓN DE NOTAS DEL TALLER ---
-# =========================================================
 class NotaTablon(models.Model):
     autor = models.ForeignKey(User, on_delete=models.CASCADE)
     texto = models.TextField()
     fecha_creacion = models.DateTimeField(auto_now_add=True)
-    completada = models.BooleanField(default=False) # <-- NUEVO CAMPO
+    completada = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.autor.username} - {self.texto[:20]}"
 
-        # =========================================================
-# --- NUEVO MODELO: NOTAS INTERNAS POR VEHÍCULO ---
-# =========================================================
 class NotaInternaOrden(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, related_name='notas_internas', on_delete=models.CASCADE)
     autor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
@@ -373,23 +401,10 @@ class NotaInternaOrden(models.Model):
     class Meta:
         ordering = ['-fecha_creacion']
 
-        # Añadimos un interruptor para saber si es del taller o de cliente
-    trabajo_interno = models.BooleanField(default=False, verbose_name="Vehículo del Taller")
-
-    # Esta función calcula los días automáticamente
-    @property
-    def dias_en_taller(self):
-        from django.utils import timezone
-        # Busca automáticamente el nombre de tu campo de fecha (fecha_creacion, fecha_ingreso, etc)
-        fecha_base = getattr(self, 'fecha_creacion', None) or getattr(self, 'fecha_ingreso', None) or getattr(self, 'fecha', None)
-        if fecha_base:
-            return (timezone.now().date() - fecha_base.date()).days
-        return 0
-
     def __str__(self):
         return f"Nota interna en Orden #{self.orden.id}"
 
-        # =========================================================
+# =========================================================
 # --- SEÑALES AUTOMÁTICAS PARA EL INVENTARIO ---
 # =========================================================
 from django.db.models.signals import pre_delete
@@ -397,14 +412,12 @@ from django.dispatch import receiver
 
 @receiver(pre_delete, sender=CompraConsumible)
 def revertir_stock_al_borrar_compra(sender, instance, **kwargs):
-    """Si se borra un Gasto de consumible, RESTAMOS ese stock que había entrado."""
-    if instance.tipo_consumible:
-        instance.tipo_consumible.stock_actual -= instance.cantidad
-        instance.tipo_consumible.save()
+    if hasattr(instance, 'tipo') and instance.tipo:
+        instance.tipo.stock_actual -= instance.cantidad
+        instance.tipo.save()
 
 @receiver(pre_delete, sender=UsoConsumible)
 def revertir_stock_al_borrar_uso(sender, instance, **kwargs):
-    """Si se borra una factura u orden que usó consumibles, SUMAMOS (devolvemos) el stock."""
-    if instance.tipo_consumible:
-        instance.tipo_consumible.stock_actual += instance.cantidad
-        instance.tipo_consumible.save()
+    if hasattr(instance, 'tipo') and instance.tipo:
+        instance.tipo.stock_actual += instance.cantidad_usada
+        instance.tipo.save()

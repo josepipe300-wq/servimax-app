@@ -9,6 +9,8 @@ urlpatterns = [
     path('anadir-gasto/', views.anadir_gasto, name='anadir_gasto'),
     path('registrar-ingreso/', views.registrar_ingreso, name='registrar_ingreso'),
     path('stock-inicial/', views.stock_inicial_consumible, name='stock_inicial_consumible'),
+    path('deudas/', views.lista_deudas, name='lista_deudas'),
+    path('deuda/<int:deuda_id>/', views.detalle_deuda, name='detalle_deuda'),
 
     # Presupuestos
     path('presupuestos/crear/', views.crear_presupuesto, name='crear_presupuesto'),

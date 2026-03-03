@@ -176,6 +176,7 @@
                             <a href="{% url 'anadir_gasto' %}" class="nav-btn" style="background: #ef4444;">➖ Añadir Gasto</a>
                             {% endif %}
                             <a href="{% url 'contabilidad' %}" class="nav-btn" style="background: #8b5cf6;">📊 Contabilidad</a>
+                            <a href="{% url 'lista_deudas' %}" class="nav-btn" style="background: #14b8a6;">📓 Cuentas por Pagar</a>
                             <a href="{% url 'cuentas_por_cobrar' %}" class="nav-btn" style="background: #f43f5e;">🚨 Cuentas por Cobrar</a>
                             <a href="{% url 'informe_tarjeta' %}" class="nav-btn" style="background: #0f172a;">💳 Bancos / TPV</a>
                         </div>
@@ -263,8 +264,8 @@
                                             <br>
                                             <span class="badge-metodo">💳 {{ mov.metodo_pago }}</span>
                                         </td>
-                                        <td style="text-align: right; font-weight: 700; font-size: 1.1em; vertical-align: middle; {% if mov.importe < 0 or mov.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Gasolina/Diesel,Otros,Compra de Consumibles,COMISIONES_INTERESES' %}color: #ef4444;{% else %}color: #10b981;{% endif %}">
-                                            {% if mov.importe < 0 or mov.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Gasolina/Diesel,Otros,Compra de Consumibles,COMISIONES_INTERESES' %}-{% else %}+{% endif %}{{ mov.importe|floatformat:2 }} €
+                                        <td style="text-align: right; font-weight: 700; font-size: 1.1em; vertical-align: middle; {% if mov.importe < 0 or mov.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Gasolina/Diesel,Otros,Compra de Consumibles,COMISIONES_INTERESES,Pago de Deuda' %}color: #ef4444;{% else %}color: #10b981;{% endif %}">
+                                            {% if mov.importe < 0 or mov.categoria in 'Repuestos,Sueldos,Herramientas,Suministros,Gasolina/Diesel,Otros,Compra de Consumibles,COMISIONES_INTERESES,Pago de Deuda' %}-{% else %}+{% endif %}{{ mov.importe|floatformat:2 }} €
                                         </td>
                                     </tr>
                                     {% empty %}
@@ -347,5 +348,7 @@
                 </div>
             </div>
 
-        </div> </div> </body>
+        </div> 
+    </div> 
+</body>
 </html>

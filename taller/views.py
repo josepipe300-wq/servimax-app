@@ -4,7 +4,7 @@ from .models import (
     Ingreso, Gasto, Cliente, Vehiculo, OrdenDeReparacion, Empleado,
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
-    CierreTarjeta, NotaTablon, NotaInternaOrden
+    CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller, 
 )
 from django.db.models import Sum, F, Q
 from django.db import transaction
@@ -370,83 +370,105 @@ def ingresar_vehiculo(request):
     return render(request, 'taller/ingresar_vehiculo.html', context)
 
 
-# --- AÑADIR GASTO ---
+# --- GASTOS ---
 @login_required
-@bloquear_lectura # CANDADO
 def anadir_gasto(request):
-    if not (request.user.is_superuser or request.user.has_perm('taller.add_gasto') or request.user.has_perm('taller.add_compraconsumible')):
-        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para acceder a la gestión de gastos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+    if request.user.groups.filter(name='Solo Ver').exists():
+        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'.</p><br><a href='/'>← Volver</a>")
 
     if request.method == 'POST':
-        categoria = request.POST.get('categoria', '')
-        metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
-        pagado_con_tarjeta_bool = (metodo_pago != 'EFECTIVO')
+        metodo_pago = request.POST.get('metodo_pago')
+        categoria = request.POST.get('categoria')
 
         if categoria == 'Compra de Consumibles':
             tipo_id = request.POST.get('tipo_consumible')
-            fecha_compra_str = request.POST.get('fecha_compra') or request.POST.get('fecha_gasto')
-            cantidad_str = request.POST.get('cantidad') or '1' 
-            coste_total_str = request.POST.get('coste_total') or request.POST.get('importe')
+            fecha_str = request.POST.get('fecha_compra')
+            cantidad = request.POST.get('cantidad')
+            coste_total = request.POST.get('coste_total')
 
-            if not tipo_id or not coste_total_str:
-                 return redirect('anadir_gasto')
-                 
+            if not all([tipo_id, fecha_str, cantidad, coste_total]):
+                return HttpResponse("Todos los campos de consumible son obligatorios.")
+
             try:
-                with transaction.atomic():
-                    cantidad = Decimal(cantidad_str)
-                    coste_total = Decimal(coste_total_str)
-                    if cantidad <= 0 or coste_total < 0: return redirect('anadir_gasto')
-                    tipo_consumible = get_object_or_404(TipoConsumible, id=tipo_id)
-                    try: fecha_compra = datetime.strptime(fecha_compra_str, '%Y-%m-%d').date() if fecha_compra_str else timezone.now().date()
-                    except ValueError: fecha_compra = timezone.now().date()
+                tipo = TipoConsumible.objects.get(id=tipo_id)
+                cantidad_decimal = Decimal(cantidad.replace(',', '.'))
+                coste_total_decimal = Decimal(coste_total.replace(',', '.'))
+                fecha_compra = datetime.strptime(fecha_str, '%Y-%m-%d').date()
 
-                    CompraConsumible.objects.create(tipo=tipo_consumible, fecha_compra=fecha_compra, cantidad=cantidad, coste_total=coste_total)
-                    Gasto.objects.create(fecha=fecha_compra, categoria=categoria, importe=coste_total, descripcion=f"COMPRA DE {cantidad} {tipo_consumible.unidad_medida} DE {tipo_consumible.nombre}".upper(), pagado_con_tarjeta=pagado_con_tarjeta_bool, metodo_pago=metodo_pago)
-            except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('anadir_gasto')
+                CompraConsumible.objects.create(
+                    tipo=tipo, fecha_compra=fecha_compra,
+                    cantidad=cantidad_decimal, coste_total=coste_total_decimal
+                )
+                
+                Gasto.objects.create(
+                    fecha=fecha_compra, categoria=categoria,
+                    importe=coste_total_decimal, descripcion=f"Compra de {cantidad_decimal} {tipo.unidad_medida} de {tipo.nombre}",
+                    metodo_pago=metodo_pago
+                )
+            except (ValueError, TypeError, TipoConsumible.DoesNotExist):
+                return HttpResponse("Error en los datos de la compra de consumible.")
+            
+            # --- CAMBIO AQUÍ ---
+            return redirect('home') 
 
         else:
-            importe_str = request.POST.get('importe')
-            descripcion = request.POST.get('descripcion', '')
-            fecha_gasto_str = request.POST.get('fecha_gasto')
-            try: fecha_gasto = datetime.strptime(fecha_gasto_str, '%Y-%m-%d').date() if fecha_gasto_str else timezone.now().date()
-            except ValueError: fecha_gasto = timezone.now().date()
-            try:
-                importe = Decimal(importe_str) if importe_str else None
-                if importe is not None and importe < 0: importe = None
-            except (ValueError, TypeError, Decimal.InvalidOperation): importe = None
+            fecha_str = request.POST.get('fecha_gasto')
+            importe = request.POST.get('importe')
+            descripcion = request.POST.get('descripcion')
+            orden_id = request.POST.get('orden')
+            empleado_id = request.POST.get('empleado')
+            deuda_id = request.POST.get('deuda')
 
-            gasto = Gasto(fecha=fecha_gasto, categoria=categoria, importe=importe, descripcion=descripcion.upper(), pagado_con_tarjeta=pagado_con_tarjeta_bool, metodo_pago=metodo_pago)
+            if not importe or not descripcion:
+                return HttpResponse("Faltan campos obligatorios para el gasto.")
 
-            if categoria in ['Repuestos', 'Otros']:
-                orden_id = request.POST.get('orden')
-                if orden_id:
-                    try:
-                        orden = OrdenDeReparacion.objects.get(id=orden_id)
-                        gasto.orden = orden 
-                        if orden.estado in ['Recibido', 'En Diagnostico']:
-                            orden.estado = 'En Reparacion'
-                            orden.save()
-                    except OrdenDeReparacion.DoesNotExist: pass
+            fecha_gasto = datetime.strptime(fecha_str, '%Y-%m-%d').date() if fecha_str else timezone.now().date()
+            importe_decimal = Decimal(importe.replace(',', '.'))
+            
+            orden = None
+            vehiculo = None
+            if (categoria in ['Repuestos', 'Otros']) and orden_id:
+                try:
+                    orden = OrdenDeReparacion.objects.get(id=orden_id)
+                    vehiculo = orden.vehiculo
+                except OrdenDeReparacion.DoesNotExist:
+                    pass
 
-            if categoria == 'Sueldos':
-                empleado_id = request.POST.get('empleado')
-                if empleado_id:
-                     try: gasto.empleado = Empleado.objects.get(id=empleado_id)
-                     except Empleado.DoesNotExist: pass
-            gasto.save()
+            empleado = None
+            if categoria == 'Sueldos' and empleado_id:
+                try:
+                    empleado = Empleado.objects.get(id=empleado_id)
+                except Empleado.DoesNotExist:
+                    pass
+                    
+            deuda_taller = None
+            if categoria == 'Pago de Deuda' and deuda_id:
+                try:
+                    deuda_taller = DeudaTaller.objects.get(id=deuda_id)
+                except DeudaTaller.DoesNotExist:
+                    pass
 
-        return redirect('home')
+            Gasto.objects.create(
+                metodo_pago=metodo_pago, fecha=fecha_gasto, categoria=categoria,
+                importe=importe_decimal, descripcion=descripcion,
+                orden=orden, vehiculo=vehiculo, empleado=empleado, deuda_asociada=deuda_taller
+            )
+            
+            # --- Y CAMBIO AQUÍ ---
+            return redirect('home')
 
-    ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente').order_by('-id')
+    ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado')
     empleados = Empleado.objects.all()
     tipos_consumible = TipoConsumible.objects.all()
-    categorias_gasto_choices = [choice for choice in Gasto.CATEGORIA_CHOICES if choice[0] != 'Compra de Consumibles']
-    metodos_pago = Gasto.METODO_PAGO_CHOICES 
-    
+    deudas_pendientes = [d for d in DeudaTaller.objects.all() if d.estado == 'Pendiente']
+
     context = {
-        'ordenes_activas': ordenes_activas, 'empleados': empleados, 'tipos_consumible': tipos_consumible,
-        'categorias_gasto': Gasto.CATEGORIA_CHOICES, 'categorias_gasto_select': categorias_gasto_choices,
-        'metodos_pago': metodos_pago
+        'metodos_pago': Gasto.METODO_PAGO_CHOICES,
+        'categorias_gasto': Gasto.CATEGORIA_CHOICES,
+        'ordenes_activas': ordenes_activas,
+        'empleados': empleados,
+        'tipos_consumible': tipos_consumible,
+        'deudas_pendientes': deudas_pendientes
     }
     return render(request, 'taller/anadir_gasto.html', context)
 
@@ -1751,3 +1773,54 @@ def historial_notas(request):
     # Muestra todas las notas que ya están completadas
     notas = NotaTablon.objects.filter(completada=True).order_by('-fecha_creacion')
     return render(request, 'taller/historial_notas.html', {'notas': notas})
+
+# --- DEUDAS DEL TALLER ---
+@login_required
+def lista_deudas(request):
+    if request.method == 'POST':
+        if request.user.groups.filter(name='Solo Ver').exists():
+            return HttpResponseForbidden("No tienes permiso para crear deudas.")
+            
+        acreedor = request.POST.get('acreedor')
+        motivo = request.POST.get('motivo')
+        importe_inicial = request.POST.get('importe_inicial')
+        
+        if acreedor and motivo and importe_inicial:
+            DeudaTaller.objects.create(
+                acreedor=acreedor,
+                motivo=motivo,
+                importe_inicial=importe_inicial
+            )
+            return redirect('lista_deudas')
+            
+    # Obtenemos todas las deudas y las separamos por estado
+    todas_las_deudas = DeudaTaller.objects.all().order_by('-fecha_creacion', '-id')
+    
+    deudas_pendientes = [d for d in todas_las_deudas if d.estado == 'Pendiente']
+    deudas_pagadas = [d for d in todas_las_deudas if d.estado == 'Pagada']
+    
+    context = {
+        'deudas_pendientes': deudas_pendientes,
+        'deudas_pagadas': deudas_pagadas
+    }
+    return render(request, 'taller/lista_deudas.html', context)
+
+@login_required
+def detalle_deuda(request, deuda_id):
+    deuda = get_object_or_404(DeudaTaller, id=deuda_id)
+    # Buscamos todos los gastos asociados a esta deuda concreta
+    pagos = deuda.gastos_pagados.all().order_by('-fecha', '-id')
+    
+    # Calculamos el porcentaje pagado para la barra de progreso
+    porcentaje = 0
+    if deuda.importe_inicial > 0:
+        porcentaje = (deuda.importe_pagado / deuda.importe_inicial) * 100
+        if porcentaje > 100: 
+            porcentaje = 100
+            
+    context = {
+        'deuda': deuda,
+        'pagos': pagos,
+        'porcentaje_pagado': porcentaje
+    }
+    return render(request, 'taller/detalle_deuda.html', context)

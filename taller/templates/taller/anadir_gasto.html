@@ -66,6 +66,18 @@
                         {% endfor %}
                     </select>
                 </div>
+                
+                <div id="campo-deuda" style="display: none;">
+                    <label for="deuda" style="color: #ef4444; font-weight: bold;">Pagar deuda a:</label>
+                    <select id="deuda" name="deuda" style="border-color: #ef4444;">
+                        <option value="">--- Selecciona la deuda a pagar ---</option>
+                        {% for deuda in deudas_pendientes %}
+                            <option value="{{ deuda.id }}">
+                                {{ deuda.acreedor }} (Resta: {{ deuda.importe_pendiente|floatformat:2 }}€)
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
 
             <div id="campos-consumible" style="display: none;">
@@ -92,8 +104,9 @@
         const categoriaSelect = document.getElementById('categoria');
         const camposGastoNormal = document.getElementById('campos-gasto-normal');
         const camposConsumible = document.getElementById('campos-consumible');
-        const campoOrden = document.getElementById('campo-orden'); // Cambiado ID
+        const campoOrden = document.getElementById('campo-orden');
         const campoEmpleado = document.getElementById('campo-empleado');
+        const campoDeuda = document.getElementById('campo-deuda'); // Añadido
 
         function actualizarFormulario() {
             const selectedValue = categoriaSelect.value;
@@ -101,6 +114,7 @@
             camposConsumible.style.display = 'none';
             campoOrden.style.display = 'none';
             campoEmpleado.style.display = 'none';
+            campoDeuda.style.display = 'none'; // Añadido
 
             if (selectedValue === 'Compra de Consumibles') {
                 camposConsumible.style.display = 'block';
@@ -108,9 +122,11 @@
                 camposGastoNormal.style.display = 'block';
 
                 if (selectedValue === 'Repuestos' || selectedValue === 'Otros') {
-                    campoOrden.style.display = 'block'; // Mostramos el select de órdenes
+                    campoOrden.style.display = 'block'; 
                 } else if (selectedValue === 'Sueldos') {
                     campoEmpleado.style.display = 'block';
+                } else if (selectedValue === 'Pago de Deuda') {
+                    campoDeuda.style.display = 'block'; // Añadido
                 }
             }
         }
