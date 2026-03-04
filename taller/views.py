@@ -291,14 +291,18 @@ def ingresar_vehiculo(request):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para ingresar vehículos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
     if request.method == 'POST':
-        nombre_cliente = request.POST['cliente_nombre'].upper()
-        telefono_cliente = request.POST['cliente_telefono']
+        # --- NUEVO: Recibimos el ID del cliente si se seleccionó del desplegable ---
+        cliente_id = request.POST.get('cliente_existente')
+        
+        nombre_cliente = request.POST.get('cliente_nombre', '').upper()
+        telefono_cliente = request.POST.get('cliente_telefono', '')
         tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
         documento_fiscal = request.POST.get('cliente_documento_fiscal', '')
         direccion_fiscal = request.POST.get('cliente_direccion_fiscal', '')
         codigo_postal_fiscal = request.POST.get('cliente_codigo_postal_fiscal', '')
         ciudad_fiscal = request.POST.get('cliente_ciudad_fiscal', '')
         provincia_fiscal = request.POST.get('cliente_provincia_fiscal', '')
+        
         matricula_vehiculo = request.POST['vehiculo_matricula'].upper()
         marca_vehiculo = request.POST['vehiculo_marca'].upper()
         modelo_vehiculo = request.POST['vehiculo_modelo'].upper()
@@ -307,11 +311,30 @@ def ingresar_vehiculo(request):
         problema_reportado = request.POST['problema'].upper()
 
         with transaction.atomic():
-            cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente, defaults={'nombre': nombre_cliente})
-            cliente.nombre = nombre_cliente; cliente.tipo_documento = tipo_documento; cliente.documento_fiscal = documento_fiscal
-            cliente.direccion_fiscal = direccion_fiscal; cliente.codigo_postal_fiscal = codigo_postal_fiscal
-            cliente.ciudad_fiscal = ciudad_fiscal; cliente.provincia_fiscal = provincia_fiscal
-            cliente.save()
+            # --- NUEVA LÓGICA: ¿Cliente Existente o Nuevo? ---
+            if cliente_id:
+                try:
+                    cliente = Cliente.objects.get(id=cliente_id)
+                    # Actualizamos sus datos por si corregiste algo en el formulario al ingresarlo
+                    cliente.nombre = nombre_cliente
+                    if telefono_cliente: cliente.telefono = telefono_cliente
+                    cliente.tipo_documento = tipo_documento
+                    cliente.documento_fiscal = documento_fiscal
+                    cliente.direccion_fiscal = direccion_fiscal
+                    cliente.codigo_postal_fiscal = codigo_postal_fiscal
+                    cliente.ciudad_fiscal = ciudad_fiscal
+                    cliente.provincia_fiscal = provincia_fiscal
+                    cliente.save()
+                except Cliente.DoesNotExist:
+                    cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente, defaults={'nombre': nombre_cliente})
+            else:
+                # Si no seleccionó del desplegable, lo crea como siempre
+                cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente, defaults={'nombre': nombre_cliente})
+                cliente.nombre = nombre_cliente; cliente.tipo_documento = tipo_documento; cliente.documento_fiscal = documento_fiscal
+                cliente.direccion_fiscal = direccion_fiscal; cliente.codigo_postal_fiscal = codigo_postal_fiscal
+                cliente.ciudad_fiscal = ciudad_fiscal; cliente.provincia_fiscal = provincia_fiscal
+                cliente.save()
+            # --------------------------------------------------
 
             vehiculo, v_created = Vehiculo.objects.get_or_create(matricula=matricula_vehiculo, defaults={'marca': marca_vehiculo, 'modelo': modelo_vehiculo, 'kilometraje': kilometraje_vehiculo, 'cliente': cliente})
             if not v_created:
@@ -353,9 +376,30 @@ def ingresar_vehiculo(request):
                 'ciudad_fiscal': p.cliente.ciudad_fiscal or '', 'provincia_fiscal': p.cliente.provincia_fiscal or 'TARRAGONA',
             }
         })
-    context = { 'presupuestos_disponibles_data': presupuestos_con_datos_fiscales }
+        
+    # --- NUEVO: Empaquetar TODOS los clientes para enviarlos al desplegable ---
+    clientes = Cliente.objects.all().order_by('nombre')
+    clientes_con_datos = []
+    for cliente in clientes:
+        clientes_con_datos.append({
+            'cliente': cliente,
+            'cliente_data_json': json.dumps({
+                'nombre': cliente.nombre or '',
+                'telefono': cliente.telefono or '',
+                'tipo_documento': cliente.tipo_documento or 'DNI', 
+                'documento_fiscal': cliente.documento_fiscal or '',
+                'direccion_fiscal': cliente.direccion_fiscal or '', 
+                'codigo_postal_fiscal': cliente.codigo_postal_fiscal or '',
+                'ciudad_fiscal': cliente.ciudad_fiscal or '', 
+                'provincia_fiscal': cliente.provincia_fiscal or ''
+            })
+        })
+        
+    context = { 
+        'presupuestos_disponibles_data': presupuestos_con_datos_fiscales,
+        'clientes_data': clientes_con_datos # <-- Esto permite crear el desplegable en el HTML
+    }
     return render(request, 'taller/ingresar_vehiculo.html', context)
-
 
 @login_required
 def anadir_gasto(request):

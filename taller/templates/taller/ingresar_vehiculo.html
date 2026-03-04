@@ -7,165 +7,210 @@
     <title>Ingresar Vehículo - ServiMax</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* Estilo para el check de confirmación */
-        .upload-status {
-            font-weight: bold;
-            color: #28a745; /* Verde */
-            margin-left: 10px;
-            display: none; /* Oculto por defecto */
-        }
-        /* Hacer los inputs de archivo más grandes para facilitar el toque en el móvil */
-        input[type="file"] {
-            padding: 10px;
-            background-color: #f8f9fa;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            width: 100%;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 900px !important; margin: 0 auto; padding: 40px 20px; }
+        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        
+        .section-panel { background: #ffffff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; margin-bottom: 24px; }
+        .section-title { font-size: 1.2em; font-weight: 700; color: #3b82f6; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-top: 0; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;}
+
+        /* Formularios Modernos */
+        label { display: block; font-weight: 600; color: #475569; margin-bottom: 6px; font-size: 0.9em; }
+        .modern-input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 15px; box-sizing: border-box; font-family: 'Inter'; font-size: 1em; outline: none; transition: 0.2s; background-color: #f8fafc; margin-bottom: 15px;}
+        .modern-input:focus { border-color: #3b82f6; background-color: #ffffff; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        
+        .grid-2-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+        
+        /* Botón de Enviar */
+        .btn-submit { background: #0f172a; color: white; border: none; padding: 16px 24px; border-radius: 10px; font-weight: 700; font-size: 1.1em; cursor: pointer; transition: 0.2s; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 10px; font-family: 'Inter';}
+        .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.15); filter: brightness(1.1); }
+
+        /* Estilo para los inputs de fotos */
+        .photo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .photo-input-wrapper { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 15px; border-radius: 8px; transition: 0.2s; }
+        .photo-input-wrapper:hover { border-color: #3b82f6; background: #eff6ff;}
+        input[type="file"] { width: 100%; font-size: 0.9em; color: #64748b; }
+        input[type="file"]::file-selector-button { background: #e2e8f0; border: none; padding: 8px 12px; border-radius: 6px; color: #475569; font-weight: 600; cursor: pointer; transition: 0.2s; margin-right: 10px;}
+        input[type="file"]::file-selector-button:hover { background: #cbd5e1; }
+        
+        .upload-status { font-weight: bold; color: #10b981; font-size: 0.85em; display: none; background: #dcfce7; padding: 2px 8px; border-radius: 999px; margin-left: 5px;}
     </style>
 </head>
 <body>
-    <div class="form-container">
-        <div class="header">
-            <h1>Ingresar Nuevo Vehículo</h1>
-            <a href="{% url 'home' %}" class="back-btn">← Volver</a>
+    <div class="container">
+        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+                <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver al Panel</a>
+                <h1 class="header-title">Ingresar Nuevo Vehículo</h1>
+                <p style="color: #64748b; font-weight: 500; margin: 0;">Abre una nueva orden de reparación en el taller.</p>
+            </div>
         </div>
-        <hr>
 
         <form id="ingreso-form" action="{% url 'ingresar_vehiculo' %}" method="post" enctype="multipart/form-data">
             {% csrf_token %}
 
-            <div class="section">
-                 <h2>Paso Opcional: Cargar desde Presupuesto</h2>
-                 <label for="presupuesto_select">Seleccionar Presupuesto Existente:</label>
-                 <select id="presupuesto_select" name="presupuesto_asociado">
-                     <option value="">--- Ninguno (Introducir datos manualmente) ---</option>
-                     
-                     {% for p_data in presupuestos_disponibles_data %} 
-                         {% with p=p_data.presupuesto %}
-                         <option value="{{ p.id }}"
-                                 data-cliente-nombre="{{ p.cliente.nombre }}"
-                                 data-cliente-telefono="{{ p.cliente.telefono }}"
-                                 
-                                 data-cliente-tipo-documento="{{ p_data.cliente_data.tipo_documento }}"
-                                 data-cliente-documento-fiscal="{{ p_data.cliente_data.documento_fiscal }}"
-                                 data-cliente-direccion-fiscal="{{ p_data.cliente_data.direccion_fiscal }}"
-                                 data-cliente-codigo-postal-fiscal="{{ p_data.cliente_data.codigo_postal_fiscal }}"
-                                 data-cliente-ciudad-fiscal="{{ p_data.cliente_data.ciudad_fiscal }}"
-                                 data-cliente-provincia-fiscal="{{ p_data.cliente_data.provincia_fiscal }}"
-                                 
-                                 data-vehiculo-matricula="{{ p.vehiculo.matricula|default:p.matricula_nueva|default:'' }}"
-                                 data-vehiculo-marca="{{ p.vehiculo.marca|default:p.marca_nueva|default:'' }}"
-                                 data-vehiculo-modelo="{{ p.vehiculo.modelo|default:p.modelo_nuevo|default:'' }}"
-                                 data-problema="{{ p.problema_o_trabajo|escape }}">
-                             #{{ p.id }} - {{ p.cliente.nombre }} ({{ p.vehiculo.matricula|default:p.matricula_nueva|default:'S/M' }}) - {{ p.total_estimado|floatformat:2 }}€
-                         </option>
-                         {% endwith %}
-                     {% endfor %}
-                 </select>
-            </div>
-
-            <div class="section">
-                <h2>Paso 1: Datos del Cliente</h2>
-                <label for="cliente_nombre">Nombre o Razón Social:</label>
-                <input type="text" id="cliente_nombre" name="cliente_nombre" required>
-                <label for="cliente_telefono">Teléfono:</label>
-                <input type="text" id="cliente_telefono" name="cliente_telefono" required>
-
-                <h3 style="margin-top: 20px; margin-bottom: 10px;">Datos Fiscales (Para Facturas)</h3>
+            <div class="section-panel" style="background: #eff6ff; border: 1px dashed #93c5fd;">
+                <h2 class="section-title" style="border-bottom: none; margin-bottom: 10px;">⚡ Autocompletar (Opcional)</h2>
                 
-                <div class="address-grid">
+                <div class="grid-2-cols">
                     <div>
-                        <label for="cliente_tipo_documento">Tipo Doc.:</label>
-                        <select id="cliente_tipo_documento" name="cliente_tipo_documento">
-                            <option value="DNI">DNI</option>
-                            <option value="NIE">NIE</option>
-                            <option value="NIF">NIF (Empresas)</option>
+                        <label>Desde un Presupuesto Aceptado:</label>
+                        <select id="presupuesto_select" name="presupuesto_asociado" class="modern-input" style="background: white; border-color: #93c5fd;">
+                            <option value="">--- Seleccionar Presupuesto ---</option>
+                            {% for p_data in presupuestos_disponibles_data %} 
+                                {% with p=p_data.presupuesto %}
+                                <option value="{{ p.id }}"
+                                        data-cliente-nombre="{{ p.cliente.nombre }}"
+                                        data-cliente-telefono="{{ p.cliente.telefono }}"
+                                        data-cliente-tipo-documento="{{ p_data.cliente_data.tipo_documento }}"
+                                        data-cliente-documento-fiscal="{{ p_data.cliente_data.documento_fiscal }}"
+                                        data-cliente-direccion-fiscal="{{ p_data.cliente_data.direccion_fiscal }}"
+                                        data-cliente-codigo-postal-fiscal="{{ p_data.cliente_data.codigo_postal_fiscal }}"
+                                        data-cliente-ciudad-fiscal="{{ p_data.cliente_data.ciudad_fiscal }}"
+                                        data-cliente-provincia-fiscal="{{ p_data.cliente_data.provincia_fiscal }}"
+                                        data-vehiculo-matricula="{{ p.vehiculo.matricula|default:p.matricula_nueva|default:'' }}"
+                                        data-vehiculo-marca="{{ p.vehiculo.marca|default:p.marca_nueva|default:'' }}"
+                                        data-vehiculo-modelo="{{ p.vehiculo.modelo|default:p.modelo_nuevo|default:'' }}"
+                                        data-problema="{{ p.problema_o_trabajo|escape }}">
+                                    #{{ p.id }} - {{ p.cliente.nombre }} ({{ p.vehiculo.matricula|default:p.matricula_nueva|default:'S/M' }})
+                                </option>
+                                {% endwith %}
+                            {% endfor %}
                         </select>
                     </div>
-                    <div>
-                        <label for="cliente_documento_fiscal">Nº Documento:</label>
-                        <input type="text" id="cliente_documento_fiscal" name="cliente_documento_fiscal">
-                    </div>
-                </div>
 
-                <label for="cliente_direccion_fiscal">Dirección Fiscal (Calle, nº):</label>
-                <input type="text" id="cliente_direccion_fiscal" name="cliente_direccion_fiscal">
-                
-                <div class="address-grid">
                     <div>
-                        <label for="cliente_codigo_postal_fiscal">Código Postal:</label>
-                        <input type="text" id="cliente_codigo_postal_fiscal" name="cliente_codigo_postal_fiscal">
-                    </div>
-                    <div>
-                        <label for="cliente_ciudad_fiscal">Población:</label>
-                        <input type="text" id="cliente_ciudad_fiscal" name="cliente_ciudad_fiscal">
+                        <label>O Desde un Cliente Habitual:</label>
+                        <select name="cliente_existente" id="select_cliente" class="modern-input" style="background: white; border-color: #93c5fd;">
+                            <option value="">--- Seleccionar Cliente ---</option>
+                            {% for item in clientes_data %}
+                                <option value="{{ item.cliente.id }}" data-json="{{ item.cliente_data_json }}">
+                                    {{ item.cliente.nombre }} - {{ item.cliente.telefono }}
+                                </option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
-                <label for="cliente_provincia_fiscal">Provincia:</label>
-                <input type="text" id="cliente_provincia_fiscal" name="cliente_provincia_fiscal" value="TARRAGONA">
             </div>
 
-            <div class="section">
-                <h2>Paso 2: Datos del Vehículo</h2>
-                <label for="vehiculo_matricula">Matrícula:</label>
-                <input type="text" id="vehiculo_matricula" name="vehiculo_matricula" required>
-                <label for="vehiculo_marca">Marca:</label>
-                <input type="text" id="vehiculo_marca" name="vehiculo_marca">
-                <label for="vehiculo_modelo">Modelo:</label>
-                <input type="text" id="vehiculo_modelo" name="vehiculo_modelo">
-                <label for="vehiculo_kilometraje">Kilometraje:</label>
-                <input type="number" id="vehiculo_kilometraje" name="vehiculo_kilometraje">
-             </div>
+            <div class="section-panel">
+                <h2 class="section-title">👤 Paso 1: Datos del Cliente</h2>
+                
+                <div class="grid-2-cols">
+                    <div>
+                        <label for="cliente_nombre">Nombre o Razón Social *</label>
+                        <input type="text" id="cliente_nombre" name="cliente_nombre" class="modern-input" required>
+                    </div>
+                    <div>
+                        <label for="cliente_telefono">Teléfono de Contacto *</label>
+                        <input type="text" id="cliente_telefono" name="cliente_telefono" class="modern-input" required>
+                    </div>
+                </div>
 
-            <div class="section">
-                <h2>Paso 3: Motivo y Fotos</h2>
-                <label for="problema">Problema / Tareas a realizar:</label>
-                <textarea id="problema" name="problema" required></textarea>
+                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 10px; border: 1px solid #e2e8f0;">
+                    <p style="margin: 0 0 15px 0; font-weight: 600; color: #475569; font-size: 0.9em;">📄 Datos Fiscales (Para futuras facturas)</p>
+                    
+                    <div class="grid-2-cols">
+                        <div>
+                            <label for="cliente_tipo_documento">Tipo Doc.</label>
+                            <select id="cliente_tipo_documento" name="cliente_tipo_documento" class="modern-input" style="background: white;">
+                                <option value="DNI">DNI</option>
+                                <option value="NIE">NIE</option>
+                                <option value="NIF">NIF (Empresas)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="cliente_documento_fiscal">Nº Documento</label>
+                            <input type="text" id="cliente_documento_fiscal" name="cliente_documento_fiscal" class="modern-input" style="background: white;">
+                        </div>
+                    </div>
 
-                <h3>Fotos del Vehículo (hasta 5)</h3>
+                    <label for="cliente_direccion_fiscal">Dirección Fiscal (Calle, nº)</label>
+                    <input type="text" id="cliente_direccion_fiscal" name="cliente_direccion_fiscal" class="modern-input" style="background: white;">
+                    
+                    <div class="grid-2-cols" style="grid-template-columns: 1fr 2fr 1fr;">
+                        <div>
+                            <label for="cliente_codigo_postal_fiscal">C. Postal</label>
+                            <input type="text" id="cliente_codigo_postal_fiscal" name="cliente_codigo_postal_fiscal" class="modern-input" style="background: white;">
+                        </div>
+                        <div>
+                            <label for="cliente_ciudad_fiscal">Población</label>
+                            <input type="text" id="cliente_ciudad_fiscal" name="cliente_ciudad_fiscal" class="modern-input" style="background: white;">
+                        </div>
+                        <div>
+                            <label for="cliente_provincia_fiscal">Provincia</label>
+                            <input type="text" id="cliente_provincia_fiscal" name="cliente_provincia_fiscal" value="TARRAGONA" class="modern-input" style="background: white;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-panel">
+                <h2 class="section-title">🚗 Paso 2: Datos del Vehículo</h2>
+                
+                <div class="grid-2-cols">
+                    <div>
+                        <label for="vehiculo_matricula">Matrícula *</label>
+                        <input type="text" id="vehiculo_matricula" name="vehiculo_matricula" class="modern-input" style="text-transform: uppercase; font-weight: bold;" required>
+                    </div>
+                    <div>
+                        <label for="vehiculo_kilometraje">Kilometraje Actual</label>
+                        <input type="number" id="vehiculo_kilometraje" name="vehiculo_kilometraje" class="modern-input">
+                    </div>
+                </div>
+                
+                <div class="grid-2-cols">
+                    <div>
+                        <label for="vehiculo_marca">Marca</label>
+                        <input type="text" id="vehiculo_marca" name="vehiculo_marca" class="modern-input">
+                    </div>
+                    <div>
+                        <label for="vehiculo_modelo">Modelo</label>
+                        <input type="text" id="vehiculo_modelo" name="vehiculo_modelo" class="modern-input">
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-panel">
+                <h2 class="section-title">🛠️ Paso 3: Trabajo y Estado Visual</h2>
+                
+                <label for="problema">Problema Reportado / Tareas a realizar *</label>
+                <textarea id="problema" name="problema" class="modern-input" style="height: 100px; resize: vertical;" required></textarea>
+
+                <h3 style="color: #475569; font-size: 1em; margin-top: 20px;">📸 Reporte Fotográfico (Opcional pero recomendado)</h3>
                 
                 <div class="photo-grid">
-                    <div>
-                        <label for="foto1">
-                            Foto 1 (Frontal): <span id="check-foto1" class="upload-status">✅ Lista</span>
-                        </label>
+                    <div class="photo-input-wrapper">
+                        <label for="foto1">Frontal <span id="check-foto1" class="upload-status">✓ OK</span></label>
                         <input type="file" id="foto1" name="foto1" accept="image/*" capture="environment">
                     </div>
-                    <div>
-                        <label for="foto2">
-                            Foto 2 (Trasera): <span id="check-foto2" class="upload-status">✅ Lista</span>
-                        </label>
+                    <div class="photo-input-wrapper">
+                        <label for="foto2">Trasera <span id="check-foto2" class="upload-status">✓ OK</span></label>
                         <input type="file" id="foto2" name="foto2" accept="image/*" capture="environment">
                     </div>
-                    <div>
-                        <label for="foto3">
-                            Foto 3 (Lateral Izquierdo): <span id="check-foto3" class="upload-status">✅ Lista</span>
-                        </label>
+                    <div class="photo-input-wrapper">
+                        <label for="foto3">Lat. Izquierdo <span id="check-foto3" class="upload-status">✓ OK</span></label>
                         <input type="file" id="foto3" name="foto3" accept="image/*" capture="environment">
                     </div>
-                    <div>
-                        <label for="foto4">
-                            Foto 4 (Lateral Derecho): <span id="check-foto4" class="upload-status">✅ Lista</span>
-                        </label>
+                    <div class="photo-input-wrapper">
+                        <label for="foto4">Lat. Derecho <span id="check-foto4" class="upload-status">✓ OK</span></label>
                         <input type="file" id="foto4" name="foto4" accept="image/*" capture="environment">
                     </div>
-                    <div>
-                        <label for="foto5">
-                            Foto 5 (Cuadro/Km): <span id="check-foto5" class="upload-status">✅ Lista</span>
-                        </label>
+                    <div class="photo-input-wrapper">
+                        <label for="foto5">Cuadro/Km <span id="check-foto5" class="upload-status">✓ OK</span></label>
                         <input type="file" id="foto5" name="foto5" accept="image/*" capture="environment">
                     </div>
                 </div>
             </div>
 
-            <button type="submit" class="btn-submit-green">Crear Orden de Reparación</button>
+            <button type="submit" class="btn-submit">Generar Orden de Reparación ➔</button>
         </form>
     </div>
 
     <script>
-        // --- SCRIPT PRESUPUESTO (Lógica Original) ---
+        // --- 1. SCRIPT DE PRESUPUESTO ---
         const presupuestoSelect = document.getElementById('presupuesto_select');
         const nombreClienteInput = document.getElementById('cliente_nombre');
         const telefonoClienteInput = document.getElementById('cliente_telefono');
@@ -181,10 +226,11 @@
         const provinciaFiscalInput = document.getElementById('cliente_provincia_fiscal');
 
         presupuestoSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            const presupuestoId = this.value;
+            // Si eligen presupuesto, reseteamos el select de cliente habitual
+            document.getElementById('select_cliente').value = ""; 
 
-            if (presupuestoId) {
+            const selectedOption = this.options[this.selectedIndex];
+            if (this.value) {
                 nombreClienteInput.value = selectedOption.dataset.clienteNombre || '';
                 telefonoClienteInput.value = selectedOption.dataset.clienteTelefono || '';
                 matriculaInput.value = selectedOption.dataset.vehiculoMatricula || '';
@@ -198,13 +244,30 @@
                 ciudadFiscalInput.value = selectedOption.dataset.clienteCiudadFiscal || '';
                 provinciaFiscalInput.value = selectedOption.dataset.clienteProvinciaFiscal || 'TARRAGONA';
             } else {
+                document.getElementById('ingreso-form').reset();
+            }
+        });
+
+        // --- 2. SCRIPT DE CLIENTE HABITUAL ---
+        const selectCliente = document.getElementById('select_cliente');
+        selectCliente.addEventListener('change', function() {
+            // Si eligen cliente, reseteamos el select de presupuestos
+            document.getElementById('presupuesto_select').value = "";
+            
+            const selectedOption = this.options[this.selectedIndex];
+            if (this.value) {
+                const data = JSON.parse(selectedOption.getAttribute('data-json'));
+                nombreClienteInput.value = data.nombre || '';
+                telefonoClienteInput.value = data.telefono || '';
+                tipoDocumentoInput.value = data.tipo_documento || 'DNI';
+                documentoFiscalInput.value = data.documento_fiscal || '';
+                direccionFiscalInput.value = data.direccion_fiscal || '';
+                codigoPostalFiscalInput.value = data.codigo_postal_fiscal || '';
+                ciudadFiscalInput.value = data.ciudad_fiscal || '';
+                provinciaFiscalInput.value = data.provincia_fiscal || 'TARRAGONA';
+            } else {
                 nombreClienteInput.value = '';
                 telefonoClienteInput.value = '';
-                matriculaInput.value = '';
-                marcaInput.value = '';
-                modeloInput.value = '';
-                problemaTextarea.value = '';
-                tipoDocumentoInput.value = 'DNI';
                 documentoFiscalInput.value = '';
                 direccionFiscalInput.value = '';
                 codigoPostalFiscalInput.value = '';
@@ -213,24 +276,25 @@
             }
         });
         
-        // --- NUEVO SCRIPT VISUAL: CHECKS DE FOTOS ---
+        // --- 3. SCRIPT VISUAL: CHECKS DE FOTOS ---
         function updateUploadStatus(inputId, statusId) {
             const input = document.getElementById(inputId);
             const statusSpan = document.getElementById(statusId);
+            const wrapper = input.parentElement;
             
             input.addEventListener('change', function() {
                 if (this.files && this.files.length > 0) {
-                    statusSpan.style.display = 'inline'; // Mostrar el Check
-                    // Opcional: Cambiar el borde del input a verde
-                    this.style.borderColor = '#28a745';
+                    statusSpan.style.display = 'inline';
+                    wrapper.style.borderColor = '#10b981';
+                    wrapper.style.backgroundColor = '#ecfdf5';
                 } else {
-                    statusSpan.style.display = 'none'; // Ocultar si se borra
-                    this.style.borderColor = '#ced4da';
+                    statusSpan.style.display = 'none';
+                    wrapper.style.borderColor = '#cbd5e1';
+                    wrapper.style.backgroundColor = '#f8fafc';
                 }
             });
         }
 
-        // Activar la función para los 5 inputs
         updateUploadStatus('foto1', 'check-foto1');
         updateUploadStatus('foto2', 'check-foto2');
         updateUploadStatus('foto3', 'check-foto3');
@@ -238,6 +302,5 @@
         updateUploadStatus('foto5', 'check-foto5');
         
     </script>
-
 </body>
 </html>
