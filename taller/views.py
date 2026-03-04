@@ -1555,10 +1555,26 @@ def contabilidad(request):
     total_gastado = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_ganancia = total_ingresado - total_gastado
     
+    # --- NUEVO: CÁLCULO DE DISPONIBLE EN TARJETAS DE CRÉDITO ---
+    # Lo calculamos sobre el total histórico (Gasto.objects.all()), no sobre el mes filtrado,
+    # porque la tarjeta arrastra la deuda de meses anteriores.
+    gastos_totales_t1 = Gasto.objects.filter(metodo_pago='TARJETA_1').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    abonos_totales_t1 = Ingreso.objects.filter(metodo_pago='TARJETA_1').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    deuda_t1 = gastos_totales_t1 - abonos_totales_t1
+    disponible_t1 = Decimal('2000.00') - deuda_t1
+
+    gastos_totales_t2 = Gasto.objects.filter(metodo_pago='TARJETA_2').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    abonos_totales_t2 = Ingreso.objects.filter(metodo_pago='TARJETA_2').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    deuda_t2 = gastos_totales_t2 - abonos_totales_t2
+    disponible_t2 = Decimal('1000.00') - deuda_t2
+    # -----------------------------------------------------------
+
     context = { 
         'total_ingresado': total_ingresado, 'total_gastado': total_gastado, 'total_ganancia': total_ganancia, 
         'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13)
+        'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13),
+        'disponible_t1': disponible_t1, # <-- Enviamos el oxígeno de T1 a la pantalla
+        'disponible_t2': disponible_t2  # <-- Enviamos el oxígeno de T2 a la pantalla
     }
     return render(request, 'taller/contabilidad.html', context)
 

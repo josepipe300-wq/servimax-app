@@ -9,7 +9,7 @@
     {# --- INICIO MODIFICACIÓN --- #}
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    {# --- FIN MODIFICACIÓN (Style block eliminado) --- #}
+    {# --- FIN MODIFICACIÓN --- #}
 
 </head>
 <body>
@@ -59,7 +59,38 @@
             </div>
         </div>
 
-        <div class="links">
+        <hr style="margin-top: 30px; border-top: 1px dashed #cbd5e1;">
+        <h2 style="color: #334155; margin-bottom: 15px; font-size: 1.4em;">Estado de Tarjetas de Crédito</h2>
+
+        <div class="summary-grid">
+            <div class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; border-top: 4px solid #3b82f6;">
+                <h3 style="color: #475569; display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 5px; font-size: 1.1em;">💳 Tarjeta 1 (Visa)</h3>
+                <p style="font-size: 0.85em; color: #64748b; margin: 0 0 5px 0;">Crédito Disponible</p>
+                <p class="amount" style="font-size: 2em; font-weight: 800; margin: 0; {% if disponible_t1 < 300 %}color: #ef4444;{% else %}color: #3b82f6;{% endif %}">
+                    {{ disponible_t1|floatformat:2 }} €
+                </p>
+                <div style="width: 100%; background: #e2e8f0; height: 8px; border-radius: 4px; margin-top: 15px; overflow: hidden;">
+                    <div style="height: 100%; width: {% widthratio disponible_t1 2000 100 %}%; {% if disponible_t1 < 300 %}background: #ef4444;{% else %}background: #3b82f6;{% endif %}; transition: width 0.5s ease;"></div>
+                </div>
+                <p style="font-size: 0.75em; color: #94a3b8; margin-top: 8px; margin-bottom: 0;">Límite Total: 2.000,00 €</p>
+            </div>
+
+            <div class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; border-top: 4px solid #8b5cf6;">
+                <h3 style="color: #475569; display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 5px; font-size: 1.1em;">💳 Tarjeta 2 (Visa)</h3>
+                <p style="font-size: 0.85em; color: #64748b; margin: 0 0 5px 0;">Crédito Disponible</p>
+                <p class="amount" style="font-size: 2em; font-weight: 800; margin: 0; {% if disponible_t2 < 150 %}color: #ef4444;{% else %}color: #8b5cf6;{% endif %}">
+                    {{ disponible_t2|floatformat:2 }} €
+                </p>
+                <div style="width: 100%; background: #e2e8f0; height: 8px; border-radius: 4px; margin-top: 15px; overflow: hidden;">
+                    <div style="height: 100%; width: {% widthratio disponible_t2 1000 100 %}%; {% if disponible_t2 < 150 %}background: #ef4444;{% else %}background: #8b5cf6;{% endif %}; transition: width 0.5s ease;"></div>
+                </div>
+                <p style="font-size: 0.75em; color: #94a3b8; margin-top: 8px; margin-bottom: 0;">Límite Total: 1.000,00 €</p>
+            </div>
+            
+            <div style="visibility: hidden;"></div>
+        </div>
+
+        <div class="links" style="margin-top: 30px;">
             <a href="{% url 'informe_ingresos' %}">Informe de Ingresos</a>
             <span>|</span>
             <a href="{% url 'informe_gastos' %}" style="font-weight: bold;">Informe Detallado de Gastos</a>
