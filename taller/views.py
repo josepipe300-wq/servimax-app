@@ -1798,6 +1798,32 @@ def lista_deudas(request):
 @login_required
 def detalle_deuda(request, deuda_id):
     deuda = get_object_or_404(DeudaTaller, id=deuda_id)
+    
+    # --- NUEVO: Lógica para procesar la ampliación de deuda ---
+    if request.method == 'POST':
+        if request.user.groups.filter(name='Solo Ver').exists():
+            return HttpResponseForbidden("No tienes permiso para modificar deudas.")
+            
+        importe_extra = request.POST.get('importe_extra')
+        if importe_extra:
+            try:
+                # Convertimos el texto a número decimal (por si pones comas)
+                extra_decimal = Decimal(importe_extra.replace(',', '.'))
+                if extra_decimal > 0:
+                    # Sumamos el dinero extra al importe original
+                    deuda.importe_inicial += extra_decimal
+                    
+                    # Si la deuda ya estaba "Pagada", al sumarle dinero vuelve a estar "Pendiente"
+                    if deuda.estado == 'Pagada':
+                        deuda.estado = 'Pendiente'
+                        
+                    deuda.save()
+            except (ValueError, TypeError, Decimal.InvalidOperation):
+                pass
+                
+        return redirect('detalle_deuda', deuda_id=deuda.id)
+    # ----------------------------------------------------------
+
     pagos = deuda.gastos_pagados.all().order_by('-fecha', '-id')
     
     porcentaje = 0
