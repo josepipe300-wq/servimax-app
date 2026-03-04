@@ -99,7 +99,7 @@
         .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         /* Elementos UI varios */
-        hr { border: none; border-top: 1px solid #e2e8f0; margin: 15px 0 30px 0; }
+        <hr> { border: none; border-top: 1px solid #e2e8f0; margin: 15px 0 30px 0; }
         .badge-metodo { display: inline-block; margin-top: 5px; padding: 4px 10px; border-radius: 9999px; font-size: 0.75em; font-weight: 600; background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
         .btn-wsp { background-color: #10b981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 9999px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s; box-shadow: 0 4px 6px rgba(16,185,129,0.2); }
         .btn-wsp:hover { background-color: #059669; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(16,185,129,0.3); }
@@ -229,21 +229,32 @@
                         </a>
 
                         <a href="{% url 'historial_cuenta' 'tarjeta1' %}" style="text-decoration: none; color: inherit;">
-                            <div class="card" style="border-top-color: #ef4444;">
-                                <h3>Tarjeta 1 (Revolving)</h3>
-                                <div class="amount text-danger">-{{ tarjeta_1.dispuesto|floatformat:2 }} €</div>
+                            <div class="card" style="border-top-color: #3b82f6;">
+                                <h3 style="display: flex; align-items: center; gap: 5px; margin-bottom: 2px;">💳 Tarjeta 1 (Revolving)</h3>
+                                <p style="font-size: 0.75em; color: #64748b; margin: 0 0 5px 0;">Límite Total: 2.000€</p>
+                                
+                                <div class="amount" style="{% if tarjeta_1.disponible < 300 %}color: #ef4444;{% else %}color: #10b981;{% endif %}">
+                                    {{ tarjeta_1.disponible|floatformat:2 }} €
+                                </div>
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-size: 0.8em; margin:0; color:#94a3b8; font-weight: 500;">Límite: {{ tarjeta_1.limite }}€</span>
+                                    <span style="font-size: 0.8em; margin:0; color:#94a3b8; font-weight: 500;">Disponible</span>
                                     <span style="font-size: 0.85em; color: #64748b; font-weight: 600;">Ver historial ➔</span>
                                 </div>
                             </div>
                         </a>
 
                         <a href="{% url 'historial_cuenta' 'tarjeta2' %}" style="text-decoration: none; color: inherit;">
-                            <div class="card" style="border-top-color: #f59e0b;">
-                                <h3>Tarjeta 2 (Mes)</h3>
-                                <div class="amount text-warning">-{{ tarjeta_2.dispuesto|floatformat:2 }} €</div>
-                                <div style="text-align: right; font-size: 0.85em; color: #64748b; font-weight: 600;">Ver historial ➔</div>
+                            <div class="card" style="border-top-color: #8b5cf6;">
+                                <h3 style="display: flex; align-items: center; gap: 5px; margin-bottom: 2px;">💳 Tarjeta 2 (Mes)</h3>
+                                <p style="font-size: 0.75em; color: #64748b; margin: 0 0 5px 0;">Límite Total: 1.000€</p>
+
+                                <div class="amount" style="{% if tarjeta_2.disponible < 150 %}color: #ef4444;{% else %}color: #10b981;{% endif %}">
+                                    {{ tarjeta_2.disponible|floatformat:2 }} €
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 0.8em; margin:0; color:#94a3b8; font-weight: 500;">Disponible</span>
+                                    <span style="font-size: 0.85em; color: #64748b; font-weight: 600;">Ver historial ➔</span>
+                                </div>
                             </div>
                         </a>
 
