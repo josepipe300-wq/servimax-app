@@ -805,6 +805,10 @@ def editar_presupuesto(request, presupuesto_id):
 @login_required
 def lista_ordenes(request):
     if request.method == 'POST':
+        # Bloqueo de seguridad: Solo el jefe puede mover los coches
+        if not request.user.is_superuser:
+            return HttpResponseForbidden("🔒 Acceso denegado. Solo Administración puede cambiar el tipo de vehículo.")
+            
         orden_id = request.POST.get('orden_id')
         accion = request.POST.get('accion')
         if orden_id and accion:
@@ -819,21 +823,20 @@ def lista_ordenes(request):
 
     ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente')
     
-    # 1. Coches en los que el mecánico TIENE que trabajar hoy
-    ordenes_taller = ordenes_activas.filter(
-        estado__in=['Recibido', 'En Diagnostico', 'Esperando Piezas', 'En Reparacion', 'En Pruebas']
-    ).order_by('id')
+    # 1. Separamos los de clientes de los del taller
+    ordenes_clientes = ordenes_activas.filter(trabajo_interno=False)
+    flota_interna = ordenes_activas.filter(trabajo_interno=True).order_by('id')
     
-    # 2. Coches atascados (esperando al jefe o al cliente)
-    ordenes_pausadas = ordenes_activas.filter(estado='Esperando Autorizacion').order_by('id')
-    
-    # 3. Coches terminados (solo los gestiona el jefe)
-    ordenes_listas = ordenes_activas.filter(estado='Listo para Recoger').order_by('id')
+    # 2. Organizamos los de CLIENTES en las pestañas del Ping-Pong
+    ordenes_taller = ordenes_clientes.filter(estado__in=['Recibido', 'En Diagnostico', 'Esperando Piezas', 'En Reparacion', 'En Pruebas']).order_by('id')
+    ordenes_pausadas = ordenes_clientes.filter(estado='Esperando Autorizacion').order_by('id')
+    ordenes_listas = ordenes_clientes.filter(estado='Listo para Recoger').order_by('id')
 
     return render(request, 'taller/lista_ordenes.html', {
         'ordenes_taller': ordenes_taller,
         'ordenes_pausadas': ordenes_pausadas,
-        'ordenes_listas': ordenes_listas
+        'ordenes_listas': ordenes_listas,
+        'flota_interna': flota_interna # <-- Enviamos los internos aparte
     })
 
 @login_required
