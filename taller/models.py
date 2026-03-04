@@ -411,6 +411,7 @@ class NotaInternaOrden(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, related_name='notas_internas', on_delete=models.CASCADE)
     autor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     texto = models.TextField()
+    imagen = models.ImageField(upload_to='notas_internas/', null=True, blank=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
     class Meta:

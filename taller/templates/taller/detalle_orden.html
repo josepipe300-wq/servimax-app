@@ -254,6 +254,14 @@
                             <span style="color: #94a3b8; font-size: 0.85em; margin-left: 10px; font-weight: 500;">{{ nota.fecha_creacion|date:"d/m/Y H:i" }}</span>
                         </div>
                         <p style="margin: 0; color: #1e293b; font-size: 1.05em; line-height: 1.4;">{{ nota.texto }}</p>
+                        
+                        {% if nota.imagen %}
+                        <div style="margin-top: 10px;">
+                            <a href="{{ nota.imagen.url }}" target="_blank">
+                                <img src="{{ nota.imagen.url }}" alt="Foto nota" style="max-width: 150px; max-height: 150px; border-radius: 8px; border: 1px solid #cbd5e1; object-fit: cover; transition: 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                            </a>
+                        </div>
+                        {% endif %}
                     </div>
                 {% empty %}
                     <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.5); border-radius: 12px;">
@@ -263,10 +271,17 @@
             </div>
 
             {% if not request.user.groups.all.0.name == 'Solo Ver' %}
-            <form method="post" style="display: flex; gap: 12px; background: white; padding: 15px; border-radius: 12px; border: 1px solid #fef3c7;">
+            <form method="post" enctype="multipart/form-data" style="display: flex; gap: 12px; background: white; padding: 15px; border-radius: 12px; border: 1px solid #fef3c7; align-items: center;">
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="nota_interna">
-                <input type="text" name="texto_nota" class="modern-input" placeholder="Ej: He gastado 2 botes de limpiafrenos, falta revisar el filtro..." required style="flex-grow: 1; border-color: #fde68a;">
+                
+                <input type="text" name="texto_nota" class="modern-input" placeholder="Ej: Referencia del filtro en la foto adjunta..." required style="flex-grow: 1; border-color: #fde68a;">
+                
+                <label style="cursor: pointer; background: #fef3c7; padding: 10px 14px; border-radius: 10px; border: 1px solid #fde68a; font-size: 1.2em; transition: 0.2s;" title="Adjuntar foto" onmouseover="this.style.background='#fde68a'" onmouseout="this.style.background='#fef3c7'">
+                    📷
+                    <input type="file" name="imagen_nota" accept="image/*" style="display: none;">
+                </label>
+
                 <button type="submit" class="btn-modern" style="background: #92400e; padding: 12px 24px;">Guardar Nota</button>
             </form>
             {% endif %}

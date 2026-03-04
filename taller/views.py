@@ -844,10 +844,18 @@ def detalle_orden(request, orden_id):
             
         elif form_type == 'nota_interna':
             texto_nota = request.POST.get('texto_nota')
-            if texto_nota:
-                NotaInternaOrden.objects.create(orden=orden, autor=request.user, texto=texto_nota)
-            return redirect('detalle_orden', orden_id=orden.id)
+            imagen_nota = request.FILES.get('imagen_nota') # <--- NUEVO: Atrapamos la foto
             
+            if texto_nota:
+                NotaInternaOrden.objects.create(
+                    orden=orden, 
+                    autor=request.user, 
+                    texto=texto_nota,
+                    imagen=imagen_nota # <--- NUEVO: La guardamos
+                )
+            return redirect('detalle_orden', orden_id=orden.id)
+
+        
         # --- NUEVO: LÓGICA DE COBRO AUTOMÁTICO ---
         elif form_type == 'registrar_pago':
             importe = Decimal(request.POST.get('importe_pago', '0'))
