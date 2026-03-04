@@ -46,11 +46,13 @@
 
         .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px; }
         
-        .estado-badge { padding: 6px 14px; border-radius: 9999px; font-weight: 700; font-size: 0.9em; letter-spacing: 0.02em; }
+        .estado-badge { padding: 6px 14px; border-radius: 9999px; font-weight: 700; font-size: 0.9em; letter-spacing: 0.02em; display: inline-block;}
         .estado-recibido { background-color: #f1f5f9; color: #475569; }
         .estado-diagnostico { background-color: #fef3c7; color: #92400e; }
+        .estado-autorizacion { background-color: #ffedd5; color: #c2410c; border: 1px dashed #fdba74;} /* NUEVO */
         .estado-piezas { background-color: #ffe4e6; color: #e11d48; }
         .estado-reparacion { background-color: #dbeafe; color: #1e40af; }
+        .estado-pruebas { background-color: #e0e7ff; color: #4338ca; border: 1px solid #a5b4fc;} /* NUEVO */
         .estado-listo { background-color: #dcfce7; color: #166534; }
         .estado-entregado { background-color: #10b981; color: white; }
 
@@ -122,7 +124,7 @@
 <body>
     <div class="container">
         
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
             <div>
                 <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em;">← Volver al Inicio</a>
                 <h1 class="header-title">Detalle de la Orden #{{ orden.id }}</h1>
@@ -132,8 +134,10 @@
                 <span class="estado-badge 
                     {% if orden.estado == 'Recibido' %}estado-recibido
                     {% elif orden.estado == 'En Diagnostico' %}estado-diagnostico
+                    {% elif orden.estado == 'Esperando Autorizacion' %}estado-autorizacion
                     {% elif orden.estado == 'Esperando Piezas' %}estado-piezas
                     {% elif orden.estado == 'En Reparacion' %}estado-reparacion
+                    {% elif orden.estado == 'En Pruebas' %}estado-pruebas
                     {% elif orden.estado == 'Listo para Recoger' %}estado-listo
                     {% elif orden.estado == 'Entregado' %}estado-entregado{% endif %}
                 ">
@@ -230,15 +234,86 @@
             </div>
         </div>
 
-        <div class="section-panel">
-            <h3 class="section-title">📋 Problema Reportado (Motivo de entrada)</h3>
-            <p style="white-space: pre-line; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; color: #1e293b; font-size: 1.05em; line-height: 1.5;">{{ orden.problema }}</p>
-            {% if orden.presupuesto_origen %}
-                <p style="margin-top: 12px; font-size: 0.9em; color: #64748b; font-weight: 500;">
-                    <em>↳ Esta orden proviene del <a href="{% url 'detalle_presupuesto' orden.presupuesto_origen.id %}" style="color: #3b82f6; text-decoration: none;">Presupuesto #{{ orden.presupuesto_origen.id }}</a></em>
-                </p>
+        <div class="info-grid">
+            <div class="section-panel" style="margin-bottom: 0;">
+                <h3 class="section-title">📋 Problema Reportado (Motivo de entrada)</h3>
+                <p style="white-space: pre-line; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; color: #1e293b; font-size: 1.05em; line-height: 1.5;">{{ orden.problema }}</p>
+                {% if orden.presupuesto_origen %}
+                    <p style="margin-top: 12px; font-size: 0.9em; color: #64748b; font-weight: 500;">
+                        <em>↳ Esta orden proviene del <a href="{% url 'detalle_presupuesto' orden.presupuesto_origen.id %}" style="color: #3b82f6; text-decoration: none;">Presupuesto #{{ orden.presupuesto_origen.id }}</a></em>
+                    </p>
+                {% endif %}
+            </div>
+
+            {% if not request.user.groups.all.0.name == 'Solo Ver' %}
+            <div class="section-panel" style="margin-bottom: 0; border: 2px solid #e2e8f0;">
+                <h3 class="section-title" style="border: none; margin-bottom: 10px;">🔄 Actualizar Fase del Taller</h3>
+                
+                {% if not request.user.is_superuser and orden.estado == 'Esperando Autorizacion' %}
+                    <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 15px; border-radius: 10px; margin-bottom: 20px; color: #92400e;">
+                        ⏳ <strong>Vehículo en Pausa.</strong> Esperando a que Administración gestione el presupuesto y cambie el estado a "Esperando Piezas".
+                    </div>
+                {% elif not request.user.is_superuser and orden.estado == 'Listo para Recoger' %}
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; border-radius: 10px; margin-bottom: 20px; color: #166534;">
+                        ✅ <strong>Trabajo Finalizado.</strong> Buen trabajo. Esperando a que Administración facture y entregue el vehículo al cliente.
+                    </div>
+                {% else %}
+                    <form method="post" class="form-inline" style="margin-bottom: 20px;">
+                        {% csrf_token %}
+                        <input type="hidden" name="form_type" value="estado">
+                        <select name="nuevo_estado" class="modern-select" style="flex-grow: 1; font-size: 1.05em; padding: 12px 16px;">
+                            {% for choice in estados_orden %}
+                                {% if request.user.is_superuser or choice.0 not in 'Esperando Piezas,Entregado' %}
+                                    <option value="{{ choice.0 }}" {% if orden.estado == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn-modern btn-primary" style="padding: 12px 24px; font-size: 1.05em;">Actualizar</button>
+                    </form>
+                {% endif %}
+
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 15px;">
+                    <h4 style="margin: 0 0 15px 0; color: #475569; font-size: 0.95em; display: flex; align-items: center; gap: 5px;">⏱️ Tiempos y Responsables</h4>
+                    
+                    <div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scroll">
+                        {% for historial in orden.historial_estados.all %}
+                            <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; position: relative;">
+                                
+                                <div style="width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; z-index: 2; 
+                                    {% if forloop.first %}background: #3b82f6; box-shadow: 0 0 0 3px #eff6ff;{% else %}background: #cbd5e1;{% endif %}">
+                                </div>
+                                
+                                {% if not forloop.last %}
+                                <div style="position: absolute; left: 4px; top: 18px; bottom: -12px; width: 2px; background: #e2e8f0; z-index: 1;"></div>
+                                {% endif %}
+                                
+                                <div style="flex: 1; background: white; padding: 8px 12px; border-radius: 8px; border: 1px solid {% if forloop.first %}#bfdbfe{% else %}#f1f5f9{% endif %};">
+                                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                                        <strong style="color: {% if forloop.first %}#0f172a{% else %}#64748b{% endif %}; font-size: 0.95em;">
+                                            {{ historial.estado }}
+                                        </strong>
+                                        
+                                        <span style="font-weight: 700; font-family: monospace; font-size: 1em;
+                                            {% if forloop.first and 'd' in historial.duracion %}color: #ef4444;{% elif forloop.first %}color: #f59e0b;{% else %}color: #94a3b8;{% endif %}">
+                                            {{ historial.duracion }}
+                                        </span>
+                                    </div>
+                                    <div style="font-size: 0.8em; color: #64748b; margin-top: 4px;">
+                                        {% if historial.usuario %}
+                                            <span style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; color: #334155; font-weight: 600; font-size: 0.85em; margin-right: 5px;">👤 {{ historial.usuario.username|title }}</span> 
+                                        {% endif %}
+                                        {{ historial.fecha_inicio|date:"d/m/y H:i" }} {% if historial.fecha_fin %} ➔ {{ historial.fecha_fin|date:"d/m/y H:i" }}{% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <p style="color: #94a3b8; font-style: italic; font-size: 0.85em; margin: 0;">No hay registro de tiempos.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
             {% endif %}
-        </div>
+            </div>
 
         <div class="chat-container">
             <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #fde68a; padding-bottom: 10px; margin-bottom: 15px;">
@@ -325,22 +400,6 @@
             </form>
             {% endif %}
         </div>
-
-        {% if not request.user.groups.all.0.name == 'Solo Ver' %}
-        <div class="section-panel" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-            <h3 class="section-title" style="border: none; margin-bottom: 10px;">Actualizar Estado del Taller</h3>
-            <form method="post" class="form-inline">
-                {% csrf_token %}
-                <input type="hidden" name="form_type" value="estado">
-                <select name="nuevo_estado" class="modern-select" style="font-size: 1.05em; padding: 12px 16px;">
-                    {% for choice in estados_orden %}
-                        <option value="{{ choice.0 }}" {% if orden.estado == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="btn-modern btn-primary" style="padding: 12px 24px; font-size: 1.05em;">Actualizar Estado</button>
-            </form>
-        </div>
-        {% endif %}
 
         {% if request.user.is_superuser %}
             <div style="margin: 50px 0 30px 0; text-align: center;">

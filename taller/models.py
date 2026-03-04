@@ -78,12 +78,19 @@ class Presupuesto(models.Model):
         self.problema_o_trabajo = self.problema_o_trabajo.upper()
         super(Presupuesto, self).save(*args, **kwargs)
 
+
+# =========================================================
+# --- MODULO DE ÓRDENES Y SEGUIMIENTO DE TIEMPOS (NUEVO) --
+# =========================================================
+
 class OrdenDeReparacion(models.Model):
     ESTADO_CHOICES = [
         ('Recibido', 'Recibido'),
         ('En Diagnostico', 'En Diagnóstico'),
+        ('Esperando Autorizacion', 'Esperando Autorización'),
         ('Esperando Piezas', 'Esperando Piezas'),
         ('En Reparacion', 'En Reparación'),
+        ('En Pruebas', 'En Pruebas'),
         ('Listo para Recoger', 'Listo para Recoger'),
         ('Entregado', 'Entregado'),
     ]
@@ -105,6 +112,69 @@ class OrdenDeReparacion(models.Model):
     def __str__(self):
         return f"Orden #{self.id} - {self.vehiculo.matricula}"
 
+    # --- EL CRONÓMETRO AUTOMÁTICO ---
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        estado_cambiado = False
+        
+        if not is_new:
+            # Comprobamos si el estado está cambiando en este momento
+            vieja_orden = OrdenDeReparacion.objects.get(pk=self.pk)
+            if vieja_orden.estado != self.estado:
+                estado_cambiado = True
+        else:
+            estado_cambiado = True # Si es un coche nuevo, registra el primer estado
+            
+        super(OrdenDeReparacion, self).save(*args, **kwargs)
+        
+        # Si el estado cambió, paramos el cronómetro viejo y empezamos uno nuevo
+        if estado_cambiado:
+            ultimo_estado = self.historial_estados.filter(fecha_fin__isnull=True).first()
+            if ultimo_estado:
+                ultimo_estado.fecha_fin = timezone.now()
+                ultimo_estado.save()
+            
+            # --- NUEVO: Atrapamos al usuario que está guardando la orden ---
+            usuario_actual = getattr(self, '_usuario_actual', None)
+            
+            HistorialEstadoOrden.objects.create(
+                orden=self, 
+                estado=self.estado, 
+                fecha_inicio=timezone.now(),
+                usuario=usuario_actual  # <-- Guardamos el usuario
+            )
+
+
+class HistorialEstadoOrden(models.Model):
+    orden = models.ForeignKey(OrdenDeReparacion, related_name='historial_estados', on_delete=models.CASCADE)
+    estado = models.CharField(max_length=50)
+    fecha_inicio = models.DateTimeField(default=timezone.now)
+    fecha_fin = models.DateTimeField(null=True, blank=True)
+    
+    # --- NUEVO: Columna para guardar quién hizo el cambio ---
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    @property
+    def duracion(self):
+        fin = self.fecha_fin or timezone.now()
+        delta = fin - self.fecha_inicio
+        dias = delta.days
+        horas = delta.seconds // 3600
+        
+        if dias > 0:
+            return f"{dias}d {horas}h"
+        elif horas > 0:
+            return f"{horas} horas"
+        else:
+            minutos = delta.seconds // 60
+            return f"{minutos} min"
+
+    class Meta:
+        ordering = ['-fecha_inicio']
+
+
+# =========================================================
+
 class Empleado(models.Model):
     nombre = models.CharField(max_length=100)
     
@@ -121,12 +191,10 @@ class DeudaTaller(models.Model):
     importe_inicial = models.DecimalField(max_digits=10, decimal_places=2)
     fecha_creacion = models.DateField(default=timezone.now)
     
-    # --- NUEVA LÍNEA AÑADIDA AQUÍ ---
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True, help_text="Orden de trabajo asociada")
 
     @property
     def importe_pagado(self):
-    # ... (el resto del código sigue igual)
         total = self.gastos_pagados.aggregate(total=Sum('importe'))['total']
         return total or Decimal('0.00')
 
@@ -152,10 +220,10 @@ class Gasto(models.Model):
         ('Repuestos', 'Repuestos'),
         ('Sueldos', 'Sueldos'),
         ('Herramientas', 'Herramientas'),
-        ('Suministros', 'Suministros (Agua, Café, etc.)'), # <-- Modificado para que tu hermano lo vea claro
+        ('Suministros', 'Suministros (Agua, Café, etc.)'),
         ('Gasolina/Diesel', 'Gasolina/Diesel'),
         ('Otros', 'Otros'),
-        ('Compra de Consumibles', 'Compra de Consumibles (Stock Taller)'), # <-- Modificado
+        ('Compra de Consumibles', 'Compra de Consumibles (Stock Taller)'),
         ('COMISIONES_INTERESES', 'Comisiones e Intereses Bancarios'),
         ('Pago de Deuda', 'Pago de Deuda (Taller)'),
     ]
@@ -166,7 +234,7 @@ class Gasto(models.Model):
         ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
         ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'),
         ('CUENTA_ERIKA', 'Cuenta Erika (Antigua)'),
-        ('COMPENSACION', '🤝 Compensación (Trueque / Sin dinero)'), # <-- LÍNEA NUEVA
+        ('COMPENSACION', '🤝 Compensación (Trueque / Sin dinero)'),
     ]
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
     
@@ -239,6 +307,7 @@ class LineaFactura(models.Model):
         ('Consumible', 'Consumible'),
         ('Externo', 'Trabajo Externo'),
         ('Mano de Obra', 'Mano de Obra'),
+        ('Grúa', 'Servicio de Grúa'), # Añadido por si se usaba en views
     ]
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
     descripcion = models.CharField(max_length=255)
@@ -256,15 +325,13 @@ class LineaFactura(models.Model):
 
 
 # =========================================================
-# --- MODULO DE INVENTARIO Y CONSUMIBLES (ACTUALIZADO) ---
+# --- MODULO DE INVENTARIO Y CONSUMIBLES ---
 # =========================================================
 
 class TipoConsumible(models.Model):
     nombre = models.CharField(max_length=100)
     unidad_medida = models.CharField(max_length=20)
     nivel_minimo_stock = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    
-    # NUEVO: Aquí guardaremos el Precio Medio Ponderado para la rentabilidad exacta
     precio_coste_medio = models.DecimalField(max_digits=10, decimal_places=4, default=0.0000, help_text="Se calcula automáticamente con cada compra")
     
     @property
@@ -295,24 +362,21 @@ class CompraConsumible(models.Model):
     coste_por_unidad = models.DecimalField(max_digits=10, decimal_places=4, editable=False)
     
     def save(self, *args, **kwargs):
-        es_nuevo = self.pk is None # Verificamos si es una compra nueva
+        es_nuevo = self.pk is None
         
         if self.cantidad and self.cantidad > 0 and self.coste_total is not None:
             self.coste_por_unidad = self.coste_total / self.cantidad
         else:
             self.coste_por_unidad = Decimal('0.0000')
             
-        # --- CÁLCULO DEL PRECIO MEDIO PONDERADO (PMP) ---
         if es_nuevo:
             tipo_asociado = self.tipo
             stock_previo = tipo_asociado.stock_actual
             precio_medio_previo = tipo_asociado.precio_coste_medio
             
             if stock_previo <= 0:
-                # Si no había stock, el nuevo precio es directamente a lo que lo compramos hoy
                 nuevo_precio_medio = self.coste_por_unidad
             else:
-                # Fórmula de las grandes empresas: (Valor Almacén + Valor Nueva Compra) / (Stock Total)
                 valor_inventario_previo = stock_previo * precio_medio_previo
                 valor_nueva_compra = self.coste_total
                 nuevo_stock_total = stock_previo + self.cantidad
@@ -320,7 +384,6 @@ class CompraConsumible(models.Model):
             
             tipo_asociado.precio_coste_medio = nuevo_precio_medio
             tipo_asociado.save()
-        # ------------------------------------------------
 
         super().save(*args, **kwargs)
         
@@ -348,7 +411,6 @@ class AjusteStockConsumible(models.Model):
         self.motivo = self.motivo.upper()
         super().save(*args, **kwargs)
 
-# Modelo Proxy para mantener compatibilidad en el Panel de Admin si lo usabas
 class TipoConsumibleStock(TipoConsumible):
     class Meta:
         proxy = True
@@ -385,7 +447,6 @@ class LineaPresupuesto(models.Model):
         self.descripcion = self.descripcion.upper()
         super(LineaPresupuesto, self).save(*args, **kwargs)
 
-
 class CierreTarjeta(models.Model):
     TARJETA_CHOICES = [
         ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
@@ -419,18 +480,6 @@ class NotaInternaOrden(models.Model):
 
     def __str__(self): return f"Nota interna en Orden #{self.orden.id}"
 
-# --- SEÑALES AUTOMÁTICAS PARA EL INVENTARIO ---
-from django.db.models.signals import pre_delete
-from django.dispatch import receiver
-
-@receiver(pre_delete, sender=CompraConsumible)
-def revertir_stock_al_borrar_compra(sender, instance, **kwargs):
-    pass # Ya no necesitamos la señal de restar stock manual porque se lee todo en tiempo real con aggregates.
-
-@receiver(pre_delete, sender=UsoConsumible)
-def revertir_stock_al_borrar_uso(sender, instance, **kwargs):
-    pass
-
 class AmpliacionDeuda(models.Model):
     deuda = models.ForeignKey(DeudaTaller, on_delete=models.CASCADE, related_name='ampliaciones')
     fecha = models.DateField(auto_now_add=True)
@@ -438,4 +487,16 @@ class AmpliacionDeuda(models.Model):
     motivo = models.CharField(max_length=255)
 
     def __str__(self):
-        return f"+{self.importe}€ a {self.deuda.acreedor}"    
+        return f"+{self.importe}€ a {self.deuda.acreedor}"
+
+# --- SEÑALES AUTOMÁTICAS PARA EL INVENTARIO ---
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
+
+@receiver(pre_delete, sender=CompraConsumible)
+def revertir_stock_al_borrar_compra(sender, instance, **kwargs):
+    pass 
+
+@receiver(pre_delete, sender=UsoConsumible)
+def revertir_stock_al_borrar_uso(sender, instance, **kwargs):
+    pass

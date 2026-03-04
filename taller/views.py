@@ -4,7 +4,8 @@ from .models import (
     Ingreso, Gasto, Cliente, Vehiculo, OrdenDeReparacion, Empleado,
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
-    CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller,AmpliacionDeuda, 
+    CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller, AmpliacionDeuda, 
+    HistorialEstadoOrden # <-- AÑADIDO
 )
 from django.db.models import Sum, F, Q
 from django.db import transaction
@@ -291,7 +292,6 @@ def ingresar_vehiculo(request):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para ingresar vehículos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
     if request.method == 'POST':
-        # --- NUEVO: Recibimos el ID del cliente si se seleccionó del desplegable ---
         cliente_id = request.POST.get('cliente_existente')
         
         nombre_cliente = request.POST.get('cliente_nombre', '').upper()
@@ -311,11 +311,9 @@ def ingresar_vehiculo(request):
         problema_reportado = request.POST['problema'].upper()
 
         with transaction.atomic():
-            # --- NUEVA LÓGICA: ¿Cliente Existente o Nuevo? ---
             if cliente_id:
                 try:
                     cliente = Cliente.objects.get(id=cliente_id)
-                    # Actualizamos sus datos por si corregiste algo en el formulario al ingresarlo
                     cliente.nombre = nombre_cliente
                     if telefono_cliente: cliente.telefono = telefono_cliente
                     cliente.tipo_documento = tipo_documento
@@ -328,13 +326,11 @@ def ingresar_vehiculo(request):
                 except Cliente.DoesNotExist:
                     cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente, defaults={'nombre': nombre_cliente})
             else:
-                # Si no seleccionó del desplegable, lo crea como siempre
                 cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente, defaults={'nombre': nombre_cliente})
                 cliente.nombre = nombre_cliente; cliente.tipo_documento = tipo_documento; cliente.documento_fiscal = documento_fiscal
                 cliente.direccion_fiscal = direccion_fiscal; cliente.codigo_postal_fiscal = codigo_postal_fiscal
                 cliente.ciudad_fiscal = ciudad_fiscal; cliente.provincia_fiscal = provincia_fiscal
                 cliente.save()
-            # --------------------------------------------------
 
             vehiculo, v_created = Vehiculo.objects.get_or_create(matricula=matricula_vehiculo, defaults={'marca': marca_vehiculo, 'modelo': modelo_vehiculo, 'kilometraje': kilometraje_vehiculo, 'cliente': cliente})
             if not v_created:
@@ -377,7 +373,6 @@ def ingresar_vehiculo(request):
             }
         })
         
-    # --- NUEVO: Empaquetar TODOS los clientes para enviarlos al desplegable ---
     clientes = Cliente.objects.all().order_by('nombre')
     clientes_con_datos = []
     for cliente in clientes:
@@ -397,7 +392,7 @@ def ingresar_vehiculo(request):
         
     context = { 
         'presupuestos_disponibles_data': presupuestos_con_datos_fiscales,
-        'clientes_data': clientes_con_datos # <-- Esto permite crear el desplegable en el HTML
+        'clientes_data': clientes_con_datos
     }
     return render(request, 'taller/ingresar_vehiculo.html', context)
 
@@ -804,6 +799,9 @@ def editar_presupuesto(request, presupuesto_id):
     return render(request, 'taller/editar_presupuesto.html', context)
 
 
+# ==========================================
+# --- NUEVA LÓGICA DE LISTA DE ÓRDENES ---
+# ==========================================
 @login_required
 def lista_ordenes(request):
     if request.method == 'POST':
@@ -820,12 +818,22 @@ def lista_ordenes(request):
         return redirect('lista_ordenes')
 
     ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente')
-    ordenes_clientes = ordenes_activas.filter(trabajo_interno=False).order_by('id')
-    ordenes_taller = ordenes_activas.filter(trabajo_interno=True).order_by('id')
+    
+    # 1. Coches en los que el mecánico TIENE que trabajar hoy
+    ordenes_taller = ordenes_activas.filter(
+        estado__in=['Recibido', 'En Diagnostico', 'Esperando Piezas', 'En Reparacion', 'En Pruebas']
+    ).order_by('id')
+    
+    # 2. Coches atascados (esperando al jefe o al cliente)
+    ordenes_pausadas = ordenes_activas.filter(estado='Esperando Autorizacion').order_by('id')
+    
+    # 3. Coches terminados (solo los gestiona el jefe)
+    ordenes_listas = ordenes_activas.filter(estado='Listo para Recoger').order_by('id')
 
     return render(request, 'taller/lista_ordenes.html', {
-        'ordenes_clientes': ordenes_clientes,
-        'ordenes_taller': ordenes_taller
+        'ordenes_taller': ordenes_taller,
+        'ordenes_pausadas': ordenes_pausadas,
+        'ordenes_listas': ordenes_listas
     })
 
 @login_required
@@ -867,7 +875,10 @@ def detalle_orden(request, orden_id):
         if form_type == 'estado':
             nuevo_estado = request.POST.get('nuevo_estado')
             if nuevo_estado in [choice[0] for choice in OrdenDeReparacion.ESTADO_CHOICES]:
-                orden.estado = nuevo_estado; orden.save()
+                # --- NUEVO: Le inyectamos el usuario que ha pulsado el botón ---
+                orden._usuario_actual = request.user
+                orden.estado = nuevo_estado
+                orden.save()
             return redirect('detalle_orden', orden_id=orden.id)
 
         elif form_type == 'kilometraje':
@@ -888,19 +899,18 @@ def detalle_orden(request, orden_id):
             
         elif form_type == 'nota_interna':
             texto_nota = request.POST.get('texto_nota')
-            imagen_nota = request.FILES.get('imagen_nota') # <--- NUEVO: Atrapamos la foto
+            imagen_nota = request.FILES.get('imagen_nota') 
             
             if texto_nota:
                 NotaInternaOrden.objects.create(
                     orden=orden, 
                     autor=request.user, 
                     texto=texto_nota,
-                    imagen=imagen_nota # <--- NUEVO: La guardamos
+                    imagen=imagen_nota 
                 )
             return redirect('detalle_orden', orden_id=orden.id)
 
         
-        # --- NUEVO: LÓGICA DE COBRO AUTOMÁTICO ---
         elif form_type == 'registrar_pago':
             importe = Decimal(request.POST.get('importe_pago', '0'))
             metodo = request.POST.get('metodo_pago')
@@ -926,7 +936,6 @@ def detalle_orden(request, orden_id):
                         except DeudaTaller.DoesNotExist: pass
             return redirect('detalle_orden', orden_id=orden.id)
 
-    # Datos para el formulario de pago
     metodos_pago = Ingreso.METODO_PAGO_CHOICES
     deudas_pendientes = [d for d in DeudaTaller.objects.all() if d.estado == 'Pendiente']
 
@@ -935,7 +944,7 @@ def detalle_orden(request, orden_id):
         'abonos': abonos, 'pendiente_pago': pendiente_pago, 'tipos_consumible': tipos_consumible,
         'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES, 'whatsapp_url': whatsapp_url,
         'notas_internas': orden.notas_internas.all(),
-        'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes # <-- Variables nuevas
+        'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes 
     }
     return render(request, 'taller/detalle_orden.html', context)
     
@@ -1314,7 +1323,6 @@ def informe_rentabilidad(request):
         total_ganancia_mo += pvp_mo
         total_ganancia_piezas += ganancia_piezas_orden
         
-        # NUEVO: Comprobar si se pagó con Trueque (Compensación)
         metodos = list(orden.ingreso_set.values_list('metodo_pago', flat=True))
         es_compensado = 'COMPENSACION' in metodos
 
@@ -1325,7 +1333,7 @@ def informe_rentabilidad(request):
             'ganancia_piezas': ganancia_piezas_orden,
             'grua_facturada': grua_en_esta_factura,
             'ganancia_total_taller': ganancia_total_taller,
-            'es_compensado': es_compensado # <-- Enviado al HTML para poner la etiqueta
+            'es_compensado': es_compensado 
         })
     
     ganancia_grua_directa = ingresos_grua.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
