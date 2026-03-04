@@ -9,92 +9,166 @@
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        /* ========================================= */
+        /* ESTILO MINIMALISTA Y PROFESIONAL          */
+        /* ========================================= */
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
-        .container { max-width: 1000px !important; margin: 0 auto; padding: 30px 20px; }
+        .container { max-width: 1200px !important; margin: 0 auto; padding: 40px 20px; }
+        
         .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
         
-        .section-panel { background: #ffffff; padding: 25px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03), 0 2px 4px -1px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; margin-bottom: 30px; }
+        /* Panel de Filtros */
+        .filter-card { 
+            background: #ffffff; padding: 24px; border-radius: 16px; 
+            border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); 
+            margin-bottom: 40px; margin-top: 20px;
+        }
+        .filter-grid { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
+        .form-group { display: flex; flex-direction: column; gap: 8px; flex-grow: 1; min-width: 200px; }
+        label { font-weight: 600; color: #475569; font-size: 0.9em; }
         
-        .modern-select { padding: 10px 14px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; font-family: 'Inter', sans-serif; font-weight: 500; outline: none; cursor: pointer; color: #334155; }
-        .modern-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
-        .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #0f172a; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 0.95em; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-decoration: none; }
-        .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); filter: brightness(1.1); }
+        .modern-select { 
+            padding: 12px 16px; border-radius: 10px; border: 1px solid #cbd5e1; 
+            background: #f8fafc; font-family: 'Inter', sans-serif; font-size: 1em; 
+            color: #334155; outline: none; transition: 0.2s; width: 100%; cursor: pointer;
+        }
+        .modern-select:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); background: white; }
+        
+        .btn-modern { 
+            background: #0f172a; color: white; border: none; padding: 12px 30px; 
+            border-radius: 10px; font-weight: 700; font-size: 1em; cursor: pointer; 
+            transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; height: 46px;
+        }
+        .btn-modern:hover { background: #1e293b; transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
 
-        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; margin-top: 20px; }
-        .card { background: white; padding: 24px; border-radius: 16px; border: 1px solid #e2e8f0; transition: all 0.2s ease; text-decoration: none; display: block; color: inherit; position: relative; overflow: hidden; border-left: 5px solid #cbd5e1; }
-        .card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px -5px rgba(0,0,0,0.08); border-color: #cbd5e1; }
-        .card h3 { margin: 0; color: #64748b; font-size: 1em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
-        .card .amount { font-size: 2em; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
+        /* Cuadrícula de Tarjetas */
+        .section-title { font-size: 1.2em; font-weight: 700; color: #334155; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;}
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
         
-        .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 15px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
-        .table-modern th, .table-modern td { padding: 14px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; }
-        .table-modern th { background-color: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; }
-        .table-modern tr:last-child td { border-bottom: none; }
-        .clickable-row { cursor: pointer; transition: background-color 0.2s; background-color: #ffffff; }
-        .clickable-row:hover { background-color: #f8fafc; }
-        .clickable-row td { color: #334155; font-weight: 500; }
-        .clickable-row td:first-child { color: #3b82f6; font-weight: 600; }
+        /* Tarjetas de Categoría */
+        .card { 
+            background: white; padding: 25px; border-radius: 16px; border: 1px solid #e2e8f0; 
+            border-top: 4px solid #ef4444; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); 
+            text-decoration: none; color: inherit; display: flex; flex-direction: column; transition: all 0.3s ease;
+        }
+        .card:hover { transform: translateY(-6px); box-shadow: 0 15px 25px -5px rgba(0,0,0,0.08); border-color: #cbd5e1; }
+        
+        .card h3 { margin: 0 0 15px 0; color: #475569; font-size: 1.1em; font-weight: 700; display: flex; align-items: center; gap: 8px;}
+        .card .amount { font-size: 2.4em; font-weight: 800; color: #ef4444; margin: 0 0 20px 0; letter-spacing: -0.02em;}
+        
+        .card .card-footer { margin-top: auto; text-align: right; font-size: 0.9em; font-weight: 700; color: #94a3b8; transition: color 0.2s;}
+        .card:hover .card-footer { color: #ef4444; }
+
+        /* Tabla de Sueldos */
+        .table-wrapper {
+            background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); overflow: hidden; margin-top: 20px;
+        }
+        .modern-table { width: 100%; border-collapse: collapse; text-align: left; }
+        .modern-table th { 
+            background-color: #f1f5f9; color: #64748b; font-weight: 700; 
+            font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; 
+            padding: 16px 20px; border-bottom: 2px solid #e2e8f0;
+        }
+        .modern-table td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 1.05em; vertical-align: middle; }
+        .modern-table tr:last-child td { border-bottom: none; }
+        .clickable-row { cursor: pointer; transition: background-color 0.2s; }
+        .clickable-row:hover { background-color: #fff1f2; transform: scale(1.002); box-shadow: 0 4px 10px rgba(0,0,0,0.05); z-index: 10; position: relative;}
+        .clickable-row td:first-child { color: #0f172a; font-weight: 700; }
+
+        /* Estado Vacío */
+        .empty-state { grid-column: 1 / -1; text-align: center; padding: 60px 20px; background: white; border-radius: 16px; border: 1px dashed #cbd5e1; color: #64748b; }
     </style>
 </head>
 <body>
     <div class="container">
         
-        <div style="margin-bottom: 30px;">
-            <a href="{% url 'contabilidad' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em; transition: color 0.2s;">← Volver a Contabilidad</a>
-            <h1 class="header-title">Informe de Gastos</h1>
+        <div style="margin-bottom: 20px;">
+            <a href="{% url 'contabilidad' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.95em;">← Volver a Contabilidad</a>
+            <h1 class="header-title" style="margin-top: 10px;">Desglose de Gastos</h1>
+            <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Analiza a dónde va a parar el dinero del taller y controla tus salidas.</p>
         </div>
         
-        <div class="section-panel" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; padding: 20px 25px;">
-            <span style="font-weight: 600; color: #475569; font-size: 1.05em;">Filtros de búsqueda:</span>
-            <form method="get" action="{% url 'informe_gastos' %}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-                <select name="ano" class="modern-select">
-                    <option value="">-- Todos los Años --</option>
-                    {% for ano in anos_disponibles %}
-                        <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
-                    {% endfor %}
-                </select>
-                <select name="mes" class="modern-select">
-                    <option value="">-- Todos los Meses --</option>
-                    {% for i in "123456789012"|make_list %}
-                        <option value="{{ forloop.counter }}" {% if mes_seleccionado == forloop.counter %}selected{% endif %}>Mes {{ forloop.counter }}</option>
-                    {% endfor %}
-                </select>
+        <div class="filter-card">
+            <form method="get" action="{% url 'informe_gastos' %}" style="width: 100%; display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; margin: 0;">
+                <div class="form-group">
+                    <label for="ano">📅 Año contable:</label>
+                    <select name="ano" id="ano" class="modern-select">
+                        <option value="">Todos los años registrados</option>
+                        {% for ano in anos_disponibles %}
+                            <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="mes">📊 Mes específico:</label>
+                    <select name="mes" id="mes" class="modern-select">
+                        <option value="">Todo el Año completo</option>
+                        {% for i in meses_del_ano %}
+                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>Mes {{ i }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <button type="submit" class="btn-modern">Aplicar Filtros</button>
             </form>
         </div>
 
-        <h2 style="font-size: 1.4em; color: #0f172a; margin-top: 40px; margin-bottom: 20px;">Resumen por Categorías</h2>
-        <div class="dashboard-grid">
+        <h2 class="section-title">Resumen por Categoría</h2>
+        
+        <div class="summary-grid">
             {% for key, data in totales_por_categoria.items %}
-            <a href="{% url 'informe_gastos_desglose' categoria=key %}?ano={{ ano_seleccionado|default:'' }}&mes={{ mes_seleccionado|default:'' }}" class="card">
-                <h3>{{ data.display_name }}</h3>
-                <div class="amount">{{ data.total|floatformat:2 }} €</div>
-                <div style="text-align: right; color: #3b82f6; font-weight: 600; font-size: 0.85em; margin-top: 15px;">Ver detalles ➔</div>
-            </a>
+                <a href="{% url 'informe_gastos_desglose' categoria=key %}?ano={{ ano_seleccionado|default:'' }}&mes={{ mes_seleccionado|default:'' }}" class="card">
+                    <h3>
+                        {% if key == 'Repuestos' %} ⚙️ 
+                        {% elif key == 'Sueldos' %} 👥 
+                        {% elif key == 'Herramientas' %} 🔧 
+                        {% elif key == 'Suministros' %} ☕ 
+                        {% elif key == 'Gasolina/Diesel' %} ⛽ 
+                        {% elif key == 'Compra de Consumibles' %} 🛢️ 
+                        {% elif key == 'COMISIONES_INTERESES' %} 🏦 
+                        {% elif key == 'Pago de Deuda' %} 📓 
+                        {% else %} 💸 {% endif %}
+                        {{ data.display_name }}
+                    </h3>
+                    <p class="amount">-{{ data.total|floatformat:2 }} €</p>
+                    <div class="card-footer">
+                        Ver todos los movimientos ➔
+                    </div>
+                </a>
+            {% empty %}
+                <div class="empty-state">
+                    <span style="font-size: 3em; display: block; margin-bottom: 10px;">📉</span>
+                    <strong style="font-size: 1.2em; color: #475569;">Sin gastos registrados</strong><br>
+                    No hay salidas de dinero que coincidan con los filtros seleccionados.
+                </div>
             {% endfor %}
         </div>
 
-        <h2 style="font-size: 1.4em; color: #0f172a; margin-top: 50px; margin-bottom: 20px;">Desglose de Sueldos por Trabajador</h2>
-        <table class="table-modern">
-            <thead>
-                <tr>
-                    <th>Trabajador</th>
-                    <th style="text-align: right;">Total Pagado</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for empleado, total in desglose_sueldos.items %}
-                <tr class="clickable-row" onclick="window.location.href='{% url 'informe_gastos_desglose_empleado' categoria='Sueldos' empleado_nombre=empleado %}?ano={{ ano_seleccionado|default:'' }}&mes={{ mes_seleccionado|default:'' }}'">
-                    <td>{{ empleado }}</td>
-                    <td style="text-align: right; font-weight: 700; color: #ef4444;">{{ total|floatformat:2 }} €</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="2" style="text-align: center; padding: 30px; color: #94a3b8; font-style: italic;">No hay pagos de sueldos registrados en este periodo.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <h2 class="section-title" style="margin-top: 50px;">👥 Desglose de Sueldos por Trabajador</h2>
+        <div class="table-wrapper">
+            <table class="modern-table">
+                <thead>
+                    <tr>
+                        <th>Nombre del Empleado</th>
+                        <th style="text-align: right;">Total Pagado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for empleado, total in desglose_sueldos.items %}
+                    <tr class="clickable-row" onclick="window.location.href='{% url 'informe_gastos_desglose_empleado' categoria='Sueldos' empleado_nombre=empleado %}?ano={{ ano_seleccionado|default:'' }}&mes={{ mes_seleccionado|default:'' }}'">
+                        <td>{{ empleado }}</td>
+                        <td style="text-align: right; font-weight: 800; color: #ef4444;">-{{ total|floatformat:2 }} €</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="2" style="text-align: center; padding: 40px; color: #94a3b8; font-style: italic;">
+                            No hay pagos de sueldos registrados en este periodo.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         
     </div>
 </body>

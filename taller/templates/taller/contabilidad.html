@@ -6,96 +6,169 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contabilidad - ServiMax</title>
     
-    {# --- INICIO MODIFICACIÓN --- #}
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    {# --- FIN MODIFICACIÓN --- #}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ========================================= */
+        /* ESTILO MINIMALISTA Y PROFESIONAL          */
+        /* ========================================= */
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 1200px !important; margin: 0 auto; padding: 40px 20px; }
+        
+        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        
+        /* Panel de Filtros */
+        .filter-card { 
+            background: #ffffff; padding: 24px; border-radius: 16px; 
+            border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); 
+            margin-bottom: 40px; margin-top: 20px;
+        }
+        .filter-grid { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
+        .form-group { display: flex; flex-direction: column; gap: 8px; flex-grow: 1; min-width: 200px; }
+        label { font-weight: 600; color: #475569; font-size: 0.9em; }
+        
+        .modern-select { 
+            padding: 12px 16px; border-radius: 10px; border: 1px solid #cbd5e1; 
+            background: #f8fafc; font-family: 'Inter', sans-serif; font-size: 1em; 
+            color: #334155; outline: none; transition: 0.2s; width: 100%; cursor: pointer;
+        }
+        .modern-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); background: white; }
+        
+        .btn-modern { 
+            background: #0f172a; color: white; border: none; padding: 12px 30px; 
+            border-radius: 10px; font-weight: 700; font-size: 1em; cursor: pointer; 
+            transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; height: 46px;
+        }
+        .btn-modern:hover { background: #1e293b; transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
 
+        /* Cuadrícula de Tarjetas Financieras */
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 40px;}
+        
+        .finance-card { 
+            background: white; padding: 30px; border-radius: 16px; border: 1px solid #e2e8f0; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); display: flex; flex-direction: column; align-items: center; text-align: center;
+            transition: transform 0.2s;
+        }
+        .finance-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px -5px rgba(0,0,0,0.08); }
+        
+        .finance-card h2 { font-size: 1.1em; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 15px 0;}
+        .finance-card .amount { font-size: 2.8em; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+        
+        .card-green { border-top: 4px solid #10b981; }
+        .card-green .amount { color: #10b981; }
+        .card-red { border-top: 4px solid #ef4444; }
+        .card-red .amount { color: #ef4444; }
+        .card-blue { border-top: 4px solid #3b82f6; background: #f8fafc;}
+        .card-blue .amount { color: #2563eb; }
+
+        /* Tarjetas de Crédito */
+        .section-title { font-size: 1.4em; font-weight: 800; color: #334155; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;}
+        
+        .credit-card { background: #ffffff; border: 1px solid #cbd5e1; padding: 25px; border-radius: 16px; text-align: left; }
+        .credit-card h3 { color: #0f172a; margin: 0 0 5px 0; font-size: 1.2em; display: flex; align-items: center; gap: 8px;}
+        
+        /* Enlaces de Navegación */
+        .nav-links { display: flex; gap: 15px; flex-wrap: wrap; margin-top: 20px; }
+        .nav-btn { 
+            background: white; border: 1px solid #cbd5e1; padding: 15px 25px; border-radius: 12px; 
+            color: #475569; font-weight: 600; text-decoration: none; transition: 0.2s; flex-grow: 1; text-align: center;
+        }
+        .nav-btn:hover { background: #f8fafc; color: #0f172a; border-color: #94a3b8; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05);}
+    </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Contabilidad General</h1>
-            <a href="{% url 'home' %}" class="back-btn">← Volver al Dashboard</a>
+        <div style="margin-bottom: 20px;">
+            <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.95em;">← Volver al Inicio</a>
+            <h1 class="header-title" style="margin-top: 10px;">⚖️ Balance Contable</h1>
+            <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Resumen general del rendimiento financiero del taller.</p>
         </div>
         
-        <form method="get" action="{% url 'contabilidad' %}">
-            <div class="filters">
-                <div>
-                    <label for="ano">Año:</label>
-                    <select name="ano" id="ano">
-                        <option value="">Todos</option>
+        <div class="filter-card">
+            <form method="get" action="{% url 'contabilidad' %}" class="filter-grid">
+                <div class="form-group">
+                    <label for="ano">📅 Año contable:</label>
+                    <select name="ano" id="ano" class="modern-select">
+                        <option value="">Todos los años</option>
                         {% for ano in anos_disponibles %}
                             <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label for="mes">Mes:</label>
-                    <select name="mes" id="mes">
-                        <option value="">Todo el Año</option>
+                <div class="form-group">
+                    <label for="mes">📊 Mes de facturación:</label>
+                    <select name="mes" id="mes" class="modern-select">
+                        <option value="">Resumen anual completo</option>
                         {% for i in meses_del_ano %}
-                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>{{ i }}</option>
+                            <option value="{{ i }}" {% if mes_seleccionado == i %}selected{% endif %}>Mes {{ i }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <button type="submit">Filtrar</button>
-            </div>
-        </form>
-        <hr>
+                <button type="submit" class="btn-modern">Generar Balance</button>
+            </form>
+        </div>
 
         <div class="summary-grid">
-            <div class="card">
+            <div class="finance-card card-green">
                 <h2>Total Ingresado</h2>
-                <p class="amount ingresos">{{ total_ingresado|floatformat:2 }} €</p>
+                <p class="amount">+{{ total_ingresado|floatformat:2 }} €</p>
             </div>
-            <div class="card">
+            <div class="finance-card card-red">
                 <h2>Total Gastado</h2>
-                <p class="amount gastos">{{ total_gastado|floatformat:2 }} €</p>
+                <p class="amount">-{{ total_gastado|floatformat:2 }} €</p>
             </div>
-            <div class="card">
-                <h2>Beneficio Bruto (Ganancia)</h2>
-                <p class="amount ganancia">{{ total_ganancia|floatformat:2 }} €</p>
+            <div class="finance-card card-blue">
+                <h2>Beneficio Bruto (Caja)</h2>
+                <p class="amount">{{ total_ganancia|floatformat:2 }} €</p>
             </div>
         </div>
 
-        <hr style="margin-top: 30px; border-top: 1px dashed #cbd5e1;">
-        <h2 style="color: #334155; margin-bottom: 15px; font-size: 1.4em;">Estado de Tarjetas de Crédito</h2>
+        <hr style="margin: 40px 0; border: none; border-top: 2px dashed #cbd5e1;">
+        
+        <h2 class="section-title">💳 Estado del Crédito (Visión Global)</h2>
 
         <div class="summary-grid">
-            <div class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; border-top: 4px solid #3b82f6;">
-                <h3 style="color: #475569; display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 5px; font-size: 1.1em;">💳 Tarjeta 1 (Visa)</h3>
-                <p style="font-size: 0.85em; color: #64748b; margin: 0 0 5px 0;">Crédito Disponible</p>
-                <p class="amount" style="font-size: 2em; font-weight: 800; margin: 0; {% if disponible_t1 < 300 %}color: #ef4444;{% else %}color: #3b82f6;{% endif %}">
+            <div class="credit-card" style="border-top: 4px solid #3b82f6;">
+                <h3>Tarjeta 1 (Visa Taller)</h3>
+                <p style="font-size: 0.9em; color: #64748b; margin: 0 0 10px 0;">Oxígeno disponible para compras</p>
+                
+                <p class="amount" style="font-size: 2.2em; font-weight: 800; margin: 0; {% if disponible_t1 < 300 %}color: #ef4444;{% else %}color: #1e293b;{% endif %}">
                     {{ disponible_t1|floatformat:2 }} €
                 </p>
-                <div style="width: 100%; background: #e2e8f0; height: 8px; border-radius: 4px; margin-top: 15px; overflow: hidden;">
+                
+                <div style="width: 100%; background: #e2e8f0; height: 10px; border-radius: 99px; margin-top: 15px; overflow: hidden;">
                     <div style="height: 100%; width: {% widthratio disponible_t1 2000 100 %}%; {% if disponible_t1 < 300 %}background: #ef4444;{% else %}background: #3b82f6;{% endif %}; transition: width 0.5s ease;"></div>
                 </div>
-                <p style="font-size: 0.75em; color: #94a3b8; margin-top: 8px; margin-bottom: 0;">Límite Total: 2.000,00 €</p>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.8em; color: #94a3b8; font-weight: 600;">
+                    <span>0 €</span>
+                    <span>Límite: 2.000 €</span>
+                </div>
             </div>
 
-            <div class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; border-top: 4px solid #8b5cf6;">
-                <h3 style="color: #475569; display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 5px; font-size: 1.1em;">💳 Tarjeta 2 (Visa)</h3>
-                <p style="font-size: 0.85em; color: #64748b; margin: 0 0 5px 0;">Crédito Disponible</p>
-                <p class="amount" style="font-size: 2em; font-weight: 800; margin: 0; {% if disponible_t2 < 150 %}color: #ef4444;{% else %}color: #8b5cf6;{% endif %}">
+            <div class="credit-card" style="border-top: 4px solid #8b5cf6;">
+                <h3>Tarjeta 2 (Visa Extra)</h3>
+                <p style="font-size: 0.9em; color: #64748b; margin: 0 0 10px 0;">Oxígeno disponible para compras</p>
+                
+                <p class="amount" style="font-size: 2.2em; font-weight: 800; margin: 0; {% if disponible_t2 < 150 %}color: #ef4444;{% else %}color: #1e293b;{% endif %}">
                     {{ disponible_t2|floatformat:2 }} €
                 </p>
-                <div style="width: 100%; background: #e2e8f0; height: 8px; border-radius: 4px; margin-top: 15px; overflow: hidden;">
+                
+                <div style="width: 100%; background: #e2e8f0; height: 10px; border-radius: 99px; margin-top: 15px; overflow: hidden;">
                     <div style="height: 100%; width: {% widthratio disponible_t2 1000 100 %}%; {% if disponible_t2 < 150 %}background: #ef4444;{% else %}background: #8b5cf6;{% endif %}; transition: width 0.5s ease;"></div>
                 </div>
-                <p style="font-size: 0.75em; color: #94a3b8; margin-top: 8px; margin-bottom: 0;">Límite Total: 1.000,00 €</p>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.8em; color: #94a3b8; font-weight: 600;">
+                    <span>0 €</span>
+                    <span>Límite: 1.000 €</span>
+                </div>
             </div>
-            
-            <div style="visibility: hidden;"></div>
         </div>
 
-        <div class="links" style="margin-top: 30px;">
-            <a href="{% url 'informe_ingresos' %}">Informe de Ingresos</a>
-            <span>|</span>
-            <a href="{% url 'informe_gastos' %}" style="font-weight: bold;">Informe Detallado de Gastos</a>
-            <span>|</span>
-            <a href="{% url 'informe_rentabilidad' %}">Informe de Rentabilidad</a>
+        <h2 class="section-title" style="margin-top: 40px;">📑 Informes Detallados</h2>
+        <div class="nav-links">
+            <a href="{% url 'informe_ingresos' %}" class="nav-btn">📈 Desglose de Ingresos</a>
+            <a href="{% url 'informe_gastos' %}" class="nav-btn">📉 Desglose de Gastos</a>
+            <a href="{% url 'informe_rentabilidad' %}" class="nav-btn">💰 Rentabilidad Real por Coche</a>
         </div>
 
     </div>
