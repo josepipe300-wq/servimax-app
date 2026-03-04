@@ -28,7 +28,7 @@
         .table-modern th, .table-modern td { padding: 16px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; }
         .table-modern th { background-color: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.8em; text-transform: uppercase; }
         .money-col { text-align: right; font-weight: 600; }
-        .badge-metodo { background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 700; }
+        .badge-metodo { background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 700; border: 1px solid #cbd5e1; }
 
         .modern-input { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; box-sizing: border-box; font-family: 'Inter'; font-size: 1em; outline: none; width: 100%; }
         .modern-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
@@ -42,7 +42,7 @@
             <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; margin-top: 15px;">
                 <div>
                     <h1 class="header-title" style="margin-top: 0;">Expediente de Deuda</h1>
-                    <p style="color: #64748b; font-weight: 500; margin: 0; line-height: 1.5;">Acreedor: <strong style="color:#0f172a;">{{ deuda.acreedor }}</strong><br> Motivo: {{ deuda.motivo }}</p>
+                    <p style="color: #64748b; font-weight: 500; margin: 0; line-height: 1.5;">Acreedor: <strong style="color:#0f172a;">{{ deuda.acreedor }}</strong><br> Motivo Inicial: {{ deuda.motivo }}</p>
                 </div>
                 {% if not request.user.groups.all.0.name == 'Solo Ver' %}
                 <div>
@@ -71,7 +71,7 @@
                         <input type="text" name="acreedor" value="{{ deuda.acreedor }}" class="modern-input" style="border-color: #fde047; background: white;" required>
                     </div>
                     <div>
-                        <label style="font-size: 0.85em; font-weight: bold; color: #854d0e; display: block; margin-bottom: 5px;">Importe Inicial Total (€)</label>
+                        <label style="font-size: 0.85em; font-weight: bold; color: #854d0e; display: block; margin-bottom: 5px;">Importe Inicial / Total (€)</label>
                         <input type="number" step="0.01" min="0" name="importe_inicial" value="{{ deuda.importe_inicial|stringformat:'f' }}" class="modern-input" style="border-color: #fde047; background: white;" required>
                     </div>
                 </div>
@@ -89,7 +89,7 @@
         {% endif %}
         <div class="summary-grid">
             <div class="card">
-                <h4>Deuda Inicial</h4>
+                <h4>Deuda Inicial Acumulada</h4>
                 <p class="amount" style="color: #64748b;">{{ deuda.importe_inicial|floatformat:2 }} €</p>
             </div>
             <div class="card">
@@ -117,7 +117,7 @@
         {% if not request.user.groups.all.0.name == 'Solo Ver' and deuda.estado == 'Pendiente' %}
         <div class="section-panel" style="background: #eff6ff; border: 1px dashed #93c5fd; padding: 25px;">
             <h4 style="margin: 0 0 10px 0; color: #1e40af; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">➕ Ampliar Deuda</h4>
-            <p style="font-size: 0.95em; color: #3b82f6; margin-bottom: 15px; margin-top: 0;">¿Te han prestado más dinero o se ha sumado algún recargo? Añádelo aquí para actualizar el total y dejar el motivo registrado.</p>
+            <p style="font-size: 0.95em; color: #3b82f6; margin-bottom: 15px; margin-top: 0;">¿Te han prestado más dinero o se ha sumado algún recargo? Añádelo aquí para actualizar el total y dejar el motivo registrado en el historial.</p>
             
             <form method="POST" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                 {% csrf_token %}
@@ -138,38 +138,53 @@
         </div>
         {% endif %}
         <div class="section-panel">
-            <h3 style="margin-top: 0; color: #0f172a; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">Historial de Pagos Realizados</h3>
+            <h3 style="margin-top: 0; color: #0f172a; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">Historial Combinado (Pagos y Ampliaciones)</h3>
             
             <div style="overflow-x: auto;">
                 <table class="table-modern">
                     <thead>
                         <tr>
                             <th>Fecha</th>
-                            <th>Descripción del Pago</th>
-                            <th>Método de Pago</th>
-                            <th class="money-col">Importe</th>
+                            <th>Descripción del Movimiento</th>
+                            <th>Tipo / Método</th>
+                            <th class="money-col">Impacto</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for pago in pagos %}
+                        {% for mov in historial %}
                         <tr>
-                            <td style="color: #64748b; font-weight: 500;">{{ pago.fecha|date:"d/m/Y" }}</td>
+                            <td style="color: #64748b; font-weight: 500;">{{ mov.fecha|date:"d/m/Y" }}</td>
+                            
                             <td style="color: #0f172a; font-weight: 500;">
-                                {{ pago.descripcion|default:"Pago de cuota/deuda" }}
-                                {% if pago.orden %}
-                                    <br><a href="{% url 'detalle_orden' pago.orden.id %}" style="font-size: 0.85em; color: #3b82f6; text-decoration: none;">Ver Orden #{{ pago.orden.id }} ➔</a>
+                                {{ mov.descripcion }}
+                                {% if mov.orden %}
+                                    <br><a href="{% url 'detalle_orden' mov.orden.id %}" style="font-size: 0.85em; color: #3b82f6; text-decoration: none;">Ver Orden #{{ mov.orden.id }} ➔</a>
                                 {% endif %}
                             </td>
-                            <td><span class="badge-metodo">{{ pago.get_metodo_pago_display }}</span></td>
-                            <td class="money-col" style="color: #10b981; font-weight: 800; font-size: 1.1em;">
-                                + {{ pago.importe|floatformat:2 }} €
+                            
+                            <td>
+                                {% if mov.tipo == 'ampliacion' %}
+                                    <span class="badge-metodo" style="background: #fef2f2; color: #ef4444; border-color: #fecaca;">{{ mov.metodo }}</span>
+                                {% else %}
+                                    <span class="badge-metodo">{{ mov.metodo }}</span>
+                                {% endif %}
                             </td>
+                            
+                            {% if mov.tipo == 'pago' %}
+                                <td class="money-col" style="color: #10b981; font-weight: 800; font-size: 1.1em;">
+                                    - {{ mov.importe|floatformat:2 }} €
+                                </td>
+                            {% else %}
+                                <td class="money-col" style="color: #ef4444; font-weight: 800; font-size: 1.1em;">
+                                    + {{ mov.importe|floatformat:2 }} €
+                                </td>
+                            {% endif %}
                         </tr>
                         {% empty %}
                         <tr>
                             <td colspan="4" style="text-align: center; padding: 40px; color: #94a3b8;">
                                 <span style="font-size: 2em; display: block; margin-bottom: 10px;">⏳</span>
-                                Aún no se ha registrado ningún pago para esta deuda.
+                                Aún no hay movimientos registrados en esta deuda.
                             </td>
                         </tr>
                         {% endfor %}

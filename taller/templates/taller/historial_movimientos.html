@@ -9,9 +9,6 @@
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* ========================================= */
-        /* ESTILO MINIMALISTA Y LIMPIO               */
-        /* ========================================= */
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
         .container { max-width: 1300px !important; margin: 0 auto; padding: 30px 20px; }
         
@@ -139,10 +136,19 @@
                             <td>
                                 <div style="color: #0f172a; font-weight: 500; margin-bottom: 4px;">{{ mov.descripcion }}</div>
                                 <span class="badge badge-metodo">💳 {{ mov.metodo_pago }}</span>
+                                
                                 {% if mov.orden %}
                                     <div style="margin-top: 6px;">
                                         <a href="{% url 'detalle_orden' mov.orden.id %}" style="display: inline-flex; align-items: center; gap: 5px; background: #eff6ff; color: #1d4ed8; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 600; text-decoration: none; border: 1px solid #bfdbfe; transition: 0.2s;">
                                             🔗 Orden #{{ mov.orden.id }} - 🚗 {{ mov.orden.vehiculo.matricula }}
+                                        </a>
+                                    </div>
+                                {% endif %}
+
+                                {% if mov.tipo == 'gasto' and mov.categoria == 'Pago de Deuda' and mov.deuda_asociada %}
+                                    <div style="margin-top: 6px;">
+                                        <a href="{% url 'detalle_deuda' mov.deuda_asociada.id %}" style="display: inline-flex; align-items: center; gap: 5px; background: #fff5f5; color: #ef4444; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 600; text-decoration: none; border: 1px solid #fecaca; transition: 0.2s;">
+                                            🔗 Ver Deuda: {{ mov.deuda_asociada.acreedor }}
                                         </a>
                                     </div>
                                 {% endif %}

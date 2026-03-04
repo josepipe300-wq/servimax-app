@@ -4,7 +4,7 @@ from .models import (
     Ingreso, Gasto, Cliente, Vehiculo, OrdenDeReparacion, Empleado,
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
-    CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller, 
+    CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller,AmpliacionDeuda, 
 )
 from django.db.models import Sum, F, Q
 from django.db import transaction
@@ -932,7 +932,7 @@ def historial_movimientos(request):
     mes_seleccionado = request.GET.get('mes', '')
     matricula_seleccionada = request.GET.get('matricula', '')
 
-    gastos_qs = Gasto.objects.select_related('orden', 'orden__vehiculo').all()
+    gastos_qs = Gasto.objects.select_related('orden', 'orden__vehiculo', 'deuda_asociada').all()
     ingresos_qs = Ingreso.objects.select_related('orden', 'orden__vehiculo').all()
 
     if ano_seleccionado and ano_seleccionado.isdigit():
@@ -1805,29 +1805,30 @@ def detalle_deuda(request, deuda_id):
             
         form_type = request.POST.get('form_type')
         
-        # --- ACCIÓN 1: AMPLIAR DEUDA ---
+        # --- AMPLIAR DEUDA (Añade a la base de datos) ---
         if form_type == 'ampliar':
             importe_extra = request.POST.get('importe_extra')
             concepto_extra = request.POST.get('concepto_extra')
             
-            if importe_extra:
+            if importe_extra and concepto_extra:
                 try:
                     extra_decimal = Decimal(importe_extra.replace(',', '.'))
                     if extra_decimal > 0:
                         deuda.importe_inicial += extra_decimal
-                        
-                        if concepto_extra:
-                            fecha_hoy = timezone.now().strftime("%d/%m/%Y")
-                            deuda.motivo += f" | [+ {extra_decimal}€ ({fecha_hoy}): {concepto_extra}]"
-                        
                         if deuda.estado == 'Pagada':
                             deuda.estado = 'Pendiente'
-                            
                         deuda.save()
+                        
+                        # Creamos el registro histórico
+                        AmpliacionDeuda.objects.create(
+                            deuda=deuda,
+                            importe=extra_decimal,
+                            motivo=concepto_extra
+                        )
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
                     
-        # --- ACCIÓN 2: EDITAR / CORREGIR ERRORES ---
+        # --- EDITAR ERRORES ---
         elif form_type == 'editar':
             nuevo_acreedor = request.POST.get('acreedor')
             nuevo_motivo = request.POST.get('motivo')
@@ -1840,7 +1841,6 @@ def detalle_deuda(request, deuda_id):
                     deuda.motivo = nuevo_motivo
                     deuda.importe_inicial = nuevo_importe
                     
-                    # Comprobamos si con el nuevo importe la deuda queda saldada
                     if deuda.estado == 'Pagada' and deuda.importe_inicial > deuda.importe_pagado:
                         deuda.estado = 'Pendiente'
                     elif deuda.estado == 'Pendiente' and deuda.importe_pagado >= deuda.importe_inicial and deuda.importe_inicial > 0:
@@ -1852,7 +1852,34 @@ def detalle_deuda(request, deuda_id):
                     
         return redirect('detalle_deuda', deuda_id=deuda.id)
 
-    pagos = deuda.gastos_pagados.all().order_by('-fecha', '-id')
+    # --- COMBINAR HISTORIAL DE PAGOS Y AUMENTOS ---
+    pagos = deuda.gastos_pagados.all()
+    ampliaciones = deuda.ampliaciones.all()
+    
+    historial_combinado = []
+    
+    for p in pagos:
+        historial_combinado.append({
+            'fecha': p.fecha,
+            'descripcion': p.descripcion or "Pago de deuda",
+            'metodo': p.get_metodo_pago_display(),
+            'importe': p.importe,
+            'tipo': 'pago',
+            'orden': p.orden
+        })
+        
+    for a in ampliaciones:
+        historial_combinado.append({
+            'fecha': a.fecha,
+            'descripcion': a.motivo,
+            'metodo': 'Ampliación / Nuevo Cargo',
+            'importe': a.importe,
+            'tipo': 'ampliacion',
+            'orden': None
+        })
+        
+    # Ordenar todo por fecha (lo más reciente primero)
+    historial_combinado.sort(key=lambda x: x['fecha'], reverse=True)
     
     porcentaje = 0
     if deuda.importe_inicial > 0:
@@ -1862,7 +1889,7 @@ def detalle_deuda(request, deuda_id):
             
     context = {
         'deuda': deuda,
-        'pagos': pagos,
+        'historial': historial_combinado, # <--- Enviamos el historial combinado
         'porcentaje_pagado': porcentaje
     }
     return render(request, 'taller/detalle_deuda.html', context)

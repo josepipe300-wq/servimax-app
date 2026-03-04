@@ -430,3 +430,12 @@ def revertir_stock_al_borrar_compra(sender, instance, **kwargs):
 @receiver(pre_delete, sender=UsoConsumible)
 def revertir_stock_al_borrar_uso(sender, instance, **kwargs):
     pass
+
+class AmpliacionDeuda(models.Model):
+    deuda = models.ForeignKey(DeudaTaller, on_delete=models.CASCADE, related_name='ampliaciones')
+    fecha = models.DateField(auto_now_add=True)
+    importe = models.DecimalField(max_digits=10, decimal_places=2)
+    motivo = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"+{self.importe}€ a {self.deuda.acreedor}"    
