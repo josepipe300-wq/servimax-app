@@ -100,7 +100,7 @@ class OrdenDeReparacion(models.Model):
     presupuesto_origen = models.ForeignKey('Presupuesto', null=True, blank=True, on_delete=models.SET_NULL)
     problema = models.TextField()
     estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='Recibido')
-    fecha_entrada = models.DateTimeField(auto_now_add=True)
+    fecha_entrada = models.DateTimeField(default=timezone.now)
     trabajo_interno = models.BooleanField(default=False, verbose_name="Vehículo del Taller")
 
     @property
@@ -500,3 +500,51 @@ def revertir_stock_al_borrar_compra(sender, instance, **kwargs):
 @receiver(pre_delete, sender=UsoConsumible)
 def revertir_stock_al_borrar_uso(sender, instance, **kwargs):
     pass
+
+class Cita(models.Model):
+    nombre_cliente = models.CharField(max_length=150, verbose_name="Nombre del Cliente")
+    vehiculo_info = models.CharField(max_length=150, blank=True, null=True, verbose_name="Vehículo / Matrícula")
+    motivo = models.CharField(max_length=255, verbose_name="Motivo de la cita (Reparación)")
+    
+    # --- NUEVO: Enganche automático con el presupuesto ---
+    presupuesto = models.ForeignKey('Presupuesto', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Presupuesto Asociado")
+    
+    fecha_hora = models.DateTimeField(verbose_name="Fecha y Hora de la cita")
+    
+    ESTADOS = [
+        ('Pendiente', 'Pendiente'),
+        ('En taller', 'Ya está en el taller'),
+        ('Cancelada', 'Cancelada'),
+    ]
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='Pendiente')
+    
+    notas_adicionales = models.TextField(blank=True, null=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Cita"
+        verbose_name_plural = "Citas"
+        ordering = ['fecha_hora']
+
+    def __str__(self):
+        return f"{self.fecha_hora.strftime('%d/%m/%Y %H:%M')} | {self.nombre_cliente} - {self.motivo}"   
+
+
+class HistorialIA(models.Model):
+    # Guardamos quién dio la orden (por si tienes a varios mecánicos usando el sistema)
+    from django.contrib.auth.models import User
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usuario")
+    
+    peticion = models.TextField(verbose_name="Lo que pediste")
+    respuesta = models.TextField(verbose_name="Lo que contestó J.A.R.V.I.S.")
+    accion_ejecutada = models.CharField(max_length=100, blank=True, null=True, verbose_name="Acción interna")
+    
+    fecha = models.DateTimeField(auto_now_add=True, verbose_name="Fecha y Hora")
+
+    class Meta:
+        verbose_name = "Historial de IA"
+        verbose_name_plural = "Historiales de IA"
+        ordering = ['-fecha'] # Las más recientes primero
+
+    def __str__(self):
+        return f"{self.fecha.strftime('%d/%m %H:%M')} | {self.usuario} -> {self.accion_ejecutada}"         

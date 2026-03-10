@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asistente IA - ServiMax</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        .header { background: #1e293b; padding: 20px; text-align: center; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;}
+        .back-btn { color: #94a3b8; text-decoration: none; font-weight: 600; transition: color 0.2s; }
+        .back-btn:hover { color: white; }
+        
+        #chat-box { flex-grow: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
+        
+        .msg { max-width: 80%; padding: 15px; border-radius: 12px; font-size: 1.1em; line-height: 1.4; animation: fadeIn 0.3s ease-out forwards; white-space: pre-wrap; }
+        .msg-user { background: #3b82f6; align-self: flex-end; border-bottom-right-radius: 2px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .msg-ia { background: #1e293b; align-self: flex-start; border-bottom-left-radius: 2px; border-left: 4px solid #10b981; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        .input-area { background: #1e293b; padding: 20px; display: flex; gap: 10px; border-top: 1px solid #334155; align-items: center;}
+        
+        input[type="text"] { flex-grow: 1; padding: 15px; border-radius: 10px; border: none; background: #0f172a; color: white; font-size: 1.1em; outline: none; border: 1px solid #334155; transition: border-color 0.2s;}
+        input[type="text"]:focus { border-color: #3b82f6; }
+        
+        button { background: #10b981; color: white; border: none; padding: 0 25px; border-radius: 10px; font-weight: bold; font-size: 1.1em; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); height: 50px;}
+        button:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(16, 185, 129, 0.3); }
+
+        /* NUEVO: ESTILO DEL BOTÓN DEL MICRÓFONO */
+        #btn-mic { background: #334155; padding: 0 15px; font-size: 1.5em; border-radius: 50%; width: 50px; height: 50px; display: flex; justify-content: center; align-items: center; transition: all 0.3s ease; }
+        #btn-mic.escuchando { background: #ef4444; animation: pulse 1.5s infinite; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            background: #1e293b;
+            padding: 12px 18px;
+            border-radius: 12px;
+            border-bottom-left-radius: 2px;
+            border-left: 4px solid #10b981;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            animation: fadeIn 0.3s;
+        }
+
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #10b981;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <a href="{% url 'home' %}" class="back-btn">← Volver al Taller</a>
+        <h2 style="margin: 0; color: #10b981; display: flex; align-items: center; gap: 10px;">
+            🤖 ServiMax AI
+        </h2>
+        <div style="width: 100px;"></div> 
+    </div>
+
+    <div id="chat-box">
+        <div class="msg msg-ia">Hola, soy J.A.R.V.I.S. Ya estoy conectado a los sistemas de ServiMax. Toca el micrófono para hablar conmigo.</div>
+    </div>
+    
+    <div class="typing-indicator" id="typing-indicator">
+        <span></span><span></span><span></span>
+    </div>
+
+    <div class="input-area">
+        <button id="btn-mic" onclick="toggleMic()" title="Hablar por micrófono">🎙️</button>
+        <input type="text" id="user-input" placeholder="Escribe o dicta tu orden aquí..." onkeypress="handleEnter(event)" autocomplete="off">
+        <button onclick="enviarMensaje()" id="btn-enviar">Enviar</button>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        const userInput = document.getElementById('user-input');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const btnEnviar = document.getElementById('btn-enviar');
+        const btnMic = document.getElementById('btn-mic');
+
+        function handleEnter(e) { if (e.key === 'Enter') enviarMensaje(); }
+
+        // --- SISTEMA DE RECONOCIMIENTO DE VOZ (NUEVO) ---
+        let reconocimiento;
+        let estaEscuchando = false;
+
+        // Comprobamos si el navegador soporta el reconocimiento de voz
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            reconocimiento = new SpeechRecognition();
+            reconocimiento.lang = 'es-ES'; // Idioma Español
+            reconocimiento.continuous = false; // Se para de escuchar cuando haces una pausa
+            reconocimiento.interimResults = false;
+
+            reconocimiento.onstart = function() {
+                estaEscuchando = true;
+                btnMic.classList.add('escuchando');
+                btnMic.innerHTML = '🔴';
+                userInput.placeholder = 'Te escucho...';
+                window.speechSynthesis.cancel(); // Si J.A.R.V.I.S. estaba hablando, se calla para escucharte
+            };
+
+            reconocimiento.onresult = function(event) {
+                const transcripcion = event.results[0][0].transcript;
+                userInput.value = transcripcion; // Ponemos lo que has dicho en la caja de texto
+                enviarMensaje(); // ¡LO ENVIAMOS AUTOMÁTICAMENTE!
+            };
+
+            reconocimiento.onerror = function(event) {
+                resetMic();
+                console.error("Error de voz: ", event.error);
+            };
+
+            reconocimiento.onend = function() {
+                resetMic();
+            };
+        } else {
+            // Si el navegador no lo soporta (ej. Firefox antiguo), ocultamos el botón
+            btnMic.style.display = 'none';
+        }
+
+        function toggleMic() {
+            if (!reconocimiento) {
+                alert("Tu navegador no soporta comandos de voz. Usa Google Chrome o Edge.");
+                return;
+            }
+            if (estaEscuchando) {
+                reconocimiento.stop();
+            } else {
+                reconocimiento.start();
+            }
+        }
+
+        function resetMic() {
+            estaEscuchando = false;
+            btnMic.classList.remove('escuchando');
+            btnMic.innerHTML = '🎙️';
+            userInput.placeholder = 'Escribe o dicta tu orden aquí...';
+        }
+        // ------------------------------------------------
+
+        function hablar(texto) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                let textoLimpio = texto.replace(/<[^>]*>?/gm, '');
+                textoLimpio = textoLimpio.replace(/[\u1000-\uFFFF]+/g, ''); 
+                
+                const utterance = new SpeechSynthesisUtterance(textoLimpio);
+                utterance.lang = 'es-ES'; 
+                utterance.rate = 1.05; 
+                utterance.pitch = 1.0; 
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function scrollToBottom() {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function enviarMensaje() {
+            const texto = userInput.value.trim();
+            if (!texto) return;
+
+            btnEnviar.disabled = true;
+            userInput.disabled = true;
+
+            chatBox.innerHTML += `<div class="msg msg-user">${texto}</div>`;
+            userInput.value = '';
+            
+            chatBox.appendChild(typingIndicator);
+            typingIndicator.style.display = 'block';
+            scrollToBottom();
+
+            try {
+                const response = await fetch("{% url 'asistente_ia' %}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ mensaje: texto })
+                });
+
+                const data = await response.json();
+                
+                typingIndicator.style.display = 'none';
+
+                let msgClass = data.status === 'error' ? 'msg msg-ia" style="border-left-color: #ef4444;"' : 'msg msg-ia"';
+                chatBox.innerHTML += `<div class="${msgClass}>${data.mensaje}</div>`;
+                
+                chatBox.appendChild(typingIndicator);
+                scrollToBottom();
+
+                let textoParaLeer = data.mensaje_voz ? data.mensaje_voz : data.mensaje;
+                hablar(textoParaLeer);
+
+                if (data.accion_pantalla === 'abrir_pdf' && data.url) {
+                    setTimeout(() => window.open(data.url, '_blank'), 2000);
+                }
+
+            } catch (error) {
+                typingIndicator.style.display = 'none';
+                chatBox.innerHTML += `<div class="msg msg-ia" style="border-left-color: #ef4444;">Error de conexión. Revisa que el servidor esté encendido.</div>`;
+                chatBox.appendChild(typingIndicator);
+                scrollToBottom();
+            } finally {
+                btnEnviar.disabled = false;
+                userInput.disabled = false;
+                // userInput.focus(); // Lo comento para que el teclado del móvil no salte solo al hablar
+            }
+        }
+    </script>
+</body>
+</html>

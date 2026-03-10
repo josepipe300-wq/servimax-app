@@ -16,13 +16,17 @@ urlpatterns = [
     path('inventario/ajustar/<int:tipo_id>/', views.ajustar_stock, name='ajustar_stock'),
     path('inventario/articulo/<int:tipo_id>/', views.detalle_consumible, name='detalle_consumible'),
     path('inventario/editar/<int:tipo_id>/', views.editar_consumible, name='editar_consumible'),
-
+    path('agenda/', views.agenda_taller, name='agenda'),
+    path('cita/editar/<int:cita_id>/', views.editar_cita, name='editar_cita'),
+    path('jarvis/historial/', views.ver_historial_ia, name='historial_ia'),
+    
     # Presupuestos
     path('presupuestos/crear/', views.crear_presupuesto, name='crear_presupuesto'),
     path('presupuestos/', views.lista_presupuestos, name='lista_presupuestos'),
     path('presupuesto/<int:presupuesto_id>/', views.detalle_presupuesto, name='detalle_presupuesto'),
     path('presupuesto/<int:presupuesto_id>/editar/', views.editar_presupuesto, name='editar_presupuesto'),
     path('presupuesto/<int:presupuesto_id>/pdf/', views.ver_presupuesto_pdf, name='ver_presupuesto_pdf'),
+    path('presupuesto/publico/<str:signed_id>/', views.ver_presupuesto_publico, name='ver_presupuesto_publico'),
 
     # Órdenes
     path('ordenes/', views.lista_ordenes, name='lista_ordenes'),
@@ -61,4 +65,7 @@ urlpatterns = [
     path('agregar-nota/', views.agregar_nota, name='agregar_nota'),
     path('completar-nota/<int:nota_id>/', views.completar_nota, name='completar_nota'),
     path('historial-notas/', views.historial_notas, name='historial_notas'),
+
+    # --- INTELIGENCIA ARTIFICIAL ---
+    path('asistente/', views.asistente_ia, name='asistente_ia'),
 ]

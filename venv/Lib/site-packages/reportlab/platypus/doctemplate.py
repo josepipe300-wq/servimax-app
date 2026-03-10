@@ -398,7 +398,7 @@ class PageAccumulator:
 
     def onPage(self,canv,doc):
         '''this will be called at the start of the page'''
-        canv.setNamedCB(self.name,self) #push ourselves onto the canvas
+        setattr(canv,self.name,self)    #push ourselves onto the canvas
         self.reset()
 
     def onPageEnd(self,canv,doc):

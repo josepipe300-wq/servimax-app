@@ -99,7 +99,7 @@
         .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         /* Elementos UI varios */
-        <hr> { border: none; border-top: 1px solid #e2e8f0; margin: 15px 0 30px 0; }
+        hr { border: none; border-top: 1px solid #e2e8f0; margin: 15px 0 30px 0; }
         .badge-metodo { display: inline-block; margin-top: 5px; padding: 4px 10px; border-radius: 9999px; font-size: 0.75em; font-weight: 600; background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
         .btn-wsp { background-color: #10b981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 9999px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s; box-shadow: 0 4px 6px rgba(16,185,129,0.2); }
         .btn-wsp:hover { background-color: #059669; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(16,185,129,0.3); }
@@ -161,6 +161,8 @@
                             <a href="{% url 'crear_presupuesto' %}" class="nav-btn" style="background: #f97316;">📝 Crear Presupuesto</a>
                             {% endif %}
                             <a href="{% url 'lista_presupuestos' %}" class="nav-btn" style="background: #eab308; color:#1e293b;">📋 Ver Presupuestos</a>
+                            
+                            <a href="{% url 'agenda' %}" class="nav-btn" style="background: #8b5cf6;">📅 Ver Agenda</a>
                         </div>
 
                         <p class="section-title" style="margin-top: 25px;">🔧 Órdenes y Trabajos</p>
@@ -362,5 +364,13 @@
 
         </div> 
     </div> 
+
+    <div style="text-align: right; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #e2e8f0;">
+            <a href="{% url 'historial_ia' %}" style="color: #94a3b8; text-decoration: none; font-size: 0.85em; display: inline-flex; align-items: center; gap: 5px; transition: 0.2s; font-weight: 600;" onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='#94a3b8'">
+                <span style="font-size: 1.3em;">🧠</span> Consultar memoria de J.A.R.V.I.S.
+            </a>
+        </div>
+
+    {% include 'taller/widget_ia.html' %}
 </body>
 </html>

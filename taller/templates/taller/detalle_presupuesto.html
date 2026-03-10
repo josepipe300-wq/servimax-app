@@ -32,19 +32,59 @@
         .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #0f172a; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; text-decoration: none; }
         .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); filter: brightness(1.1); }
         
+        /* Estilo específico para el botón de WhatsApp */
+        .btn-wsp { background-color: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(16,185,129,0.2); cursor: pointer; font-size: 1em; }
+        .btn-wsp:hover { background-color: #059669; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(16,185,129,0.3); }
+
         .totals-box { margin-top: 30px; display: flex; justify-content: flex-end; }
         .totals-content { width: 100%; max-width: 350px; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
         .total-row { display: flex; justify-content: space-between; margin-bottom: 10px; color: #475569; font-weight: 500; }
+
+        /* Estilos del botón flotante de la IA */
+        .btn-ia-flotante {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 1.1em;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            font-family: 'Inter', sans-serif;
+            border: 2px solid #34d399;
+        }
+        .btn-ia-flotante:hover {
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 15px 30px rgba(16, 185, 129, 0.6);
+            color: white;
+        }
+        .ia-icon {
+            font-size: 1.4em;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; flex-wrap: wrap; gap: 20px;">
             <div>
                 <a href="{% url 'lista_presupuestos' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver a Presupuestos</a>
                 <h1 class="header-title">Presupuesto #{{ presupuesto.id }}</h1>
                 
-                <div style="margin-top: 10px; display: flex; align-items: center; gap: 15px;">
+                <div style="margin-top: 10px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                     <span class="badge 
                         {% if presupuesto.estado == 'Pendiente' %}badge-pendiente
                         {% elif presupuesto.estado == 'Aceptado' %}badge-aceptado
@@ -59,14 +99,18 @@
                 </div>
             </div>
             
-            {% if request.user.is_superuser %}
-            <div style="display: flex; gap: 10px;">
-                {% if presupuesto.estado != 'Convertido' %}
-                    <a href="{% url 'editar_presupuesto' presupuesto.id %}" class="btn-modern" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1;">✏️ Modificar</a>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button onclick="enviarWhatsApp()" class="btn-wsp" title="Enviar presupuesto al cliente">
+                    <span style="font-size: 1.2em;">💬</span> Enviar por WhatsApp
+                </button>
+
+                {% if request.user.is_superuser %}
+                    {% if presupuesto.estado != 'Convertido' %}
+                        <a href="{% url 'editar_presupuesto' presupuesto.id %}" class="btn-modern" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1;">✏️ Modificar</a>
+                    {% endif %}
+                    <a href="{% url 'ver_presupuesto_pdf' presupuesto.id %}" target="_blank" class="btn-modern" style="background: #3b82f6;">📄 Ver PDF</a>
                 {% endif %}
-                <a href="{% url 'ver_presupuesto_pdf' presupuesto.id %}" target="_blank" class="btn-modern" style="background: #3b82f6;">📄 Ver PDF</a>
             </div>
-            {% endif %}
         </div>
 
         <div class="section-panel">
@@ -75,18 +119,19 @@
                 <div class="info-item">
                     <p>Cliente</p>
                     <strong>{{ presupuesto.cliente.nombre }}</strong> <br>
-                    <span style="color: #64748b; font-size: 0.9em;">📞 {{ presupuesto.cliente.telefono }}</span>
+                    <span style="color: #64748b; font-size: 0.9em;" id="cliente-telefono">📞 {{ presupuesto.cliente.telefono }}</span>
                 </div>
                 <div class="info-item">
                     <p>Vehículo</p>
                     {% if presupuesto.vehiculo %}
                         <strong>{{ presupuesto.vehiculo.matricula }}</strong><br>
-                        <span style="color: #64748b; font-size: 0.9em;">{{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }}</span>
+                        <span style="color: #64748b; font-size: 0.9em;" id="vehiculo-info">{{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }}</span>
                     {% elif presupuesto.matricula_nueva %}
                         <strong>{{ presupuesto.matricula_nueva }}</strong><br>
-                        <span style="color: #64748b; font-size: 0.9em;">{{ presupuesto.marca_nueva }} {{ presupuesto.modelo_nuevo }} <span style="color:#ef4444;">(Nuevo)</span></span>
+                        <span style="color: #64748b; font-size: 0.9em;" id="vehiculo-info">{{ presupuesto.marca_nueva }} {{ presupuesto.modelo_nuevo }} <span style="color:#ef4444;">(Nuevo)</span></span>
                     {% else %}
                         <strong>No especificado</strong>
+                        <span id="vehiculo-info" style="display:none;">su vehículo</span>
                     {% endif %}
                 </div>
             </div>
@@ -172,5 +217,64 @@
         {% endif %}
 
     </div>
+
+    <a href="{% url 'asistente_ia' %}" class="btn-ia-flotante">
+        <span class="ia-icon">🤖</span>
+        <span class="ia-text">Hablar con IA</span>
+    </a>
+
+    <script>
+        function enviarWhatsApp() {
+            // Obtenemos los datos de la página
+            const telefonoBruto = document.getElementById('cliente-telefono').innerText.replace('📞', '').trim();
+            const clienteNombre = "{{ presupuesto.cliente.nombre }}";
+            const vehiculoInfo = document.getElementById('vehiculo-info').innerText.replace('(Nuevo)', '').trim();
+            const idPresupuesto = "{{ presupuesto.id }}";
+            
+            // Limpiar teléfono
+            let telefono = telefonoBruto.replace(/\D/g,'');
+            if (telefono.length === 0) {
+                alert("El cliente no tiene un número de teléfono válido registrado.");
+                return;
+            }
+            if (!telefono.startsWith('34') && telefono.length === 9) {
+                telefono = '34' + telefono;
+            }
+
+            // Llamar al asistente para que nos dé el enlace mágico y construya el mensaje
+            // Usamos un pequeño truco para pedirle a la IA que lo prepare sin tener que ir a la pantalla de chat
+            const botonWsp = document.querySelector('.btn-wsp');
+            const textoOriginal = botonWsp.innerHTML;
+            botonWsp.innerHTML = "⏳ Preparando...";
+            botonWsp.disabled = true;
+
+            fetch("{% url 'asistente_ia' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ mensaje: "Envía el presupuesto " + idPresupuesto })
+            })
+            .then(response => response.json())
+            .then(data => {
+                botonWsp.innerHTML = textoOriginal;
+                botonWsp.disabled = false;
+                
+                if (data.status === 'success' && data.url) {
+                    // Abrimos WhatsApp en una pestaña nueva
+                    window.open(data.url, '_blank');
+                } else {
+                    alert(data.mensaje || "Hubo un error al preparar el envío.");
+                }
+            })
+            .catch(error => {
+                botonWsp.innerHTML = textoOriginal;
+                botonWsp.disabled = false;
+                alert("Error de conexión al generar el enlace.");
+                console.error(error);
+            });
+        }
+    </script> {% include 'taller/widget_ia.html' %}
 </body>
 </html>

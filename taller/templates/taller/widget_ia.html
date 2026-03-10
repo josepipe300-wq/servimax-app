@@ -1,0 +1,112 @@
+<style>
+    #jarvis-widget { position: fixed; bottom: 30px; right: 30px; z-index: 99999; display: flex; flex-direction: column; align-items: flex-end; gap: 15px; font-family: sans-serif; }
+    #jarvis-bubble { background: #1e293b; color: white; padding: 15px 20px; border-radius: 12px; border-bottom-right-radius: 2px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); max-width: 320px; display: none; font-size: 14px; border-left: 4px solid #10b981; line-height: 1.5; word-wrap: break-word;}
+    #jarvis-bubble a { color: #3b82f6; text-decoration: none; font-weight: bold; }
+    #jarvis-bubble a:hover { text-decoration: underline; }
+    #jarvis-btn { width: 65px; height: 65px; border-radius: 50%; background: #10b981; color: white; border: none; font-size: 28px; cursor: pointer; box-shadow: 0 4px 15px rgba(16,185,129,0.4); transition: all 0.3s ease; display: flex; justify-content: center; align-items: center; outline: none;}
+    #jarvis-btn:hover { transform: scale(1.05); background: #059669; }
+    #jarvis-btn.escuchando { background: #ef4444; animation: pulse-rojo 1.5s infinite; box-shadow: 0 4px 15px rgba(239,68,68,0.4); }
+    #jarvis-btn.pensando { background: #f59e0b; animation: pulse-naranja 1.5s infinite; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4); }
+    @keyframes pulse-rojo { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    @keyframes pulse-naranja { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
+    .jarvis-close { float: right; cursor: pointer; color: #94a3b8; font-weight: bold; margin-left: 10px; font-size: 16px; transition: color 0.2s;}
+    .jarvis-close:hover { color: #ef4444; }
+</style>
+
+<div id="jarvis-widget">
+    <div id="jarvis-bubble"></div>
+    <button id="jarvis-btn" onclick="toggleJarvis()" title="Hablar con J.A.R.V.I.S.">🎙️</button>
+</div>
+
+<script>
+    let jarvisRec;
+    let jarvisEscuchando = false;
+    const btnJarvis = document.getElementById('jarvis-btn');
+    const bubbleJarvis = document.getElementById('jarvis-bubble');
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        jarvisRec = new SpeechRecognition();
+        jarvisRec.lang = 'es-ES';
+        jarvisRec.continuous = false;
+        jarvisRec.interimResults = false;
+
+        jarvisRec.onstart = function() {
+            jarvisEscuchando = true;
+            btnJarvis.classList.add('escuchando');
+            btnJarvis.innerHTML = '🔴';
+            bubbleJarvis.style.display = 'block';
+            bubbleJarvis.innerHTML = '<span class="jarvis-close" onclick="cerrarJarvisBubble()">✖</span><i>Te escucho, jefe...</i>';
+            window.speechSynthesis.cancel();
+        };
+
+        jarvisRec.onresult = function(event) {
+            const transcripcion = event.results[0][0].transcript;
+            enviarAJarvis(transcripcion);
+        };
+
+        jarvisRec.onerror = function(event) {
+            resetJarvisMic();
+            bubbleJarvis.innerHTML = '<span class="jarvis-close" onclick="cerrarJarvisBubble()">✖</span>Error de micrófono.';
+        };
+
+        jarvisRec.onend = function() { resetJarvisMic(); };
+    }
+
+    function toggleJarvis() {
+        if (!jarvisRec) { alert("Tu navegador no soporta voz. Usa Chrome o Edge."); return; }
+        if (jarvisEscuchando) { jarvisRec.stop(); } else { jarvisRec.start(); }
+    }
+
+    function resetJarvisMic() {
+        jarvisEscuchando = false;
+        btnJarvis.classList.remove('escuchando');
+        if(!btnJarvis.classList.contains('pensando')){ btnJarvis.innerHTML = '🎙️'; }
+    }
+
+    function cerrarJarvisBubble() { bubbleJarvis.style.display = 'none'; }
+
+    function hablarJarvis(texto) {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            let textoLimpio = texto.replace(/<[^>]*>?/gm, '');
+            textoLimpio = textoLimpio.replace(/[\u1000-\uFFFF]+/g, ''); 
+            const utterance = new SpeechSynthesisUtterance(textoLimpio);
+            utterance.lang = 'es-ES'; 
+            utterance.rate = 1.05; 
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    async function enviarAJarvis(texto) {
+        btnJarvis.classList.add('pensando');
+        btnJarvis.innerHTML = '🤔';
+        bubbleJarvis.innerHTML = `<span class="jarvis-close" onclick="cerrarJarvisBubble()">✖</span><i>Procesando: "${texto}"...</i>`;
+
+        try {
+            const response = await fetch("{% url 'asistente_ia' %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({ mensaje: texto })
+            });
+
+            const data = await response.json();
+            btnJarvis.classList.remove('pensando');
+            btnJarvis.innerHTML = '🎙️';
+
+            bubbleJarvis.innerHTML = `<span class="jarvis-close" onclick="cerrarJarvisBubble()">✖</span> ${data.mensaje}`;
+            bubbleJarvis.style.display = 'block';
+
+            let textoParaLeer = data.mensaje_voz ? data.mensaje_voz : data.mensaje;
+            hablarJarvis(textoParaLeer);
+
+            if (data.accion_pantalla === 'abrir_pdf' && data.url) {
+                setTimeout(() => window.open(data.url, '_blank'), 1500);
+            }
+        } catch (error) {
+            btnJarvis.classList.remove('pensando');
+            btnJarvis.innerHTML = '🎙️';
+            bubbleJarvis.innerHTML = '<span class="jarvis-close" onclick="cerrarJarvisBubble()">✖</span>Error de conexión.';
+        }
+    }
+</script>

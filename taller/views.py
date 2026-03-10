@@ -5,14 +5,14 @@ from .models import (
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
     CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller, AmpliacionDeuda, 
-    HistorialEstadoOrden # <-- AÑADIDO
+    HistorialEstadoOrden, Cita, HistorialIA 
 )
 from django.db.models import Sum, F, Q
 from django.db import transaction
 from datetime import datetime, timedelta
 from decimal import Decimal
 from itertools import groupby
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.template.loader import get_template
 from xhtml2pdf import pisa
 import os
@@ -25,6 +25,10 @@ from functools import wraps
 
 from django.core.signing import Signer, BadSignature
 from urllib.parse import quote
+
+# --- IMPORTS PARA LA INTELIGENCIA ARTIFICIAL ---
+import google.generativeai as genai
+from . import ai_tools
 
 # ==============================================================
 # --- CANDADO DE SEGURIDAD PARA EL MODO LECTURA (PADRE) ---
@@ -732,11 +736,21 @@ def editar_presupuesto(request, presupuesto_id):
                     except Cliente.DoesNotExist: pass
                 elif nombre_cliente_form and telefono_cliente_form:
                     cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente_form, defaults={'nombre': nombre_cliente_form})
-                    cliente.nombre = nombre_cliente_form; cliente.tipo_documento = tipo_documento; cliente.documento_fiscal = documento_fiscal
-                    cliente.direccion_fiscal = direccion_fiscal; cliente.codigo_postal_fiscal = codigo_postal_fiscal
-                    cliente.ciudad_fiscal = ciudad_fiscal; cliente.provincia_fiscal = provincia_fiscal; cliente.save()
-
-                if not cliente: raise ValueError("Cliente inválido")
+                
+                # --- AQUÍ ESTÁ LA MAGIA QUE FALTABA ---
+                if cliente:
+                    # Actualizamos SIEMPRE los datos, sea un cliente nuevo o uno existente
+                    if nombre_cliente_form: cliente.nombre = nombre_cliente_form
+                    if telefono_cliente_form: cliente.telefono = telefono_cliente_form
+                    cliente.tipo_documento = tipo_documento
+                    cliente.documento_fiscal = documento_fiscal
+                    cliente.direccion_fiscal = direccion_fiscal
+                    cliente.codigo_postal_fiscal = codigo_postal_fiscal
+                    cliente.ciudad_fiscal = ciudad_fiscal
+                    cliente.provincia_fiscal = provincia_fiscal
+                    cliente.save()
+                else:
+                    raise ValueError("Cliente inválido")
 
                 vehiculo_id = request.POST.get('vehiculo_existente'); matricula_nueva = request.POST.get('matricula_nueva', '').upper()
                 marca_nueva = request.POST.get('marca_nueva', '').upper(); modelo_nuevo = request.POST.get('modelo_nuevo', '').upper()
@@ -982,11 +996,16 @@ def historial_ordenes(request):
 def historial_movimientos(request):
     from django.utils import timezone
     from django.db.models.functions import ExtractYear
-    
+    from django.db.models import Q  # <--- NUEVO: Para poder buscar en dos sitios a la vez
+    from decimal import Decimal     # <--- NUEVO: Para detectar si busca un precio
+
     tipo_seleccionado = request.GET.get('tipo', '')
     ano_seleccionado = request.GET.get('ano', '')
     mes_seleccionado = request.GET.get('mes', '')
     matricula_seleccionada = request.GET.get('matricula', '')
+    
+    # --- NUEVO: Atrapamos la palabra que manda J.A.R.V.I.S. ---
+    buscar_seleccionado = request.GET.get('buscar', '').strip() 
 
     gastos_qs = Gasto.objects.select_related('orden', 'orden__vehiculo', 'deuda_asociada').all()
     ingresos_qs = Ingreso.objects.select_related('orden', 'orden__vehiculo').all()
@@ -1002,6 +1021,28 @@ def historial_movimientos(request):
     if matricula_seleccionada:
         gastos_qs = gastos_qs.filter(orden__vehiculo__matricula__icontains=matricula_seleccionada)
         ingresos_qs = ingresos_qs.filter(orden__vehiculo__matricula__icontains=matricula_seleccionada)
+
+    # =========================================================
+    # EL MOTOR DE BÚSQUEDA DE J.A.R.V.I.S.
+    # =========================================================
+    if buscar_seleccionado:
+        es_numero = False
+        try:
+            # Intentamos ver si lo que ha dicho es un precio (ej: "120")
+            cantidad = Decimal(buscar_seleccionado.replace(',', '.').replace('€', '').replace('euros', '').strip())
+            es_numero = True
+        except:
+            pass
+            
+        if es_numero:
+            # Busca recibos que valgan ese dinero EXACTO o que lo ponga en el texto
+            gastos_qs = gastos_qs.filter(Q(importe=cantidad) | Q(descripcion__icontains=buscar_seleccionado))
+            ingresos_qs = ingresos_qs.filter(Q(importe=cantidad) | Q(descripcion__icontains=buscar_seleccionado))
+        else:
+            # Si es texto (ej: "filtros"), busca en la descripción
+            gastos_qs = gastos_qs.filter(descripcion__icontains=buscar_seleccionado)
+            ingresos_qs = ingresos_qs.filter(descripcion__icontains=buscar_seleccionado)
+    # =========================================================
 
     movimientos = []
     if tipo_seleccionado in ['', 'gasto']:
@@ -1028,6 +1069,7 @@ def historial_movimientos(request):
         'ano_seleccionado': int(ano_seleccionado) if ano_seleccionado.isdigit() else '',
         'mes_seleccionado': str(mes_seleccionado),
         'matricula_seleccionada': matricula_seleccionada,
+        'buscar_seleccionado': buscar_seleccionado, # Pasamos la palabra al HTML por si la quieres usar
         'anos_disponibles': anos_disponibles,
     }
     return render(request, 'taller/historial_movimientos.html', context)
@@ -2084,3 +2126,379 @@ def editar_consumible(request, tipo_id):
             
     context = {'tipo': tipo}
     return render(request, 'taller/editar_consumible.html', context)
+
+# --- VISTA PARA EL ENLACE MÁGICO DEL PRESUPUESTO ---
+def ver_presupuesto_publico(request, signed_id):
+    signer = Signer()
+    try:
+        # Extraemos el ID real quitándole la firma secreta
+        presupuesto_id = signer.unsign(signed_id)
+        presupuesto = get_object_or_404(Presupuesto, id=presupuesto_id)
+    except BadSignature:
+        return HttpResponseForbidden("El enlace de este presupuesto es inválido o ha caducado.")
+
+    # Generamos el PDF tal y como lo haces normalmente
+    template_path = 'taller/presupuesto_pdf.html' # Asegúrate de que este es tu nombre real del template
+    context = {'presupuesto': presupuesto}
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="Presupuesto_{presupuesto.id}.pdf"'
+    
+    template = get_template(template_path)
+    html = template.render(context)
+    pisa_status = pisa.CreatePDF(html, dest=response)
+    
+    if pisa_status.err:
+        return HttpResponse('Tuvimos algunos errores al crear el PDF <pre>' + html + '</pre>')
+    return response
+
+# --- CONEXIÓN CON INTELIGENCIA ARTIFICIAL (GEMINI) ---
+import json
+import google.generativeai as genai
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.shortcuts import render
+from . import ai_tools
+
+genai.configure(api_key="AIzaSyBFflBY-EfABTlt9up6FSW7ip2BtfWU8Pk")
+
+@login_required
+def asistente_ia(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            mensaje_usuario = data.get('mensaje', '')
+
+            # --- MÓDULO DE MEMORIA A CORTO PLAZO ---
+            if 'memoria_ia' not in request.session:
+                request.session['memoria_ia'] = []
+            
+            memoria = request.session['memoria_ia']
+            
+            contexto_conversacion = "HISTORIAL RECIENTE DE LA CONVERSACIÓN:\n"
+            for linea in memoria:
+                contexto_conversacion += f"{linea}\n"
+            contexto_conversacion += f"\nEL USUARIO AHORA DICE: {mensaje_usuario}"
+
+            # Instrucciones estrictas para J.A.R.V.I.S.
+            # --- NUEVO: Le damos un reloj a la IA ---
+            from django.utils import timezone
+            fecha_hoy = timezone.now().strftime("%Y-%m-%d")
+            # Instrucciones estrictas para J.A.R.V.I.S.
+            instruccion = f"""
+            Eres J.A.R.V.I.S., el asistente ejecutivo de Inteligencia Artificial del taller ServiMax.
+            Tu trabajo es leer lo que pide el usuario y devolver UNICAMENTE un archivo JSON con la orden de lo que hay que hacer.
+            
+            IMPORTANTE: HOY ES {fecha_hoy}. Usa esta fecha exacta como referencia obligatoria para calcular los días (mañana, el próximo jueves, etc).
+            
+            REGLAS ESTRICTAS DE RESPUESTA:
+            --- REGLAS DE LA AGENDA Y CITAS ---
+            - Si te piden agendar, apuntar o crear una cita: {{"accion": "crear_cita", "cliente": "Carlos", "vehiculo": "BMW", "motivo": "Cambiar pastillas", "fecha": "2026-03-12", "hora": "10:00"}}
+            (Calcula SIEMPRE la 'fecha' en formato YYYY-MM-DD y la 'hora' en formato HH:MM. Si no te dicen el vehículo, déjalo vacío).
+            """ + """
+            - Si te piden modificar, cambiar de día, cambiar la hora, o CORREGIR EL NOMBRE de una cita: {"accion": "modificar_cita", "cliente": "Carlos", "fecha": "2026-03-15", "hora": "12:00", "motivo": "Revisión general", "vehiculo": "BMW", "nuevo_nombre": "Marcos"} (Extrae el 'cliente' original para buscarlo, y pon en 'nuevo_nombre', 'fecha', etc., SOLO lo que haya que cambiar).
+            - Si te dicen que un cliente ha llegado, que ya está aquí, o que canceles su cita: {"accion": "actualizar_cita", "cliente": "Maria", "hora": "17:00", "estado": "En taller"} (Extrae el nombre, la hora si la dicen, y pon estado 'En taller' si ha llegado o 'Cancelada' si no viene).
+            - Si piden "ver", "mostrar" o "dame" la factura de un coche...
+            
+            --- REGLAS DE TIEMPOS Y ENTREGAS ---
+            - Si preguntan cuánto tiempo lleva, cuánto ha tardado o días en el taller de una ORDEN concreta: {"accion": "tiempo_taller", "id_orden": 15}
+            - Si el usuario responde "sí" al desglose de fases: {"accion": "desglose", "id_orden": 15}
+            - Si preguntan qué vehículos han sido entregados o el historial de entregas: {"accion": "vehiculos_entregados"}
+            
+            --- REGLAS DE FINANZAS INTELIGENTES ---
+            - Si te piden buscar un gasto, ingreso, factura, recibo o movimiento por su concepto, nombre o precio: {"accion": "buscar_movimiento", "termino": "aceite"} (Extrae el nombre, concepto o la cantidad exacta de dinero que buscan en número).
+            - Si preguntan cuánto dinero ha dejado o la ganancia de una ORDEN concreta: {"accion": "rentabilidad_orden", "id_orden": 15}
+            - Si preguntan por el dinero/ganancia de un COCHE entero, o si responden "SÍ" a ver el historial de ganancias: {"accion": "rentabilidad_historial", "id_orden": 15, "matricula": "1234ABC"} (Extrae el id_orden o la matricula del historial reciente).
+            
+            --- REGLAS DE PRESUPUESTOS Y BORRADORES ---
+            - Si preguntan cuánto solemos cobrar, cuál es el precio medio o piden un presupuesto a ojo para una reparación: {"accion": "presupuesto_predictivo", "reparacion": "embrague", "modelo": "Seat Ibiza"} (Extrae la reparación y el modelo si lo dicen, si no hay modelo déjalo vacío).
+            - Si te piden "crear un presupuesto", "generar borrador", "hazle un presupuesto": {"accion": "crear_borrador", "matricula": "1234ABC", "cliente": "Andrés", "descripcion": "Cambio de embrague", "precio": 450} (Extrae la matrícula o el nombre del cliente. Puedes dejar matrícula o cliente vacío si solo te dan uno de los dos).
+            
+            --- REGLA DE MARKETING AUTOMÁTICO ---
+            - Si te preguntan a qué clientes les toca revisión, cambio de aceite, o te piden hacer una campaña de marketing/recordatorio: {"accion": "marketing_revision", "reparacion": "aceite"} (Extrae la palabra clave de lo que buscan, por defecto usa "aceite" o "revisión").
+            
+            --- REGLAS DEL TABLÓN Y TAREAS ---
+            - Si preguntan por tareas pendientes, avisos o el tablón: {"accion": "tareas"}
+            - Si te piden apuntar, anotar, recordar algo en el tablón o crear una tarea: {"accion": "crear_nota", "texto": "Llamar al proveedor de ruedas mañana"} (Extrae exactamente la tarea o recordatorio que el usuario quiere guardar).
+            -------------------------------------------
+            
+            - Si preguntan qué coches llevan mucho tiempo, están atascados o retrasados: {"accion": "coches_atascados"}
+            - Si preguntan por stock o piezas: {"accion": "stock", "articulo": "nombre_del_articulo"}
+            - Si preguntan por ingresos, caja o balance de hoy: {"accion": "caja_hoy"}
+            - Si preguntan quién debe dinero, morosos o cuentas por cobrar: {"accion": "deudores"}
+            - Si preguntan cuántos coches hay en el taller o resumen del taller: {"accion": "resumen_taller"}
+            - Si preguntan por el historial, qué se le hizo o cuántas veces ha venido un coche: {"accion": "historial_coche", "matricula": "1234ABC"}
+            - Si preguntan qué coches están listos, terminados o para entregar: {"accion": "coches_listos"}
+            - Si piden el teléfono, contacto o dueño de una matrícula: {"accion": "contacto_cliente", "matricula": "1234ABC"}
+            - Si saludan o dicen algo fuera de esto: {"accion": "hablar", "texto": "tu respuesta amistosa"}
+            
+            No uses markdown, devuelve SOLO el JSON puro.
+            """
+
+            model = genai.GenerativeModel(
+                'gemini-2.5-flash', 
+                system_instruction=instruccion,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+            response = model.generate_content(contexto_conversacion)
+            decision_ia = json.loads(response.text)
+            
+            accion = decision_ia.get('accion')
+            
+            if accion == 'ver_factura':
+                resultado = ai_tools.obtener_factura_por_matricula(decision_ia.get('matricula'), enviar_whatsapp=False)
+            elif accion == 'enviar_factura':
+                resultado = ai_tools.obtener_factura_por_matricula(decision_ia.get('matricula'), enviar_whatsapp=True)
+            elif accion == 'presupuesto':
+                resultado = ai_tools.enviar_presupuesto_whatsapp(decision_ia.get('id'))
+            elif accion == 'estado':
+                resultado = ai_tools.consultar_estado_vehiculo(decision_ia.get('matricula'))
+            elif accion == 'tiempo_taller':
+                resultado = ai_tools.tiempo_en_taller(decision_ia.get('id_orden'))
+            elif accion == 'desglose':
+                resultado = ai_tools.desglose_fases_vehiculo(decision_ia.get('id_orden'))
+            elif accion == 'vehiculos_entregados':
+                resultado = ai_tools.vehiculos_entregados_reporte()
+            elif accion == 'coches_atascados':
+                resultado = ai_tools.coches_atascados()
+            elif accion == 'rentabilidad_orden':
+                resultado = ai_tools.rentabilidad_vehiculo(id_orden=decision_ia.get('id_orden'), solo_orden=True)
+            elif accion == 'rentabilidad_historial':
+                resultado = ai_tools.rentabilidad_vehiculo(matricula=decision_ia.get('matricula'), id_orden=decision_ia.get('id_orden'), solo_orden=False)
+            
+            # --- CREACIÓN AUTOMÁTICA DE BORRADORES ---
+            elif accion == 'crear_borrador':
+                resultado = ai_tools.crear_borrador_presupuesto(
+                    matricula=decision_ia.get('matricula'), 
+                    nombre_cliente=decision_ia.get('cliente'),
+                    descripcion=decision_ia.get('descripcion'), 
+                    precio=decision_ia.get('precio')
+                )
+            
+            # --- AGENDA ---
+            elif accion == 'crear_cita':
+                resultado = ai_tools.crear_cita_agenda(
+                    cliente=decision_ia.get('cliente'),
+                    motivo=decision_ia.get('motivo'),
+                    vehiculo=decision_ia.get('vehiculo'),
+                    fecha=decision_ia.get('fecha'),
+                    hora=decision_ia.get('hora')
+                )
+
+            elif accion == 'modificar_cita':
+                resultado = ai_tools.modificar_cita_agenda(
+                    cliente=decision_ia.get('cliente'),
+                    fecha=decision_ia.get('fecha'),
+                    hora=decision_ia.get('hora'),
+                    motivo=decision_ia.get('motivo'),
+                    vehiculo=decision_ia.get('vehiculo'),
+                    nuevo_nombre=decision_ia.get('nuevo_nombre') # ¡Ahora sí coge el nombre nuevo!
+                )    
+
+            elif accion == 'actualizar_cita':
+                resultado = ai_tools.actualizar_estado_cita(
+                    cliente=decision_ia.get('cliente'),
+                    hora=decision_ia.get('hora'),
+                    estado=decision_ia.get('estado', 'En taller')
+                )    
+            
+            # --- MAGIA PURA: LA DOBLE LLAMADA DE PRESUPUESTOS PREDICTIVOS ---
+            elif accion == 'presupuesto_predictivo':
+                reparacion_pedida = decision_ia.get('reparacion')
+                datos_historial = ai_tools.extraer_datos_presupuesto(reparacion_pedida, decision_ia.get('modelo', ''))
+                
+                if datos_historial == "NO_HAY_DATOS" or datos_historial == "No se especificó reparación.":
+                    resultado = {"status": "success", "mensaje": f"He revisado el historial, pero no encuentro ninguna reparación pasada que encaje con '{reparacion_pedida}'. Tendremos que calcular este presupuesto desde cero."}
+                else:
+                    prompt_analisis = f"""
+                    Eres J.A.R.V.I.S. El jefe del taller quiere dar un presupuesto estimado a ojo para: '{reparacion_pedida}'.
+                    He extraído estas facturas recientes del historial de tu base de datos:
+                    
+                    {datos_historial}
+                    
+                    TU TAREA DE ANÁLISIS:
+                    1. Lee el 'Problema escrito por el mecánico' de cada orden.
+                    2. Si ves que una factura tiene un precio muy alto porque incluye OTRAS averías además de '{reparacion_pedida}' (por ejemplo: cambio de caja Y además alternador), IGNORA esa factura en tu cálculo mental porque inflará el precio de la reparación pedida.
+                    3. Quédate solo con las facturas que parezcan estar aislando el problema principal ('{reparacion_pedida}').
+                    4. Redacta una respuesta directa y profesional diciéndole al jefe cuál suele ser el precio real estimado basándote en las facturas más "puras". Explícale brevemente qué facturas has descartado y por qué.
+                    
+                    Responde directamente con tu análisis.
+                    """
+                    
+                    # Llamamos a J.A.R.V.I.S. por segunda vez sin formato JSON para que nos hable normal
+                    respuesta_razonada = model.generate_content(prompt_analisis)
+                    resultado = {"status": "success", "mensaje": respuesta_razonada.text}
+            # -----------------------------------------------------------------
+            
+            # --- MARKETING AUTOMÁTICO (RECORDATORIOS ANUALES) ---
+            elif accion == 'marketing_revision':
+                resultado = ai_tools.clientes_para_revision(reparacion=decision_ia.get('reparacion', 'aceite'))
+            
+            # --- CREACIÓN DE NOTAS EN EL TABLÓN ---
+            elif accion == 'crear_nota':
+                resultado = ai_tools.crear_nota_tablon(
+                    texto=decision_ia.get('texto'), 
+                    usuario=request.user
+                )
+            # -----------------------------------------------------------------
+                
+            elif accion == 'stock':
+                resultado = ai_tools.consultar_stock(decision_ia.get('articulo'))
+            # --- BUSCADOR DE CONTABILIDAD ---
+            elif accion == 'buscar_movimiento':
+                resultado = ai_tools.buscar_movimiento(decision_ia.get('termino'))    
+            elif accion == 'caja_hoy':
+                resultado = ai_tools.resumen_caja_hoy()
+            elif accion == 'deudores':
+                resultado = ai_tools.clientes_deudores()
+            elif accion == 'resumen_taller':
+                resultado = ai_tools.coches_en_taller()
+            elif accion == 'historial_coche':
+                resultado = ai_tools.historial_vehiculo(decision_ia.get('matricula'))
+            elif accion == 'coches_listos':
+                resultado = ai_tools.coches_listos_para_entregar()
+            elif accion == 'contacto_cliente':
+                resultado = ai_tools.contacto_cliente(decision_ia.get('matricula'))
+            elif accion == 'tareas':
+                resultado = ai_tools.tareas_pendientes()
+            elif accion == 'hablar':
+                resultado = {"status": "success", "mensaje": decision_ia.get('texto')}
+            else:
+                resultado = {"status": "error", "mensaje": "No tengo una herramienta para hacer eso todavía."}
+
+            # Actualizamos la memoria
+            memoria.append(f"Usuario: {mensaje_usuario}")
+            memoria.append(f"J.A.R.V.I.S.: {resultado.get('mensaje', '')}")
+            
+            request.session['memoria_ia'] = memoria[-4:] 
+            request.session.modified = True
+
+            # --- CORREGIDO: GUARDAR EN LA MEMORIA A LARGO PLAZO ---
+            try:
+                from .models import HistorialIA
+                HistorialIA.objects.create(
+                    usuario=request.user if request.user.is_authenticated else None,
+                    peticion=mensaje_usuario, # Usamos la variable correcta de arriba
+                    respuesta=resultado.get('mensaje', 'Sin respuesta textual'), 
+                    accion_ejecutada=accion 
+                )
+            except Exception as e:
+                print(f"Error guardando la memoria de J.A.R.V.I.S.: {e}")
+            # --------------------------------------------------
+
+            return JsonResponse(resultado)
+
+        except Exception as e:
+            return JsonResponse({"status": "error", "mensaje": f"Hubo un fallo en mi sistema: {str(e)}"})
+            
+    return render(request, 'taller/asistente_ia.html')
+
+# (AQUÍ TERMINA TU FUNCIÓN ANTERIOR)
+
+@login_required
+def agenda_taller(request):
+    from django.utils import timezone
+    from django.db.models.functions import ExtractYear
+    from datetime import timedelta
+    
+    hoy = timezone.now().date()
+    
+    # Atrapamos si queremos ver las pendientes o el historial
+    filtro = request.GET.get('filtro', 'pendientes')
+    
+    # --- NUEVO: Atrapamos los datos del filtro ---
+    ano_seleccionado = request.GET.get('ano', '')
+    mes_seleccionado = request.GET.get('mes', '')
+    
+    if filtro == 'historial':
+        # Buscamos todos los que ya vinieron o cancelaron
+        citas_historial = Cita.objects.filter(estado__in=['En taller', 'Cancelada'])
+        
+        # Filtramos por Año / Mes si has tocado el desplegable
+        if ano_seleccionado and ano_seleccionado.isdigit():
+            citas_historial = citas_historial.filter(fecha_hora__year=int(ano_seleccionado))
+        if mes_seleccionado and mes_seleccionado.isdigit():
+            citas_historial = citas_historial.filter(fecha_hora__month=int(mes_seleccionado))
+            
+        # MAGIA: Si no has tocado nada, por defecto filtramos SOLO ESTA SEMANA
+        if not ano_seleccionado and not mes_seleccionado:
+            inicio_semana = hoy - timedelta(days=hoy.weekday()) # Busca el Lunes de esta semana
+            fin_semana = inicio_semana + timedelta(days=6)      # Busca el Domingo
+            citas_historial = citas_historial.filter(fecha_hora__date__gte=inicio_semana, fecha_hora__date__lte=fin_semana)
+            
+        citas_hoy = citas_historial.order_by('-fecha_hora')
+        citas_proximas = []
+    else:
+        # Los pendientes de hoy y del futuro
+        citas_hoy = Cita.objects.filter(fecha_hora__date=hoy, estado='Pendiente').order_by('fecha_hora')
+        citas_proximas = Cita.objects.filter(fecha_hora__date__gt=hoy, estado='Pendiente').order_by('fecha_hora')[:15]
+    
+    # --- Sacar los años disponibles automáticamente para el desplegable ---
+    anos_crudos = Cita.objects.filter(estado__in=['En taller', 'Cancelada']).annotate(year=ExtractYear('fecha_hora')).values_list('year', flat=True)
+    # ¡Magia pura!: set() elimina cualquier duplicado instantáneamente
+    anos_disponibles = sorted(list(set(filter(None, anos_crudos))), reverse=True)
+    if not anos_disponibles:
+        anos_disponibles = [hoy.year]
+        
+    context = {
+        'citas_hoy': citas_hoy,
+        'citas_proximas': citas_proximas,
+        'filtro': filtro,
+        # Variables nuevas para que el HTML sepa qué pintar
+        'ano_seleccionado': int(ano_seleccionado) if ano_seleccionado.isdigit() else '',
+        'mes_seleccionado': str(mes_seleccionado),
+        'anos_disponibles': anos_disponibles,
+    }
+    return render(request, 'taller/agenda.html', context)
+
+
+@login_required
+def editar_cita(request, cita_id):
+    from django.shortcuts import get_object_or_404, redirect
+    from .models import Cita
+    from datetime import datetime
+    from django.utils import timezone
+
+    # Buscamos la cita que queremos editar
+    cita = get_object_or_404(Cita, id=cita_id)
+
+    if request.method == 'POST':
+        # Recogemos los datos que has escrito en el formulario
+        cita.nombre_cliente = request.POST.get('nombre_cliente')
+        cita.vehiculo_info = request.POST.get('vehiculo_info')
+        cita.motivo = request.POST.get('motivo')
+        cita.estado = request.POST.get('estado')
+        cita.notas_adicionales = request.POST.get('notas_adicionales')
+
+        # Juntamos la fecha y la hora
+        fecha_str = request.POST.get('fecha')
+        hora_str = request.POST.get('hora')
+        if fecha_str and hora_str:
+            try:
+                fecha_completa = f"{fecha_str} {hora_str}"
+                fecha_obj = datetime.strptime(fecha_completa, "%Y-%m-%d %H:%M")
+                cita.fecha_hora = timezone.make_aware(fecha_obj)
+            except Exception:
+                pass # Si hay un error raro, deja la fecha que ya tenía
+
+        cita.save()
+        return redirect('agenda') # Te devuelve a la agenda automáticamente
+
+    # Preparamos los datos para mostrarlos en la pantalla
+    context = {
+        'cita': cita,
+        # Separamos la fecha y la hora para que los calendarios del HTML lo entiendan
+        'fecha_formato': cita.fecha_hora.strftime('%Y-%m-%d') if cita.fecha_hora else '',
+        'hora_formato': cita.fecha_hora.strftime('%H:%M') if cita.fecha_hora else '',
+    }
+    return render(request, 'taller/editar_cita.html', context)  
+
+@login_required
+def ver_historial_ia(request):
+    from .models import HistorialIA
+    # Cogemos las últimas 50 conversaciones para no saturar la pantalla
+    conversaciones = HistorialIA.objects.all()[:50]
+    
+    return render(request, 'taller/historial_ia.html', {'conversaciones': conversaciones})
+
+    

@@ -16,7 +16,8 @@ from .models import (
     LineaPresupuesto,
     FotoVehiculo,
     TipoConsumibleStock,
-    AjusteStockConsumible # <-- Importar el nuevo modelo
+    AjusteStockConsumible,  # <-- Con su coma
+    Cita                    # <-- El nuevo modelo limpio
 )
 from django.db.models import Sum
 from decimal import Decimal
@@ -43,8 +44,6 @@ class AjusteStockConsumibleAdmin(admin.ModelAdmin):
     list_display = ('fecha_ajuste', 'tipo', 'cantidad_ajustada', 'motivo')
     list_filter = ('tipo', 'fecha_ajuste')
     search_fields = ('tipo__nombre', 'motivo')
-    # fields = ('tipo', 'cantidad_ajustada', 'motivo', 'fecha_ajuste') # Descomentar si quieres la fecha editable
-# --- FIN NUEVA CLASE ADMIN ---
 
 # Clase Admin para la vista de Stock (Existente)
 @admin.register(TipoConsumibleStock)
@@ -75,4 +74,10 @@ admin.site.register(Presupuesto)
 admin.site.register(LineaPresupuesto)
 admin.site.register(FotoVehiculo)
 
-# Nota: TipoConsumibleStock y AjusteStockConsumible se registran usando el decorador @admin.register arriba
+# --- NUEVO: Panel de control para las Citas ---
+@admin.register(Cita)
+class CitaAdmin(admin.ModelAdmin):
+    list_display = ('fecha_hora', 'nombre_cliente', 'vehiculo_info', 'estado', 'presupuesto')
+    list_filter = ('estado', 'fecha_hora')
+    search_fields = ('nombre_cliente', 'vehiculo_info', 'motivo')
+    date_hierarchy = 'fecha_hora'

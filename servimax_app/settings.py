@@ -76,11 +76,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'servimax_app.wsgi.application'
 
-# Database
 DATABASES = {
     'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600
+        default='postgresql://servimax_db_user:9h6SMO3Jen3KxqypVQrDP8i6GYAhQYe5@dpg-d3lvkhu3jp1c73fj5qqg-a.frankfurt-postgres.render.com/servimax_db',
+        conn_max_age=600,
+        ssl_require=True
     )
 }
 

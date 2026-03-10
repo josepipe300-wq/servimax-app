@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agenda del Taller - ServiMax</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .btn-volver { background: #e2e8f0; color: #475569; padding: 10px 20px; text-decoration: none; border-radius: 10px; font-weight: 600; transition: 0.2s; }
+        .btn-volver:hover { background: #cbd5e1; color: #0f172a; }
+
+        .tabs { display: flex; gap: 15px; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+        .tab-btn { text-decoration: none; font-size: 1.1em; font-weight: 700; color: #94a3b8; padding: 5px 10px; transition: 0.2s;}
+        .tab-btn.active { color: #0f172a; border-bottom: 3px solid #3b82f6; }
+        .tab-btn:hover { color: #3b82f6; }
+
+        .seccion-titulo { font-size: 1.5em; font-weight: 800; color: #0f172a; margin-top: 10px; margin-bottom: 15px; }
+        
+        .grid-citas { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        
+        .cita-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; border-left: 5px solid #3b82f6; transition: 0.2s; position: relative;}
+        .cita-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .cita-card.hoy { border-left-color: #ef4444; background: #fffcfc; }
+        .cita-card.entaller { border-left-color: #10b981; opacity: 0.8; }
+        .cita-card.cancelada { border-left-color: #94a3b8; opacity: 0.6; }
+        
+        .cita-hora { font-size: 1.4em; font-weight: 800; color: #0f172a; margin-bottom: 5px; }
+        .cita-fecha { font-size: 0.85em; font-weight: 600; color: #64748b; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+        
+        .cita-cliente { font-size: 1.1em; font-weight: 700; color: #1e293b; }
+        .cita-vehiculo { font-size: 0.9em; color: #64748b; margin-bottom: 15px; }
+        .cita-motivo { background: #f1f5f9; padding: 10px; border-radius: 8px; font-size: 0.95em; color: #334155; margin-bottom: 10px;}
+        
+        .vacio { text-align: center; padding: 40px; background: white; border-radius: 16px; border: 2px dashed #cbd5e1; color: #64748b; }
+        .badge-estado { position: absolute; top: 15px; right: 15px; font-size: 0.75em; padding: 4px 8px; border-radius: 50px; font-weight: bold;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin: 0; font-weight: 800; color: #0f172a;">📅 Agenda del Taller</h1>
+            <a href="{% url 'home' %}" class="btn-volver">⬅ Volver al Inicio</a>
+        </div>
+
+        <div class="tabs">
+            <a href="{% url 'agenda' %}?filtro=pendientes" class="tab-btn {% if filtro == 'pendientes' %}active{% endif %}">⏳ Citas Pendientes</a>
+            <a href="{% url 'agenda' %}?filtro=historial" class="tab-btn {% if filtro == 'historial' %}active{% endif %}">✅ Historial (Ya vinieron)</a>
+        </div>
+
+        {% if filtro == 'pendientes' %}
+            <h2 class="seccion-titulo" style="color: #ef4444;">🔴 Entran Hoy</h2>
+            {% if citas_hoy %}
+                <div class="grid-citas" style="margin-bottom: 40px;">
+                    {% for cita in citas_hoy %}
+                        <div class="cita-card hoy">
+                            <div class="cita-hora">{{ cita.fecha_hora|time:"H:i" }}</div>
+                            <div class="cita-cliente">👤 {{ cita.nombre_cliente }}</div>
+                            <div class="cita-vehiculo">🚗 {{ cita.vehiculo_info|default:"Vehículo sin especificar" }}</div>
+                            <div class="cita-motivo">🔧 {{ cita.motivo }}</div>
+                            
+                            <a href="{% url 'editar_cita' cita.id %}" style="display: inline-block; background: #e2e8f0; color: #475569; padding: 5px 10px; border-radius: 6px; text-decoration: none; font-size: 0.85em; font-weight: bold; margin-top: 5px; margin-right: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: 0.2s;">✏️ Editar Cita</a>
+                            
+                            {% if cita.presupuesto %}
+                                <a href="{% url 'detalle_presupuesto' cita.presupuesto.id %}" style="display: inline-block; background: #fef08a; color: #854d0e; padding: 5px 10px; border-radius: 6px; text-decoration: none; font-size: 0.85em; font-weight: bold; border: 1px solid #fde047; margin-top: 5px;">📝 Presupuesto Asociado #{{ cita.presupuesto.id }}</a>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="vacio" style="margin-bottom: 40px;">
+                    <span style="font-size: 2em;">☕</span>
+                    <p style="margin-top: 10px; font-weight: 600;">No hay citas programadas para hoy.</p>
+                </div>
+            {% endif %}
+
+            <h2 class="seccion-titulo" style="color: #3b82f6;">🔵 Próximos Días</h2>
+            {% if citas_proximas %}
+                <div class="grid-citas">
+                    {% for cita in citas_proximas %}
+                        <div class="cita-card">
+                            <div class="cita-fecha">{{ cita.fecha_hora|date:"l, d M Y" }}</div>
+                            <div class="cita-hora">{{ cita.fecha_hora|time:"H:i" }}</div>
+                            <div class="cita-cliente">👤 {{ cita.nombre_cliente }}</div>
+                            <div class="cita-vehiculo">🚗 {{ cita.vehiculo_info|default:"Vehículo sin especificar" }}</div>
+                            <div class="cita-motivo">🔧 {{ cita.motivo }}</div>
+                            
+                            <a href="{% url 'editar_cita' cita.id %}" style="display: inline-block; background: #e2e8f0; color: #475569; padding: 5px 10px; border-radius: 6px; text-decoration: none; font-size: 0.85em; font-weight: bold; margin-top: 5px; margin-right: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: 0.2s;">✏️ Editar Cita</a>
+                            
+                            {% if cita.presupuesto %}
+                                <a href="{% url 'detalle_presupuesto' cita.presupuesto.id %}" style="display: inline-block; background: #fef08a; color: #854d0e; padding: 5px 10px; border-radius: 6px; text-decoration: none; font-size: 0.85em; font-weight: bold; border: 1px solid #fde047; margin-top: 5px;">📝 Presupuesto #{{ cita.presupuesto.id }}</a>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="vacio">
+                    <span style="font-size: 2em;">🗓️</span>
+                    <p style="margin-top: 10px; font-weight: 600;">No tienes citas agendadas para los próximos días.</p>
+                </div>
+            {% endif %}
+            
+        {% else %}
+            <h2 class="seccion-titulo" style="color: #10b981;">✅ Vehículos que ya ingresaron o cancelaron</h2>
+            
+            <form method="GET" action="{% url 'agenda' %}" style="display: flex; gap: 15px; margin-bottom: 25px; align-items: center; background: white; padding: 15px 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 5px rgba(0,0,0,0.02); flex-wrap: wrap;">
+                <input type="hidden" name="filtro" value="historial">
+                
+                <label style="font-weight: 700; color: #475569; display: flex; align-items: center; gap: 8px;">
+                    <span>🔍 Filtrar historial:</span>
+                </label>
+                
+                <select name="mes" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; background: #f8fafc; font-family: 'Inter', sans-serif; cursor: pointer;">
+                    <option value="">Cualquier Mes</option>
+                    <option value="1" {% if mes_seleccionado == '1' %}selected{% endif %}>Enero</option>
+                    <option value="2" {% if mes_seleccionado == '2' %}selected{% endif %}>Febrero</option>
+                    <option value="3" {% if mes_seleccionado == '3' %}selected{% endif %}>Marzo</option>
+                    <option value="4" {% if mes_seleccionado == '4' %}selected{% endif %}>Abril</option>
+                    <option value="5" {% if mes_seleccionado == '5' %}selected{% endif %}>Mayo</option>
+                    <option value="6" {% if mes_seleccionado == '6' %}selected{% endif %}>Junio</option>
+                    <option value="7" {% if mes_seleccionado == '7' %}selected{% endif %}>Julio</option>
+                    <option value="8" {% if mes_seleccionado == '8' %}selected{% endif %}>Agosto</option>
+                    <option value="9" {% if mes_seleccionado == '9' %}selected{% endif %}>Septiembre</option>
+                    <option value="10" {% if mes_seleccionado == '10' %}selected{% endif %}>Octubre</option>
+                    <option value="11" {% if mes_seleccionado == '11' %}selected{% endif %}>Noviembre</option>
+                    <option value="12" {% if mes_seleccionado == '12' %}selected{% endif %}>Diciembre</option>
+                </select>
+
+                <select name="ano" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; background: #f8fafc; font-family: 'Inter', sans-serif; cursor: pointer;">
+                    <option value="">Cualquier Año</option>
+                    {% for ano in anos_disponibles %}
+                        <option value="{{ ano }}" {% if ano_seleccionado == ano %}selected{% endif %}>{{ ano }}</option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit" style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s;">Buscar</button>
+                
+                {% if ano_seleccionado or mes_seleccionado %}
+                    <a href="{% url 'agenda' %}?filtro=historial" style="color: #64748b; text-decoration: underline; font-size: 0.9em; margin-left: auto;">Limpiar filtro (Ver esta semana)</a>
+                {% else %}
+                    <span style="color: #94a3b8; font-size: 0.85em; margin-left: auto;">Mostrando por defecto <b>esta semana</b></span>
+                {% endif %}
+            </form>
+
+            {% if citas_hoy %}
+                <div class="grid-citas">
+                    {% for cita in citas_hoy %}
+                        <div class="cita-card {% if cita.estado == 'En taller' %}entaller{% else %}cancelada{% endif %}">
+                            <div class="badge-estado" style="background: {% if cita.estado == 'En taller' %}#d1fae5; color: #047857;{% else %}#f1f5f9; color: #64748b;{% endif %}">{{ cita.estado }}</div>
+                            <div class="cita-fecha">{{ cita.fecha_hora|date:"d M Y" }} - {{ cita.fecha_hora|time:"H:i" }}</div>
+                            <div class="cita-cliente">👤 {{ cita.nombre_cliente }}</div>
+                            <div class="cita-vehiculo">🚗 {{ cita.vehiculo_info|default:"Vehículo sin especificar" }}</div>
+                            <div class="cita-motivo" style="background: white; border: 1px solid #e2e8f0;">🔧 {{ cita.motivo }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="vacio">
+                    <span style="font-size: 2em;">🗂️</span>
+                    <p style="margin-top: 10px; font-weight: 600;">No hay registro de citas en estas fechas.</p>
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    {% include 'taller/widget_ia.html' %}
+</body>
+</html>
