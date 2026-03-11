@@ -4,7 +4,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Presupuesto #{{ presupuesto.id }}</title>
-    <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <style>
         @page { size: a4 portrait; margin: 1.5cm; }
         body { font-family: sans-serif; font-size: 11px; }
@@ -121,6 +120,6 @@
         <div class="nota">
             <p>Este presupuesto tiene carácter informativo y no contractual. Los precios pueden variar en función de imprevistos o cambios solicitados durante la reparación. Validez del presupuesto: 30 días.</p>
         </div>
-    </div> {% include 'taller/widget_ia.html' %}
+    </div>
 </body>
 </html>
