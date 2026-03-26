@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 {% load static %}
 <html lang="es">
 <head>
@@ -193,13 +193,23 @@
                                 </td>
                             {% endif %}
 
-                            <td style="text-align: center;">
+                            <td style="text-align: center; display: flex; justify-content: center; gap: 5px;">
                                 <button type="button" class="btn-action" title="Editar este movimiento" 
                                     onclick="abrirModalEdicion('{{ mov.id_real }}', '{{ mov.tipo }}', '{{ mov.fecha|date:'Y-m-d' }}', '{{ mov.importe|stringformat:'f' }}', '{{ mov.descripcion|escapejs }}')">
                                     ✏️
                                 </button>
+                                
+                                <form method="POST" style="margin: 0;" onsubmit="return confirm('⚠️ ¿Estás seguro de que quieres borrar este movimiento? Los totales de la deuda se recalcularán automáticamente.');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="form_type" value="borrar_movimiento">
+                                    <input type="hidden" name="mov_id" value="{{ mov.id_real }}">
+                                    <input type="hidden" name="mov_tipo" value="{{ mov.tipo }}">
+                                    <button type="submit" class="btn-action" style="color: #ef4444;" title="Borrar este movimiento">
+                                        🗑️
+                                    </button>
+                                </form>
                             </td>
-                        </tr>
+                            </tr>
                         {% empty %}
                         <tr>
                             <td colspan="5" style="text-align: center; padding: 40px; color: #94a3b8;">

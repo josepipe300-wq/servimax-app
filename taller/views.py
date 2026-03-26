@@ -1992,9 +1992,7 @@ def detalle_deuda(request, deuda_id):
                     extra_decimal = Decimal(importe_extra.replace(',', '.'))
                     if extra_decimal > 0:
                         deuda.importe_inicial += extra_decimal
-                        if deuda.estado == 'Pagada':
-                            deuda.estado = 'Pendiente'
-                        deuda.save()
+                        deuda.save() # ¡Se guarda solo el importe, el estado se calcula automático!
                         
                         # Creamos el registro histórico
                         AmpliacionDeuda.objects.create(
@@ -2017,17 +2015,11 @@ def detalle_deuda(request, deuda_id):
                     deuda.acreedor = nuevo_acreedor
                     deuda.motivo = nuevo_motivo
                     deuda.importe_inicial = nuevo_importe
-                    
-                    if deuda.estado == 'Pagada' and deuda.importe_inicial > deuda.importe_pagado:
-                        deuda.estado = 'Pendiente'
-                    elif deuda.estado == 'Pendiente' and deuda.importe_pagado >= deuda.importe_inicial and deuda.importe_inicial > 0:
-                        deuda.estado = 'Pagada'
-                        
-                    deuda.save()
+                    deuda.save() # ¡Magia automática!
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
                     
-        # --- EDITAR UN MOVIMIENTO ESPECÍFICO (NUEVO) ---
+        # --- EDITAR UN MOVIMIENTO ESPECÍFICO ---
         elif form_type == 'editar_movimiento':
             mov_id = request.POST.get('mov_id')
             mov_tipo = request.POST.get('mov_tipo')
@@ -2061,8 +2053,28 @@ def detalle_deuda(request, deuda_id):
                     ampliacion.motivo = nueva_descripcion.upper()
                     ampliacion.save()
                     
-            except (ValueError, TypeError, Decimal.InvalidOperation, Gasto.DoesNotExist, AmpliacionDeuda.DoesNotExist) as e:
-                # Si algo falla (ej. formato de número incorrecto), simplemente pasamos para no romper la app
+            except (ValueError, TypeError, Decimal.InvalidOperation, Gasto.DoesNotExist, AmpliacionDeuda.DoesNotExist):
+                pass
+
+        # --- BORRAR UN MOVIMIENTO (CORREGIDO) ---
+        elif form_type == 'borrar_movimiento':
+            mov_id = request.POST.get('mov_id')
+            mov_tipo = request.POST.get('mov_tipo')
+            
+            try:
+                if mov_tipo == 'pago':
+                    # Es un Gasto. Al borrarlo, todo se actualiza solo.
+                    gasto = Gasto.objects.get(id=mov_id, deuda_asociada=deuda)
+                    gasto.delete()
+                    
+                elif mov_tipo == 'ampliacion':
+                    # Es una Ampliación. Restamos el dinero del total inicial y borramos.
+                    ampliacion = AmpliacionDeuda.objects.get(id=mov_id, deuda=deuda)
+                    deuda.importe_inicial -= ampliacion.importe
+                    deuda.save() # Guardamos la resta
+                    ampliacion.delete()
+                
+            except (Gasto.DoesNotExist, AmpliacionDeuda.DoesNotExist):
                 pass
 
         return redirect('detalle_deuda', deuda_id=deuda.id)
@@ -2075,7 +2087,7 @@ def detalle_deuda(request, deuda_id):
     
     for p in pagos:
         historial_combinado.append({
-            'id_real': p.id,            # <-- NUEVO: Para saber qué ID editar
+            'id_real': p.id,            
             'fecha': p.fecha,
             'descripcion': p.descripcion or "Pago de deuda",
             'metodo': p.get_metodo_pago_display(),
@@ -2086,7 +2098,7 @@ def detalle_deuda(request, deuda_id):
         
     for a in ampliaciones:
         historial_combinado.append({
-            'id_real': a.id,            # <-- NUEVO: Para saber qué ID editar
+            'id_real': a.id,            
             'fecha': a.fecha,
             'descripcion': a.motivo,
             'metodo': 'Ampliación / Nuevo Cargo',
