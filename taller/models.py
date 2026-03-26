@@ -264,8 +264,10 @@ class Ingreso(models.Model):
         ('Grua', 'Servicio de Grúa'),
         ('Otras Ganancias', 'Otras Ganancias'),
         ('ABONO_TARJETA', 'Abono/Pago a Tarjeta'),
+        ('PRESTAMO', '🤝 Préstamo / Adelanto a Devolver'), # <-- NUESTRA NUEVA OPCIÓN
         ('Otros', 'Otros Ingresos'),
     ]
+    # ... (El resto del modelo Ingreso déjalo exactamente como lo tenías, con deuda_asociada)
     METODO_PAGO_CHOICES = Gasto.METODO_PAGO_CHOICES 
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
     fecha = models.DateField(default=timezone.now)
@@ -274,6 +276,15 @@ class Ingreso(models.Model):
     descripcion = models.CharField(max_length=255)
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True)
     es_tpv = models.BooleanField(default=False)
+
+    # --- NUEVA CONEXIÓN PARA LOS PRÉSTAMOS ---
+    deuda_asociada = models.ForeignKey(
+        DeudaTaller, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        verbose_name="¿Es un préstamo? Añadir a Deuda Existente"
+    )
 
     def __str__(self):
         return f"{self.fecha} - {self.get_categoria_display()} - {self.importe}€ [{self.get_metodo_pago_display()}]"

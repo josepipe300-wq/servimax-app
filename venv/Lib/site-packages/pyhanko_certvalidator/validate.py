@@ -150,58 +150,7 @@ async def async_validate_path(
     )
 
 
-def validate_tls_hostname(
-    validation_context: ValidationContext, cert: x509.Certificate, hostname: str
-):
-    """
-    Validates the end-entity certificate from a
-    pyhanko_certvalidator.path.ValidationPath object to ensure that the certificate
-    is valid for the hostname provided and that the certificate is valid for
-    the purpose of a TLS connection.
-
-    THE CERTIFICATE PATH MUST BE VALIDATED SEPARATELY VIA validate_path()!
-
-    :param validation_context:
-        A pyhanko_certvalidator.context.ValidationContext object to use for
-        configuring validation behavior
-
-    :param cert:
-        An asn1crypto.x509.Certificate object returned from validate_path()
-
-    :param hostname:
-        A unicode string of the TLS server hostname
-
-    :raises:
-        pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
-    """
-
-    if validation_context.is_whitelisted(cert):
-        return
-
-    if not cert.is_valid_domain_ip(hostname):
-        raise InvalidCertificateError(
-            f"The X.509 certificate provided is not valid for {hostname}. "
-            f"Valid hostnames include: {', '.join(cert.valid_domains)}."
-        )
-
-    bad_key_usage = (
-        cert.key_usage_value
-        and 'digital_signature' not in cert.key_usage_value.native
-    )
-    bad_ext_key_usage = (
-        cert.extended_key_usage_value
-        and 'server_auth' not in cert.extended_key_usage_value.native
-    )
-
-    if bad_key_usage or bad_ext_key_usage:
-        raise InvalidCertificateError(
-            "The X.509 certificate provided is not valid for securing TLS "
-            "connections"
-        )
-
-
 def validate_usage(
-    validation_context: ValidationContext,
     cert: x509.Certificate,
     key_usage: Set[str],
     extended_key_usage: Set[str],
@@ -214,10 +163,6 @@ def validate_usage(
     specified.
 
     THE CERTIFICATE PATH MUST BE VALIDATED SEPARATELY VIA validate_path()!
-
-    :param validation_context:
-        A pyhanko_certvalidator.context.ValidationContext object to use for
-        configuring validation behavior
 
     :param cert:
         An asn1crypto.x509.Certificate object returned from validate_path()
@@ -235,9 +180,6 @@ def validate_usage(
     :raises:
         pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
     """
-
-    if validation_context.is_whitelisted(cert):
-        return
 
     if key_usage is None:
         key_usage = set()
@@ -273,24 +215,19 @@ def validate_usage(
 
 
 def validate_aa_usage(
-    validation_context: ValidationContext,
     cert: x509.Certificate,
     extended_key_usage: Optional[Set[str]] = None,
 ):
     """
     Validate AA certificate profile conditions in RFC 5755 § 4.5
 
-    :param validation_context:
     :param cert:
     :param extended_key_usage:
     :return:
     """
-    if validation_context.is_whitelisted(cert):
-        return
 
     # Check key usage requirements
     validate_usage(
-        validation_context,
         cert,
         key_usage={'digital_signature'},
         extended_key_usage=extended_key_usage or set(),
@@ -665,7 +602,7 @@ async def async_validate_ac(
     aa_path: Optional[ValidationPath] = None
     for aa_candidate in aa_candidates:
         try:
-            validate_aa_usage(validation_context, aa_candidate)
+            validate_aa_usage(aa_candidate)
         except InvalidAttrCertificateError as e:
             exceptions.append(e)
             continue
@@ -1132,15 +1069,14 @@ async def intl_validate_path(
         )
 
         # Step 2 a 2
-        if not validation_context.is_whitelisted(cert):
-            tolerance = validation_context.time_tolerance
-            validity = cert['tbs_certificate']['validity']
-            _check_validity(
-                validity=validity,
-                moment=moment,
-                tolerance=tolerance,
-                proc_state=proc_state,
-            )
+        tolerance = validation_context.time_tolerance
+        validity = cert['tbs_certificate']['validity']
+        _check_validity(
+            validity=validity,
+            moment=moment,
+            tolerance=tolerance,
+            proc_state=proc_state,
+        )
 
         # Step 2 a 3 - CRL/OCSP
         if (

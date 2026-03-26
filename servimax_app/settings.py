@@ -1,5 +1,3 @@
-# servimax_app/settings.py
-
 from pathlib import Path
 import os
 import dj_database_url
@@ -28,7 +26,6 @@ if DEBUG:
     ALLOWED_HOSTS.extend(['127.0.0.1', 'localhost', '*'])
 
 # -------------------------------------------------------------
-
 
 # Application definition
 
@@ -76,13 +73,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'servimax_app.wsgi.application'
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default='postgresql://servimax_db_user:9h6SMO3Jen3KxqypVQrDP8i6GYAhQYe5@dpg-d3lvkhu3jp1c73fj5qqg-a.frankfurt-postgres.render.com/servimax_db',
-        conn_max_age=600,
-        ssl_require=True
-    )
-}
+# --- CONFIGURACIÓN DE BASE DE DATOS INTELIGENTE ---
+if 'RENDER' in os.environ:
+    # Si estamos en Render, usamos PostgreSQL (la real)
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
+else:
+    # Si estamos en LOCAL (tu PC), usamos SQLite (el laboratorio)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -110,7 +118,7 @@ STORAGES = {
     "default": {}, 
 }
 
-# --- CONFIGURACIÓN DE ALMACENAMIENTO Y OPTIMIZACIÓN CLOUDINARY ---
+# --- CONFIGURACIÓN DE ALMACENAMIENTO CLOUDINARY ---
 
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
 CLOUDINARY_MEDIA_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage'
@@ -120,35 +128,26 @@ if CLOUDINARY_URL:
     MEDIA_URL = '/media/'
     MEDIA_ROOT = '' 
     
-    # Configuración para reducir tamaño AUTOMÁTICAMENTE al subir
     CLOUDINARY_STORAGE = {
-        # Intentamos obtener el CLOUD_NAME de la URL, si falla usa el valor por defecto de la librería
-        'CLOUD_NAME': CLOUDINARY_URL.split('@')[1] if '@' in CLOUDINARY_URL else None,
-        
+        'CLOUD_NAME': CLOUDINARY_URL.split('@')[1].split('.')[0] if '@' in CLOUDINARY_URL else None,
         'HAVE_IMAGE_TRANSFORMATION': True,
         'IMAGE_TRANSFORMATION': {
-            'quality': 'auto',      # Compresión inteligente
-            'fetch_format': 'auto', # Formato eficiente (WebP/AVIF)
-            'width': 1920,          # Reducir a Full HD
-            'crop': 'limit'         # No estirar si es pequeña
+            'quality': 'auto',
+            'fetch_format': 'auto',
+            'width': 1920,
+            'crop': 'limit'
         }
     }
 else:
-    # Configuración local si no hay Cloudinary (para desarrollo offline)
     MEDIA_URL = '/media/'
     MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
     STORAGES["default"]["BACKEND"] = 'django.core.files.storage.FileSystemStorage' 
 
-
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# --- CONFIGURACIÓN DE AUTENTICACIÓN ---
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 LOGIN_URL = '/accounts/login/'
 
-# --- LÍMITES DE SUBIDA AMPLIADOS ---
-# 100MB para permitir la subida inicial de fotos grandes (luego Cloudinary las reduce)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600

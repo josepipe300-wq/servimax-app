@@ -507,21 +507,35 @@ def registrar_ingreso(request):
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para acceder a la gestión de ingresos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
 
     if request.method == 'POST':
-        categoria = request.POST['categoria']; importe_str = request.POST.get('importe')
+        categoria = request.POST['categoria']
+        importe_str = request.POST.get('importe')
         descripcion = request.POST.get('descripcion', '')
         metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
         es_tpv_bool = (metodo_pago != 'EFECTIVO')
 
         fecha_ingreso_str = request.POST.get('fecha_ingreso')
-        try: fecha_ingreso = datetime.strptime(fecha_ingreso_str, '%Y-%m-%d').date() if fecha_ingreso_str else timezone.now().date()
-        except ValueError: fecha_ingreso = timezone.now().date()
+        try: 
+            fecha_ingreso = datetime.strptime(fecha_ingreso_str, '%Y-%m-%d').date() if fecha_ingreso_str else timezone.now().date()
+        except ValueError: 
+            fecha_ingreso = timezone.now().date()
+            
         try:
             importe = Decimal(importe_str) if importe_str else Decimal('0.00')
             if importe <= 0: return redirect('registrar_ingreso')
-        except (ValueError, TypeError, Decimal.InvalidOperation): return redirect('registrar_ingreso')
+        except (ValueError, TypeError, Decimal.InvalidOperation): 
+            return redirect('registrar_ingreso')
 
-        ingreso = Ingreso(fecha=fecha_ingreso, categoria=categoria, importe=importe, descripcion=descripcion.upper(), es_tpv=es_tpv_bool, metodo_pago=metodo_pago)
+        # 1. Creamos el ingreso
+        ingreso = Ingreso(
+            fecha=fecha_ingreso, 
+            categoria=categoria, 
+            importe=importe, 
+            descripcion=descripcion.upper(), 
+            es_tpv=es_tpv_bool, 
+            metodo_pago=metodo_pago
+        )
 
+        # 2. VINCULACIÓN CON ORDEN (Si es del taller)
         if categoria == 'Taller':
             orden_id = request.POST.get('orden')
             if orden_id:
@@ -529,15 +543,65 @@ def registrar_ingreso(request):
                 try:
                     orden_seleccionada = ordenes_relevantes.get(id=orden_id)
                     ingreso.orden = orden_seleccionada
-                except OrdenDeReparacion.DoesNotExist: pass
+                except OrdenDeReparacion.DoesNotExist: 
+                    pass
+        
+       # 3. MAGIA DE LOS PRÉSTAMOS
+        es_prestamo = (categoria == 'PRESTAMO') # <-- AHORA DEPENDE DE LA CATEGORÍA
+        if es_prestamo:
+            deuda_existente_id = request.POST.get('deuda_existente')
+            # ... el resto sigue igual (Caso A y Caso B)
+            
+            # Caso A: Crear una deuda totalmente nueva
+            if deuda_existente_id == 'NUEVA':
+                nuevo_acreedor = request.POST.get('nueva_deuda_acreedor', '').upper()
+                if nuevo_acreedor:
+                    nueva_deuda = DeudaTaller.objects.create(
+                        acreedor=nuevo_acreedor,
+                        motivo=f"PRÉSTAMO INICIAL: {descripcion.upper()}",
+                        importe_inicial=importe,
+                        fecha_creacion=fecha_ingreso
+                    )
+                    ingreso.deuda_asociada = nueva_deuda
+
+            # Caso B: Sumar a una deuda existente (Ej: Eduardo)
+            elif deuda_existente_id:
+                try:
+                    deuda_guardada = DeudaTaller.objects.get(id=deuda_existente_id)
+                    
+                    # Registramos el historial de la ampliación
+                    AmpliacionDeuda.objects.create(
+                        deuda=deuda_guardada,
+                        importe=importe,
+                        motivo=f"NUEVO PRÉSTAMO REGISTRADO: {descripcion.upper()}"
+                    )
+                    
+                    # Le sumamos el dinero a lo que ya nos prestó antes
+                    deuda_guardada.importe_inicial += importe
+                    deuda_guardada.save()
+                    
+                    ingreso.deuda_asociada = deuda_guardada
+                except DeudaTaller.DoesNotExist:
+                    pass
+
+        # Finalmente, guardamos el ingreso con todas sus conexiones
         ingreso.save()
         return redirect('home')
 
+    # --- LO QUE SE ENVÍA A LA PANTALLA ---
     ordenes_filtradas = obtener_ordenes_relevantes().order_by('-fecha_entrada')
     categorias_ingreso = Ingreso.CATEGORIA_CHOICES
     metodos_pago = Ingreso.METODO_PAGO_CHOICES 
+    
+    # Enviamos la lista de deudas para el nuevo desplegable
+    deudas_taller = DeudaTaller.objects.all().order_by('acreedor')
 
-    context = { 'ordenes': ordenes_filtradas, 'categorias_ingreso': categorias_ingreso, 'metodos_pago': metodos_pago }
+    context = { 
+        'ordenes': ordenes_filtradas, 
+        'categorias_ingreso': categorias_ingreso, 
+        'metodos_pago': metodos_pago,
+        'deudas_taller': deudas_taller # <-- La pieza clave
+    }
     return render(request, 'taller/registrar_ingreso.html', context)
 
 
@@ -1941,7 +2005,7 @@ def detalle_deuda(request, deuda_id):
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
                     
-        # --- EDITAR ERRORES ---
+        # --- EDITAR DEUDA GENERAL (Nombre, Total inicial) ---
         elif form_type == 'editar':
             nuevo_acreedor = request.POST.get('acreedor')
             nuevo_motivo = request.POST.get('motivo')
@@ -1963,6 +2027,44 @@ def detalle_deuda(request, deuda_id):
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
                     
+        # --- EDITAR UN MOVIMIENTO ESPECÍFICO (NUEVO) ---
+        elif form_type == 'editar_movimiento':
+            mov_id = request.POST.get('mov_id')
+            mov_tipo = request.POST.get('mov_tipo')
+            nueva_fecha_str = request.POST.get('fecha')
+            nuevo_importe_str = request.POST.get('importe')
+            nueva_descripcion = request.POST.get('descripcion')
+            
+            try:
+                nueva_fecha = datetime.strptime(nueva_fecha_str, '%Y-%m-%d').date()
+                nuevo_importe = Decimal(nuevo_importe_str.replace(',', '.'))
+                
+                if mov_tipo == 'pago':
+                    # Es un Gasto que estamos devolviendo
+                    gasto = Gasto.objects.get(id=mov_id, deuda_asociada=deuda)
+                    gasto.fecha = nueva_fecha
+                    gasto.importe = nuevo_importe
+                    gasto.descripcion = nueva_descripcion.upper()
+                    gasto.save()
+                
+                elif mov_tipo == 'ampliacion':
+                    # Es una AmpliacionDeuda (más dinero que nos han prestado)
+                    ampliacion = AmpliacionDeuda.objects.get(id=mov_id, deuda=deuda)
+                    
+                    # Tenemos que restar el viejo importe de la deuda total y sumar el nuevo
+                    diferencia = nuevo_importe - ampliacion.importe
+                    deuda.importe_inicial += diferencia
+                    deuda.save()
+                    
+                    ampliacion.fecha = nueva_fecha
+                    ampliacion.importe = nuevo_importe
+                    ampliacion.motivo = nueva_descripcion.upper()
+                    ampliacion.save()
+                    
+            except (ValueError, TypeError, Decimal.InvalidOperation, Gasto.DoesNotExist, AmpliacionDeuda.DoesNotExist) as e:
+                # Si algo falla (ej. formato de número incorrecto), simplemente pasamos para no romper la app
+                pass
+
         return redirect('detalle_deuda', deuda_id=deuda.id)
 
     # --- COMBINAR HISTORIAL DE PAGOS Y AUMENTOS ---
@@ -1973,6 +2075,7 @@ def detalle_deuda(request, deuda_id):
     
     for p in pagos:
         historial_combinado.append({
+            'id_real': p.id,            # <-- NUEVO: Para saber qué ID editar
             'fecha': p.fecha,
             'descripcion': p.descripcion or "Pago de deuda",
             'metodo': p.get_metodo_pago_display(),
@@ -1983,6 +2086,7 @@ def detalle_deuda(request, deuda_id):
         
     for a in ampliaciones:
         historial_combinado.append({
+            'id_real': a.id,            # <-- NUEVO: Para saber qué ID editar
             'fecha': a.fecha,
             'descripcion': a.motivo,
             'metodo': 'Ampliación / Nuevo Cargo',
@@ -2002,7 +2106,7 @@ def detalle_deuda(request, deuda_id):
             
     context = {
         'deuda': deuda,
-        'historial': historial_combinado, # <--- Enviamos el historial combinado
+        'historial': historial_combinado,
         'porcentaje_pagado': porcentaje
     }
     return render(request, 'taller/detalle_deuda.html', context)
