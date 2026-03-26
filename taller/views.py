@@ -2269,13 +2269,19 @@ def ver_presupuesto_publico(request, signed_id):
 
 # --- CONEXIÓN CON INTELIGENCIA ARTIFICIAL (GEMINI) ---
 import json
+import os
 import google.generativeai as genai
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render
 from . import ai_tools
 
-genai.configure(api_key="AIzaSyBFflBY-EfABTlt9up6FSW7ip2BtfWU8Pk")
+# 🛡️ ¡CLAVE PROTEGIDA! Ahora lee desde tu ordenador o desde Render, no del código.
+api_key = os.environ.get("GOOGLE_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
+else:
+    print("⚠️ ADVERTENCIA: No se ha encontrado GOOGLE_API_KEY. J.A.R.V.I.S. estará apagado.")
 
 @login_required
 def asistente_ia(request):
@@ -2409,14 +2415,14 @@ def asistente_ia(request):
                     motivo=decision_ia.get('motivo'),
                     vehiculo=decision_ia.get('vehiculo'),
                     nuevo_nombre=decision_ia.get('nuevo_nombre') # ¡Ahora sí coge el nombre nuevo!
-                )    
+                )   
 
             elif accion == 'actualizar_cita':
                 resultado = ai_tools.actualizar_estado_cita(
                     cliente=decision_ia.get('cliente'),
                     hora=decision_ia.get('hora'),
                     estado=decision_ia.get('estado', 'En taller')
-                )    
+                )   
             
             # --- MAGIA PURA: LA DOBLE LLAMADA DE PRESUPUESTOS PREDICTIVOS ---
             elif accion == 'presupuesto_predictivo':
@@ -2462,7 +2468,7 @@ def asistente_ia(request):
                 resultado = ai_tools.consultar_stock(decision_ia.get('articulo'))
             # --- BUSCADOR DE CONTABILIDAD ---
             elif accion == 'buscar_movimiento':
-                resultado = ai_tools.buscar_movimiento(decision_ia.get('termino'))    
+                resultado = ai_tools.buscar_movimiento(decision_ia.get('termino'))   
             elif accion == 'caja_hoy':
                 resultado = ai_tools.resumen_caja_hoy()
             elif accion == 'deudores':
@@ -2509,7 +2515,6 @@ def asistente_ia(request):
             
     return render(request, 'taller/asistente_ia.html')
 
-# (AQUÍ TERMINA TU FUNCIÓN ANTERIOR)
 
 @login_required
 def agenda_taller(request):
@@ -2616,5 +2621,3 @@ def ver_historial_ia(request):
     conversaciones = HistorialIA.objects.all()[:50]
     
     return render(request, 'taller/historial_ia.html', {'conversaciones': conversaciones})
-
-    
