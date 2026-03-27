@@ -15,6 +15,15 @@
         
         .section-panel { background: #ffffff; padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; margin-bottom: 24px; }
         
+        /* Panel del Gran Total */
+        .summary-grid { display: grid; grid-template-columns: 1fr; margin-bottom: 24px; }
+        .total-card { background: #fef2f2; border: 2px solid #fecaca; padding: 25px; border-radius: 16px; text-align: center; box-shadow: 0 4px 10px rgba(239,68,68,0.1); }
+        .total-card h4 { color: #b91c1c; font-size: 1.1em; font-weight: 800; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 0.05em;}
+        .total-card .amount { font-size: 3.5em; font-weight: 800; margin: 0; color: #ef4444; text-shadow: 1px 1px 0px rgba(0,0,0,0.05);}
+        .total-breakdown { display: flex; justify-content: center; gap: 30px; margin-top: 15px; font-size: 1em; color: #7f1d1d; background: rgba(255,255,255,0.5); padding: 10px; border-radius: 8px; display: inline-flex;}
+        .total-breakdown span { font-weight: 500; }
+        .total-breakdown b { font-weight: 800; color: #991b1b; font-size: 1.1em;}
+
         /* Formulario Nuevo */
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: end; }
         .form-group { display: flex; flex-direction: column; }
@@ -25,6 +34,11 @@
         .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; height: 40px;}
         .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(239,68,68,0.2); filter: brightness(1.1); }
 
+        /* Estilos para el Checkbox tipo Switch del Banco */
+        .switch-container { display: flex; align-items: center; gap: 10px; background: #eff6ff; padding: 8px 15px; border-radius: 8px; border: 1px solid #bfdbfe; height: 40px; box-sizing: border-box; cursor: pointer;}
+        .switch-container input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #3b82f6; margin: 0;}
+        .switch-label { font-size: 0.9em; font-weight: 700; color: #1e3a8a; cursor: pointer; margin: 0; padding: 0; text-transform: none !important;}
+
         /* Tabla */
         .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
         .table-modern th, .table-modern td { padding: 14px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; }
@@ -34,49 +48,69 @@
         .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 700; }
         .badge-pendiente { background-color: #fee2e2; color: #b91c1c; }
         .badge-pagada { background-color: #d1fae5; color: #047857; }
+        .badge-banco { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; margin-left: 8px; font-size: 0.7em;}
     </style>
 </head>
 <body>
     <div class="container">
-        <div style="margin-bottom: 30px;">
+        <div style="margin-bottom: 20px;">
             <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver al Inicio</a>
-            <h1 class="header-title">Cuentas por Pagar (Deudas)</h1>
-            <p style="color: #64748b; font-weight: 500; margin: 0;">Gestiona el dinero que debe el taller a clientes, socios o proveedores.</p>
+            <h1 class="header-title">Cuentas por Pagar</h1>
+            <p style="color: #64748b; font-weight: 500; margin: 0;">Resumen del dinero que el taller debe a bancos, tarjetas y proveedores.</p>
+        </div>
+
+        <div class="summary-grid">
+            <div class="total-card">
+                <h4>🚨 Gran Total Adeudado</h4>
+                <p class="amount">{{ gran_total_deuda|floatformat:2 }} €</p>
+                <div style="text-align: center;">
+                    <div class="total-breakdown">
+                        <span>Préstamos y Proveedores: <b>{{ total_deudas_normales|floatformat:2 }} €</b></span>
+                        <span style="color: #cbd5e1;">|</span>
+                        <span>Deuda en Tarjetas: <b>{{ total_tarjetas|floatformat:2 }} €</b></span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         {% if not request.user.groups.all.0.name == 'Solo Ver' %}
         <div class="section-panel" style="background: #fff5f5; border-color: #fecaca;">
-            <h3 style="margin-top: 0; color: #991b1b; display: flex; align-items: center; gap: 8px;">➕ Registrar Nueva Deuda</h3>
+            <h3 style="margin-top: 0; color: #991b1b; display: flex; align-items: center; gap: 8px;">➕ Registrar Nueva Deuda / Préstamo</h3>
             <form method="POST" action="{% url 'lista_deudas' %}">
                 {% csrf_token %}
                 <div class="form-grid">
                     <div class="form-group">
                         <label>¿A quién se le debe?</label>
-                        <input type="text" name="acreedor" class="form-control" placeholder="Ej: Hermano, Cliente Juan..." required>
+                        <input type="text" name="acreedor" class="form-control" placeholder="Ej: Banco BBVA, Hermano..." required>
                     </div>
                     
-                    <div class="form-group">
-                        <label>Asociar a Orden (Opcional)</label>
-                        <select name="orden" class="form-control" style="background-color: white;">
-                            <option value="">--- Ninguna ---</option>
-                            {% for orden in ordenes_activas %}
-                                <option value="{{ orden.id }}">{{ orden.vehiculo.matricula }} ({{ orden.cliente.nombre }})</option>
-                            {% endfor %}
-                        </select>
-                    </div>
                     <div class="form-group" style="flex-grow: 2;">
                         <label>Motivo de la deuda</label>
-                        <input type="text" name="motivo" class="form-control" placeholder="Ej: Devolución, Pieza..." required>
+                        <input type="text" name="motivo" class="form-control" placeholder="Ej: Crédito Taller, Pieza..." required>
                     </div>
-                    <div class="form-group">
+
+                    <div class="form-group" style="max-width: 150px;">
                         <label>Importe (€)</label>
                         <input type="number" step="0.01" name="importe_inicial" class="form-control" placeholder="0.00" required>
                     </div>
+
                     <div class="form-group">
+                        <label>&nbsp;</label>
+                        <label class="switch-container" title="Activa esto para préstamos bancarios. Calculará los intereses al pagar.">
+                            <input type="checkbox" name="es_credito_bancario" value="True">
+                            <span class="switch-label">🏦 Es Crédito de Banco</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
                         <button type="submit" class="btn-modern">Guardar Deuda</button>
                     </div>
                 </div>
-            </form> </div> {% endif %} <div class="section-panel" style="border-top: 4px solid #ef4444;">
+            </form> 
+        </div> 
+        {% endif %} 
+        
+        <div class="section-panel" style="border-top: 4px solid #ef4444;">
             <h3 style="margin-top: 0; color: #0f172a; display: flex; align-items: center; gap: 8px;">
                 🚨 Deudas Activas (Pendientes)
             </h3>
@@ -96,7 +130,11 @@
                         <tr onclick="window.location.href='{% url 'detalle_deuda' deuda.id %}'" style="cursor: pointer; transition: background 0.2s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
                             <td style="color: #64748b; font-weight: 500;">{{ deuda.fecha_creacion|date:"d/m/Y" }}</td>
                             <td>
-                                <strong style="color: #0f172a;">{{ deuda.acreedor }}</strong><br>
+                                <strong style="color: #0f172a;">{{ deuda.acreedor }}</strong>
+                                {% if deuda.es_credito_bancario %}
+                                    <span class="badge badge-banco">🏦 PRÉSTAMO</span>
+                                {% endif %}
+                                <br>
                                 <span style="color: #64748b; font-size: 0.85em;">{{ deuda.motivo }}</span>
                                 {% if deuda.orden %}
                                     <br><a href="{% url 'detalle_orden' deuda.orden.id %}" style="font-size: 0.85em; color: #3b82f6; text-decoration: none; font-weight: 600;">🚗 {{ deuda.orden.vehiculo.matricula }}</a>
@@ -141,11 +179,12 @@
                         <tr onclick="window.location.href='{% url 'detalle_deuda' deuda.id %}'" style="cursor: pointer; transition: background 0.2s;" onmouseover="this.style.backgroundColor='#ffffff'" onmouseout="this.style.backgroundColor='transparent'">
                             <td style="color: #94a3b8; font-weight: 500;">{{ deuda.fecha_creacion|date:"d/m/Y" }}</td>
                             <td>
-                                <strong style="color: #475569;">{{ deuda.acreedor }}</strong><br>
-                                <span style="color: #94a3b8; font-size: 0.85em;">{{ deuda.motivo }}</span>
-                                {% if deuda.orden %}
-                                    <br><a href="{% url 'detalle_orden' deuda.orden.id %}" style="font-size: 0.85em; color: #3b82f6; text-decoration: none; font-weight: 600;">🚗 {{ deuda.orden.vehiculo.matricula }}</a>
+                                <strong style="color: #475569;">{{ deuda.acreedor }}</strong>
+                                {% if deuda.es_credito_bancario %}
+                                    <span class="badge badge-banco" style="opacity: 0.7;">🏦 PRÉSTAMO</span>
                                 {% endif %}
+                                <br>
+                                <span style="color: #94a3b8; font-size: 0.85em;">{{ deuda.motivo }}</span>
                             </td>
                             <td class="money-col" style="color: #047857; font-weight: 700;">{{ deuda.importe_inicial|floatformat:2 }} €</td>
                             <td style="text-align: center;">

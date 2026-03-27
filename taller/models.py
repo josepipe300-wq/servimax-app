@@ -191,6 +191,13 @@ class DeudaTaller(models.Model):
     importe_inicial = models.DecimalField(max_digits=10, decimal_places=2)
     fecha_creacion = models.DateField(default=timezone.now)
     
+    # --- NUEVO: EL INTERRUPTOR PARA EL CRÉDITO BANCARIO ---
+    es_credito_bancario = models.BooleanField(
+        default=False, 
+        help_text="Si se marca, al pagar calculará automáticamente los intereses comparando con el saldo del banco."
+    )
+    # ------------------------------------------------------
+    
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True, help_text="Orden de trabajo asociada")
 
     @property
@@ -226,6 +233,7 @@ class Gasto(models.Model):
         ('Compra de Consumibles', 'Compra de Consumibles (Stock Taller)'),
         ('COMISIONES_INTERESES', 'Comisiones e Intereses Bancarios'),
         ('Pago de Deuda', 'Pago de Deuda (Taller)'),
+        ('PAGO_TARJETA', '💳 Pago de Tarjeta de Crédito'), # <-- NUESTRA NUEVA CATEGORÍA
     ]
     
     METODO_PAGO_CHOICES = [
@@ -233,7 +241,7 @@ class Gasto(models.Model):
         ('CUENTA_TALLER', 'Cuenta Taller (Banco)'),
         ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
         ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'),
-        ('CUENTA_ERIKA', 'Cuenta Erika (Antigua)'),
+        # ¡Adiós Cuenta Erika!
         ('COMPENSACION', '🤝 Compensación (Trueque / Sin dinero)'),
     ]
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
@@ -558,4 +566,4 @@ class HistorialIA(models.Model):
         ordering = ['-fecha'] # Las más recientes primero
 
     def __str__(self):
-        return f"{self.fecha.strftime('%d/%m %H:%M')} | {self.usuario} -> {self.accion_ejecutada}"         
+        return f"{self.fecha.strftime('%d/%m %H:%M')} | {self.usuario} -> {self.accion_ejecutada}"

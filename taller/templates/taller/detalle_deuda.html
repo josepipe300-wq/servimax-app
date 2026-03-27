@@ -28,7 +28,7 @@
         .table-modern th, .table-modern td { padding: 16px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; }
         .table-modern th { background-color: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.8em; text-transform: uppercase; }
         .money-col { text-align: right; font-weight: 600; }
-        .badge-metodo { background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 700; border: 1px solid #cbd5e1; }
+        .badge-metodo { background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 700; border: 1px solid #cbd5e1; display: inline-block;}
 
         .modern-input { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; box-sizing: border-box; font-family: 'Inter'; font-size: 1em; outline: none; width: 100%; }
         .modern-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
@@ -47,7 +47,10 @@
             
             <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; margin-top: 15px;">
                 <div>
-                    <h1 class="header-title" style="margin-top: 0;">Expediente de Deuda</h1>
+                    <h1 class="header-title" style="margin-top: 0;">
+                        Expediente de Deuda 
+                        {% if deuda.es_credito_bancario %} <span style="font-size: 0.5em; background: #dbeafe; color: #1e40af; padding: 5px 12px; border-radius: 8px; vertical-align: middle; border: 1px solid #bfdbfe;">🏦 PRÉSTAMO</span> {% endif %}
+                    </h1>
                     <p style="color: #64748b; font-weight: 500; margin: 0; line-height: 1.5;">Acreedor: <strong style="color:#0f172a;">{{ deuda.acreedor }}</strong><br> Motivo Inicial: {{ deuda.motivo }}</p>
                 </div>
                 {% if not request.user.groups.all.0.name == 'Solo Ver' %}
@@ -99,10 +102,19 @@
                 <h4>Deuda Inicial Acumulada</h4>
                 <p class="amount" style="color: #64748b;">{{ deuda.importe_inicial|floatformat:2 }} €</p>
             </div>
+            
             <div class="card">
-                <h4>Total Pagado</h4>
+                <h4>Total Pagado (Amortizado)</h4>
                 <p class="amount" style="color: #10b981;">{{ deuda.importe_pagado|floatformat:2 }} €</p>
             </div>
+
+            {% if deuda.es_credito_bancario %}
+            <div class="card" style="background: #fffbeb; border-color: #fde68a;">
+                <h4 style="color: #b45309;">Total Intereses Pagados</h4>
+                <p class="amount" style="color: #d97706;">{{ total_intereses|floatformat:2 }} €</p>
+            </div>
+            {% endif %}
+
             <div class="card" style="{% if deuda.importe_pendiente <= 0 %}background: #ecfdf5; border-color: #10b981;{% else %}background: #fef2f2; border-color: #ef4444;{% endif %}">
                 <h4 style="{% if deuda.importe_pendiente <= 0 %}color: #047857;{% else %}color: #b91c1c;{% endif %}">Pendiente</h4>
                 <p class="amount" style="{% if deuda.importe_pendiente <= 0 %}color: #10b981;{% else %}color: #ef4444;{% endif %}">
@@ -122,27 +134,27 @@
         </div>
 
         {% if not request.user.groups.all.0.name == 'Solo Ver' and deuda.estado == 'Pendiente' %}
-        <div class="section-panel" style="background: #eff6ff; border: 1px dashed #93c5fd; padding: 25px;">
-            <h4 style="margin: 0 0 10px 0; color: #1e40af; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">➕ Ampliar Deuda</h4>
-            <p style="font-size: 0.95em; color: #3b82f6; margin-bottom: 15px; margin-top: 0;">¿Te han prestado más dinero o se ha sumado algún recargo? Añádelo aquí para actualizar el total y dejar el motivo registrado en el historial.</p>
-            
-            <form method="POST" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                {% csrf_token %}
-                <input type="hidden" name="form_type" value="ampliar">
+            <div class="section-panel" style="background: #eff6ff; border: 1px dashed #93c5fd; padding: 25px;">
+                <h4 style="margin: 0 0 10px 0; color: #1e40af; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">➕ Ampliar Deuda Manualmente</h4>
+                <p style="font-size: 0.95em; color: #3b82f6; margin-bottom: 15px; margin-top: 0;">¿Te han prestado más dinero o se ha sumado algún recargo excepcional? Añádelo aquí.</p>
                 
-                <div style="width: 150px;">
-                    <input type="number" step="0.01" min="0.01" name="importe_extra" class="modern-input" style="border-color: #93c5fd;" placeholder="Importe (€)" required>
-                </div>
-                
-                <div style="flex-grow: 1; min-width: 250px;">
-                    <input type="text" name="concepto_extra" class="modern-input" style="border-color: #93c5fd;" placeholder="Motivo (Ej: Préstamo extra para piezas)" required>
-                </div>
+                <form method="POST" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="ampliar">
+                    
+                    <div style="width: 150px;">
+                        <input type="number" step="0.01" min="0.01" name="importe_extra" class="modern-input" style="border-color: #93c5fd;" placeholder="Importe (€)" required>
+                    </div>
+                    
+                    <div style="flex-grow: 1; min-width: 250px;">
+                        <input type="text" name="concepto_extra" class="modern-input" style="border-color: #93c5fd;" placeholder="Motivo (Ej: Préstamo extra para piezas)" required>
+                    </div>
 
-                <button type="submit" style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; white-space: nowrap; font-size: 1em; font-family: 'Inter';" onmouseover="this.style.backgroundColor='#2563eb'" onmouseout="this.style.backgroundColor='#3b82f6'">
-                    Sumar al Total
-                </button>
-            </form>
-        </div>
+                    <button type="submit" style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; white-space: nowrap; font-size: 1em; font-family: 'Inter';" onmouseover="this.style.backgroundColor='#2563eb'" onmouseout="this.style.backgroundColor='#3b82f6'">
+                        Sumar al Total
+                    </button>
+                </form>
+            </div>
         {% endif %}
         
         <div class="section-panel">
@@ -161,7 +173,7 @@
                     </thead>
                     <tbody>
                         {% for mov in historial %}
-                        <tr>
+                        <tr style="{% if mov.tipo == 'interes' %}background-color: #fffbeb;{% endif %}">
                             <td style="color: #64748b; font-weight: 500;">
                                 <div style="display:flex; flex-direction:column;">
                                     <span>{{ mov.fecha|date:"d/m/Y" }}</span>
@@ -178,14 +190,20 @@
                             <td>
                                 {% if mov.tipo == 'ampliacion' %}
                                     <span class="badge-metodo" style="background: #fef2f2; color: #ef4444; border-color: #fecaca;">{{ mov.metodo }}</span>
+                                {% elif mov.tipo == 'interes' %}
+                                    <span class="badge-metodo" style="background: #fef3c7; color: #b45309; border-color: #fde68a;">🏦 Intereses Banco</span>
                                 {% else %}
                                     <span class="badge-metodo">{{ mov.metodo }}</span>
                                 {% endif %}
                             </td>
                             
                             {% if mov.tipo == 'pago' %}
-                                <td class="money-col" style="color: #10b981; font-weight: 800; font-size: 1.1em;">
+                                <td class="money-col" style="color: #10b981; font-weight: 800; font-size: 1.1em;" title="Amortización (Baja la deuda real)">
                                     - {{ mov.importe|floatformat:2 }} €
+                                </td>
+                            {% elif mov.tipo == 'interes' %}
+                                <td class="money-col" style="color: #d97706; font-weight: 800; font-size: 1.1em;" title="Intereses (Gasto para el taller, no baja la deuda)">
+                                    💸 {{ mov.importe|floatformat:2 }} €
                                 </td>
                             {% else %}
                                 <td class="money-col" style="color: #ef4444; font-weight: 800; font-size: 1.1em;">
@@ -264,16 +282,13 @@
     {% include 'taller/widget_ia.html' %}
 
     <script>
-        // Funciones para el Modal de Edición
         function abrirModalEdicion(id, tipo, fecha, importe, descripcion) {
-            // Llenamos los campos del modal con los datos del movimiento
             document.getElementById('edit_mov_id').value = id;
             document.getElementById('edit_mov_tipo').value = tipo;
             document.getElementById('edit_fecha').value = fecha;
             document.getElementById('edit_importe').value = parseFloat(importe.replace(',', '.')).toFixed(2);
             document.getElementById('edit_descripcion').value = descripcion;
             
-            // Mostramos el modal
             document.getElementById('modalEditarMovimiento').style.display = 'flex';
         }
 

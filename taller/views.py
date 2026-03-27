@@ -180,10 +180,6 @@ def home(request):
     ing_efectivo = Ingreso.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_efectivo = Gasto.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_efectivo = ing_efectivo - gas_efectivo
-    
-    ing_erika = Ingreso.objects.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    gas_erika = Gasto.objects.filter(metodo_pago='CUENTA_ERIKA').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-    balance_erika = ing_erika - gas_erika
 
     ing_taller = Ingreso.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_taller = Gasto.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
@@ -231,7 +227,6 @@ def home(request):
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
         'balance_efectivo': balance_efectivo,
-        'balance_erika': balance_erika,
         'balance_taller': balance_taller,
         'tarjeta_1': tarjeta_1,
         'tarjeta_2': tarjeta_2,
@@ -468,14 +463,85 @@ def anadir_gasto(request):
                     empleado = Empleado.objects.get(id=empleado_id)
                 except Empleado.DoesNotExist:
                     pass
+            
+            # ======================================================
+            # --- MAGIA 1: PAGO DE TARJETA DE CRÉDITO ---
+            # ======================================================
+            if categoria == 'PAGO_TARJETA':
+                tarjeta_destino = request.POST.get('tarjeta_destino')
+                saldo_real_str = request.POST.get('saldo_real_banco')
+                
+                if tarjeta_destino and saldo_real_str:
+                    saldo_real_banco = Decimal(saldo_real_str.replace(',', '.'))
                     
+                    # 1. ¿Cuánto se debe en la tarjeta ahora mismo?
+                    gastos_tarjeta = Gasto.objects.filter(metodo_pago=tarjeta_destino).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+                    abonos_tarjeta = Ingreso.objects.filter(metodo_pago=tarjeta_destino).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+                    deuda_app_antes = gastos_tarjeta - abonos_tarjeta
+                    
+                    # 2. Si pago X, la deuda debería bajar a Y
+                    deuda_app_despues = deuda_app_antes - importe_decimal
+                    
+                    # 3. Pero la app del banco dice que debo Z. La diferencia son intereses.
+                    intereses = saldo_real_banco - deuda_app_despues
+                    
+                    with transaction.atomic():
+                        # A. Gasto en el Taller (sale el dinero del banco)
+                        Gasto.objects.create(
+                            metodo_pago=metodo_pago, fecha=fecha_gasto, categoria='PAGO_TARJETA',
+                            importe=importe_decimal, descripcion=descripcion, empleado=empleado
+                        )
+                        # B. Ingreso en la Tarjeta (entra el dinero para bajar la deuda de la tarjeta)
+                        Ingreso.objects.create(
+                            metodo_pago=tarjeta_destino, fecha=fecha_gasto, categoria='ABONO_TARJETA',
+                            importe=importe_decimal, descripcion=f"ABONO DESDE {metodo_pago} - {descripcion}",
+                            es_tpv=False
+                        )
+                        # C. Si hay intereses, los cargamos a la tarjeta para que cuadre matemáticamente
+                        if intereses > 0:
+                            Gasto.objects.create(
+                                metodo_pago=tarjeta_destino, fecha=fecha_gasto, categoria='COMISIONES_INTERESES',
+                                importe=intereses, descripcion=f"INTERESES/COMISIONES - {descripcion}", empleado=empleado
+                            )
+                        # D. Guardamos el histórico del cierre de la tarjeta
+                        CierreTarjeta.objects.create(
+                            fecha_cierre=fecha_gasto, tarjeta=tarjeta_destino, 
+                            pago_cuota=importe_decimal, saldo_deuda_banco=saldo_real_banco, 
+                            intereses_calculados=intereses if intereses > 0 else Decimal('0.00')
+                        )
+                    return redirect('home')
+
+            # ======================================================
+            # --- MAGIA 2: PAGO DE PRÉSTAMO DE BANCO ---
+            # ======================================================
             deuda_taller = None
             if categoria == 'Pago de Deuda' and deuda_id:
                 try:
                     deuda_taller = DeudaTaller.objects.get(id=deuda_id)
+                    if deuda_taller.es_credito_bancario:
+                        saldo_real_str = request.POST.get('saldo_real_banco')
+                        if saldo_real_str:
+                            saldo_real_banco = Decimal(saldo_real_str.replace(',', '.'))
+                            amortizacion = deuda_taller.importe_pendiente - saldo_real_banco
+                            intereses = importe_decimal - amortizacion
+                            
+                            if intereses >= 0 and amortizacion >= 0:
+                                with transaction.atomic():
+                                    Gasto.objects.create(
+                                        metodo_pago=metodo_pago, fecha=fecha_gasto, categoria='Pago de Deuda',
+                                        importe=amortizacion, descripcion=f"AMORTIZACIÓN DE PRINCIPAL - {descripcion}",
+                                        orden=orden, vehiculo=vehiculo, empleado=empleado, deuda_asociada=deuda_taller
+                                    )
+                                    Gasto.objects.create(
+                                        metodo_pago=metodo_pago, fecha=fecha_gasto, categoria='COMISIONES_INTERESES',
+                                        importe=intereses, descripcion=f"INTERESES BANCARIOS ({deuda_taller.acreedor}) - {descripcion}",
+                                        orden=orden, vehiculo=vehiculo, empleado=empleado, deuda_asociada=None
+                                    )
+                                return redirect('home')
                 except DeudaTaller.DoesNotExist:
                     pass
 
+            # Si NO es ni Tarjeta ni Banco Inteligente, guardamos un gasto normal
             Gasto.objects.create(
                 metodo_pago=metodo_pago, fecha=fecha_gasto, categoria=categoria,
                 importe=importe_decimal, descripcion=descripcion,
@@ -1879,7 +1945,6 @@ def historial_cuenta(request, cuenta_nombre):
         'banco': ('CUENTA_TALLER', 'Cuenta Taller (Banco)'),
         'tarjeta1': ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
         'tarjeta2': ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'),
-        'erika': ('CUENTA_ERIKA', 'Cuenta Erika (Antigua)'),
     }
 
     if cuenta_nombre not in mapeo_cuentas: return redirect('home')
@@ -1953,11 +2018,15 @@ def lista_deudas(request):
         motivo = request.POST.get('motivo')
         importe_inicial = request.POST.get('importe_inicial')
         
+        # Atrapamos si se ha marcado la casilla del banco
+        es_banco = request.POST.get('es_credito_bancario') == 'True'
+        
         if acreedor and motivo and importe_inicial:
             DeudaTaller.objects.create(
                 acreedor=acreedor,
                 motivo=motivo,
-                importe_inicial=importe_inicial
+                importe_inicial=importe_inicial,
+                es_credito_bancario=es_banco # <-- Añadimos esto
             )
             return redirect('lista_deudas')
             
@@ -1965,9 +2034,28 @@ def lista_deudas(request):
     deudas_pendientes = [d for d in todas_las_deudas if d.estado == 'Pendiente']
     deudas_pagadas = [d for d in todas_las_deudas if d.estado == 'Pagada']
     
+    # --- CÁLCULO DEL GRAN TOTAL A PAGAR ---
+    total_deudas_normales = sum(d.importe_pendiente for d in deudas_pendientes)
+    
+    # Calculamos lo dispuesto en la Tarjeta 1
+    gastos_t1 = Gasto.objects.filter(metodo_pago='TARJETA_1').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    abonos_t1 = Ingreso.objects.filter(metodo_pago='TARJETA_1').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    deuda_t1 = gastos_t1 - abonos_t1
+    
+    # Calculamos lo dispuesto en la Tarjeta 2
+    gastos_t2 = Gasto.objects.filter(metodo_pago='TARJETA_2').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    abonos_t2 = Ingreso.objects.filter(metodo_pago='TARJETA_2').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+    deuda_t2 = gastos_t2 - abonos_t2
+    
+    total_tarjetas = deuda_t1 + deuda_t2
+    gran_total_deuda = total_deudas_normales + total_tarjetas
+    
     context = {
         'deudas_pendientes': deudas_pendientes,
-        'deudas_pagadas': deudas_pagadas
+        'deudas_pagadas': deudas_pagadas,
+        'gran_total_deuda': gran_total_deuda,
+        'total_deudas_normales': total_deudas_normales,
+        'total_tarjetas': total_tarjetas
     }
     return render(request, 'taller/lista_deudas.html', context)
 
@@ -1982,8 +2070,38 @@ def detalle_deuda(request, deuda_id):
             
         form_type = request.POST.get('form_type')
         
-        # --- AMPLIAR DEUDA (Añade a la base de datos) ---
-        if form_type == 'ampliar':
+        # --- NUEVO: PAGO INTELIGENTE (BANCARIO) ---
+        if form_type == 'pago_inteligente_banco':
+            importe_pago_str = request.POST.get('importe_pago')
+            saldo_real_str = request.POST.get('saldo_real_banco')
+            fecha_str = request.POST.get('fecha_pago')
+            
+            if importe_pago_str and saldo_real_str:
+                try:
+                    importe_pago = Decimal(importe_pago_str.replace(',', '.'))
+                    saldo_real_banco = Decimal(saldo_real_str.replace(',', '.'))
+                    fecha_pago = datetime.strptime(fecha_str, '%Y-%m-%d').date() if fecha_str else timezone.now().date()
+                    
+                    amortizacion = deuda.importe_pendiente - saldo_real_banco
+                    intereses = importe_pago - amortizacion
+                    
+                    if intereses >= 0 and amortizacion >= 0:
+                        with transaction.atomic():
+                            Gasto.objects.create(
+                                fecha=fecha_pago, categoria='Pago de Deuda', importe=amortizacion,
+                                descripcion=f"AMORTIZACIÓN CUOTA PRÉSTAMO: {deuda.acreedor}",
+                                metodo_pago='CUENTA_TALLER', deuda_asociada=deuda
+                            )
+                            Gasto.objects.create(
+                                fecha=fecha_pago, categoria='COMISIONES_INTERESES', importe=intereses,
+                                descripcion=f"INTERESES BANCARIOS ({deuda.acreedor})",
+                                metodo_pago='CUENTA_TALLER', deuda_asociada=None
+                            )
+                except (ValueError, TypeError, Decimal.InvalidOperation):
+                    pass
+
+        # --- AMPLIAR DEUDA (MANUAL) ---
+        elif form_type == 'ampliar':
             importe_extra = request.POST.get('importe_extra')
             concepto_extra = request.POST.get('concepto_extra')
             
@@ -1992,18 +2110,12 @@ def detalle_deuda(request, deuda_id):
                     extra_decimal = Decimal(importe_extra.replace(',', '.'))
                     if extra_decimal > 0:
                         deuda.importe_inicial += extra_decimal
-                        deuda.save() # ¡Se guarda solo el importe, el estado se calcula automático!
-                        
-                        # Creamos el registro histórico
-                        AmpliacionDeuda.objects.create(
-                            deuda=deuda,
-                            importe=extra_decimal,
-                            motivo=concepto_extra
-                        )
+                        deuda.save()
+                        AmpliacionDeuda.objects.create(deuda=deuda, importe=extra_decimal, motivo=concepto_extra)
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
                     
-        # --- EDITAR DEUDA GENERAL (Nombre, Total inicial) ---
+        # --- EDITAR DEUDA GENERAL ---
         elif form_type == 'editar':
             nuevo_acreedor = request.POST.get('acreedor')
             nuevo_motivo = request.POST.get('motivo')
@@ -2012,19 +2124,14 @@ def detalle_deuda(request, deuda_id):
             if nuevo_acreedor and nuevo_motivo and nuevo_importe_str:
                 try:
                     nuevo_importe = Decimal(nuevo_importe_str.replace(',', '.'))
-                    deuda.acreedor = nuevo_acreedor
-                    deuda.motivo = nuevo_motivo
-                    deuda.importe_inicial = nuevo_importe
-                    deuda.save() # ¡Magia automática!
+                    deuda.acreedor = nuevo_acreedor; deuda.motivo = nuevo_motivo; deuda.importe_inicial = nuevo_importe; deuda.save() 
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
                     
         # --- EDITAR UN MOVIMIENTO ESPECÍFICO ---
         elif form_type == 'editar_movimiento':
-            mov_id = request.POST.get('mov_id')
-            mov_tipo = request.POST.get('mov_tipo')
-            nueva_fecha_str = request.POST.get('fecha')
-            nuevo_importe_str = request.POST.get('importe')
+            mov_id = request.POST.get('mov_id'); mov_tipo = request.POST.get('mov_tipo')
+            nueva_fecha_str = request.POST.get('fecha'); nuevo_importe_str = request.POST.get('importe')
             nueva_descripcion = request.POST.get('descripcion')
             
             try:
@@ -2032,47 +2139,40 @@ def detalle_deuda(request, deuda_id):
                 nuevo_importe = Decimal(nuevo_importe_str.replace(',', '.'))
                 
                 if mov_tipo == 'pago':
-                    # Es un Gasto que estamos devolviendo
                     gasto = Gasto.objects.get(id=mov_id, deuda_asociada=deuda)
-                    gasto.fecha = nueva_fecha
-                    gasto.importe = nuevo_importe
-                    gasto.descripcion = nueva_descripcion.upper()
-                    gasto.save()
+                    gasto.fecha = nueva_fecha; gasto.importe = nuevo_importe; gasto.descripcion = nueva_descripcion.upper(); gasto.save()
                 
                 elif mov_tipo == 'ampliacion':
-                    # Es una AmpliacionDeuda (más dinero que nos han prestado)
                     ampliacion = AmpliacionDeuda.objects.get(id=mov_id, deuda=deuda)
-                    
-                    # Tenemos que restar el viejo importe de la deuda total y sumar el nuevo
                     diferencia = nuevo_importe - ampliacion.importe
-                    deuda.importe_inicial += diferencia
-                    deuda.save()
+                    deuda.importe_inicial += diferencia; deuda.save()
+                    ampliacion.fecha = nueva_fecha; ampliacion.importe = nuevo_importe; ampliacion.motivo = nueva_descripcion.upper(); ampliacion.save()
                     
-                    ampliacion.fecha = nueva_fecha
-                    ampliacion.importe = nuevo_importe
-                    ampliacion.motivo = nueva_descripcion.upper()
-                    ampliacion.save()
+                elif mov_tipo == 'interes':
+                    gasto = Gasto.objects.get(id=mov_id, categoria='COMISIONES_INTERESES')
+                    gasto.fecha = nueva_fecha; gasto.importe = nuevo_importe; gasto.descripcion = nueva_descripcion.upper(); gasto.save()
                     
             except (ValueError, TypeError, Decimal.InvalidOperation, Gasto.DoesNotExist, AmpliacionDeuda.DoesNotExist):
                 pass
 
-        # --- BORRAR UN MOVIMIENTO (CORREGIDO) ---
+        # --- BORRAR UN MOVIMIENTO ---
         elif form_type == 'borrar_movimiento':
-            mov_id = request.POST.get('mov_id')
-            mov_tipo = request.POST.get('mov_tipo')
+            mov_id = request.POST.get('mov_id'); mov_tipo = request.POST.get('mov_tipo')
             
             try:
                 if mov_tipo == 'pago':
-                    # Es un Gasto. Al borrarlo, todo se actualiza solo.
                     gasto = Gasto.objects.get(id=mov_id, deuda_asociada=deuda)
+                    if deuda.es_credito_bancario:
+                        Gasto.objects.filter(fecha=gasto.fecha, categoria='COMISIONES_INTERESES').filter(Q(descripcion__icontains=deuda.acreedor) | Q(descripcion__icontains="INTERESES BANCARIOS")).delete()
                     gasto.delete()
                     
                 elif mov_tipo == 'ampliacion':
-                    # Es una Ampliación. Restamos el dinero del total inicial y borramos.
                     ampliacion = AmpliacionDeuda.objects.get(id=mov_id, deuda=deuda)
-                    deuda.importe_inicial -= ampliacion.importe
-                    deuda.save() # Guardamos la resta
-                    ampliacion.delete()
+                    deuda.importe_inicial -= ampliacion.importe; deuda.save(); ampliacion.delete()
+                    
+                elif mov_tipo == 'interes':
+                    gasto_int = Gasto.objects.get(id=mov_id, categoria='COMISIONES_INTERESES')
+                    gasto_int.delete()
                 
             except (Gasto.DoesNotExist, AmpliacionDeuda.DoesNotExist):
                 pass
@@ -2107,19 +2207,41 @@ def detalle_deuda(request, deuda_id):
             'orden': None
         })
         
-    # Ordenar todo por fecha (lo más reciente primero)
+    # --- NUEVO: AÑADIR INTERESES AL HISTORIAL Y CALCULAR EL TOTAL ---
+    total_intereses = Decimal('0.00')
+    if deuda.es_credito_bancario:
+        fechas_pagos = [p.fecha for p in pagos]
+        
+        # Búsqueda inteligente: cualquier interés hecho los mismos días que los pagos, 
+        # o que contenga la palabra "INTERESES BANCARIOS" o el nombre del banco.
+        intereses = Gasto.objects.filter(categoria='COMISIONES_INTERESES').filter(
+            Q(fecha__in=fechas_pagos) | Q(descripcion__icontains=deuda.acreedor) | Q(descripcion__icontains="INTERESES BANCARIOS")
+        ).distinct()
+        
+        for i in intereses:
+            historial_combinado.append({
+                'id_real': i.id,            
+                'fecha': i.fecha,
+                'descripcion': i.descripcion,
+                'metodo': i.get_metodo_pago_display(),
+                'importe': i.importe,
+                'tipo': 'interes', 
+                'orden': None
+            })
+            total_intereses += (i.importe or Decimal('0.00'))
+        
     historial_combinado.sort(key=lambda x: x['fecha'], reverse=True)
     
     porcentaje = 0
     if deuda.importe_inicial > 0:
         porcentaje = (deuda.importe_pagado / deuda.importe_inicial) * 100
-        if porcentaje > 100: 
-            porcentaje = 100
+        if porcentaje > 100: porcentaje = 100
             
     context = {
         'deuda': deuda,
         'historial': historial_combinado,
-        'porcentaje_pagado': porcentaje
+        'porcentaje_pagado': porcentaje,
+        'total_intereses': total_intereses # Pasamos el total a la plantilla HTML
     }
     return render(request, 'taller/detalle_deuda.html', context)
 

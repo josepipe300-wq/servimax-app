@@ -27,10 +27,6 @@
         .progress-bar { height: 100%; border-radius: 5px; background-color: #28a745; }
         .progress-bar.warning { background-color: #ffc107; }
         .progress-bar.danger { background-color: #dc3545; }
-
-        .action-bar { background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 30px; display: flex; justify-content: center; border: 1px dashed #ccc;}
-        .btn-pago-tarjeta { background-color: #007bff; color: white; padding: 12px 25px; border-radius: 5px; text-decoration: none; font-weight: bold; font-size: 1.1em; display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 2px 4px rgba(0,123,255,0.3); }
-        .btn-pago-tarjeta:hover { background-color: #0056b3; }
     </style>
 </head>
 <body>
@@ -41,13 +37,7 @@
         </div>
         <hr>
 
-        <div class="action-bar">
-            <a href="{% url 'registrar_pago_tarjeta' %}" class="btn-pago-tarjeta">
-                <span>💳 Registrar Pago de Tarjeta a Fin de Mes</span>
-            </a>
-        </div>
-
-        <div class="cards-grid">
+        <div class="cards-grid" style="margin-top: 20px;">
             <div class="credit-card roja">
                 <div class="cc-header">
                     <h3>Tarjeta 1 (Revolving)</h3>
@@ -89,7 +79,9 @@
             </div>
         </div>
 
-        <h3 style="margin-top: 40px; border-bottom: 2px solid #eee; padding-bottom: 10px;">Intereses y Cierres Automáticos</h3>
+        <h3 style="margin-top: 40px; border-bottom: 2px solid #eee; padding-bottom: 10px;">Historial de Pagos y Cierres (Inteligentes)</h3>
+        <p style="font-size: 0.9em; color: #666;">Los pagos y el cálculo de intereses ahora se realizan directamente desde la pantalla de <strong>"Añadir Gasto"</strong> (Opción: Pago de Tarjeta de Crédito).</p>
+        
         <table class="report-table">
             <thead>
                 <tr>
@@ -98,7 +90,8 @@
                     <th>Pago Realizado</th>
                     <th>Deuda Reportada</th>
                     <th>Intereses Detectados</th>
-                    <th>Acción</th> </tr>
+                    <th>Acción</th> 
+                </tr>
             </thead>
             <tbody>
                 {% for cierre in cierres %}
@@ -123,11 +116,13 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" style="text-align: center; color: #666; padding: 20px;">Aún no se han registrado pagos de fin de mes.</td>
+                    <td colspan="6" style="text-align: center; color: #666; padding: 20px;">Aún no se han registrado pagos inteligentes de fin de mes.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-    </div> {% include 'taller/widget_ia.html' %}
+    </div> 
+    
+    {% include 'taller/widget_ia.html' %}
 </body>
 </html>

@@ -38,7 +38,7 @@
                 
                 <div class="form-group">
                     <label>¿De dónde sale el dinero?</label>
-                    <select name="metodo_pago" class="form-control" required>
+                    <select name="metodo_pago" id="metodo-pago-select" class="form-control" required>
                         {% for value, label in metodos_pago %}
                             <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
@@ -88,12 +88,31 @@
                     
                     <div id="campo-deuda" class="form-group" style="display: none; background: #fff5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #ef4444;">
                         <label style="color: #ef4444;">🚨 Pagar deuda a:</label>
-                        <select name="deuda" class="form-control" style="border-color: #fca5a5;">
+                        <select name="deuda" id="deuda-select" class="form-control" style="border-color: #fca5a5;">
                             <option value="">-- Selecciona la Deuda --</option>
                             {% for deuda in deudas_pendientes %}
-                                <option value="{{ deuda.id }}">{{ deuda.acreedor }} - Resta: {{ deuda.importe_pendiente }}€</option>
+                                <option value="{{ deuda.id }}" data-es-banco="{% if deuda.es_credito_bancario %}true{% else %}false{% endif %}">
+                                    {{ deuda.acreedor }} - Resta: {{ deuda.importe_pendiente }}€
+                                </option>
                             {% endfor %}
                         </select>
+                    </div>
+
+                    <div id="campo-tarjeta-destino" class="form-group" style="display: none; background: #fffbeb; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                        <label style="color: #d97706;">💳 Selecciona la Tarjeta a pagar:</label>
+                        <select name="tarjeta_destino" id="tarjeta-select" class="form-control" style="border-color: #fcd34d;">
+                            <option value="">-- Elige una tarjeta --</option>
+                            <option value="TARJETA_1">Tarjeta 1 (Visa 2000€)</option>
+                            <option value="TARJETA_2">Tarjeta 2 (Visa 1000€)</option>
+                        </select>
+                        <p style="font-size: 0.75em; color: #b45309; margin: 5px 0 0 0; text-transform: none;">* Asegúrate de que arriba en "¿De dónde sale el dinero?" esté puesto <b>Cuenta Taller</b>.</p>
+                    </div>
+
+                    <div id="campo-banco-inteligente" class="form-group" style="display: none; background: #f0fdf4; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981; margin-top: -10px;">
+                        <h4 style="margin: 0 0 10px 0; color: #047857; font-size: 0.95em;">🏦 Cálculo Inteligente de Banco/Tarjeta</h4>
+                        <label style="color: #059669;" id="label-saldo-banco">Deuda Restante según el Banco/App (€):</label>
+                        <input type="number" step="0.01" name="saldo_real_banco" id="saldo-banco-input" class="form-control" style="border-color: #6ee7b7;" placeholder="Ej: 24500.00 o 350.00">
+                        <p style="font-size: 0.75em; color: #059669; margin: 5px 0 0 0; text-transform: none;">El sistema restará el pago de arriba y añadirá la diferencia como intereses o comisiones automáticamente.</p>
                     </div>
 
                     <div id="campo-empleado" class="form-group" style="display: none;">
@@ -117,8 +136,8 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Importe (€):</label>
-                        <input type="number" step="0.01" name="importe" id="importe-input" class="form-control" placeholder="0.00">
+                        <label>Importe Pagado (€):</label>
+                        <input type="number" step="0.01" name="importe" id="importe-input" class="form-control" placeholder="Ej: 470.00">
                     </div>
 
                     <div class="form-group">
@@ -128,7 +147,7 @@
 
                     <div class="form-group">
                         <label>Descripción / Concepto:</label>
-                        <input type="text" name="descripcion" id="descripcion-input" class="form-control" placeholder="Ej: Factura luz, Repuesto filtro...">
+                        <input type="text" name="descripcion" id="descripcion-input" class="form-control" placeholder="Ej: Cuota mensual, Factura luz, Repuesto filtro...">
                     </div>
                 </div>
 
@@ -140,16 +159,25 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const selectCat = document.getElementById('categoria-select');
+            const selectDeuda = document.getElementById('deuda-select');
+            const selectMetodoPago = document.getElementById('metodo-pago-select');
+            
             const bloqueConsumibles = document.getElementById('bloque-consumibles');
             const bloqueNormal = document.getElementById('bloque-normal');
             
             const campoDeuda = document.getElementById('campo-deuda');
             const campoEmpleado = document.getElementById('campo-empleado');
             const campoOrden = document.getElementById('campo-orden');
+            const campoBancoInteligente = document.getElementById('campo-banco-inteligente');
+            const campoTarjetaDestino = document.getElementById('campo-tarjeta-destino');
+            const selectTarjetaDestino = document.getElementById('tarjeta-select');
             
             const inputImporte = document.getElementById('importe-input');
             const inputDesc = document.getElementById('descripcion-input');
+            const inputSaldoBanco = document.getElementById('saldo-banco-input');
+            const labelSaldoBanco = document.getElementById('label-saldo-banco');
 
+            // --- Lógica General de Categorías ---
             function actualizarCampos() {
                 const cat = selectCat.value;
                 
@@ -159,14 +187,18 @@
                 campoDeuda.style.display = 'none';
                 campoEmpleado.style.display = 'none';
                 campoOrden.style.display = 'none';
+                campoBancoInteligente.style.display = 'none';
+                campoTarjetaDestino.style.display = 'none';
                 
-                // 2. Quitar el 'required' para que no bloquee el formulario si están ocultos
+                // 2. Quitar requireds
                 inputImporte.required = false;
                 inputDesc.required = false;
+                inputSaldoBanco.required = false;
+                selectTarjetaDestino.required = false;
 
                 if (!cat) return;
 
-                // 3. Mostrar según la categoría elegida
+                // 3. Mostrar según categoría
                 if (cat === 'Compra de Consumibles') {
                     bloqueConsumibles.style.display = 'block';
                 } else {
@@ -181,13 +213,55 @@
                     } else if (cat === 'Pago de Deuda') {
                         campoDeuda.style.display = 'block';
                         campoOrden.style.display = 'block'; 
+                        comprobarSiEsBanco(); 
+                    } else if (cat === 'PAGO_TARJETA') {
+                        // LA MAGIA DE LA TARJETA
+                        campoTarjetaDestino.style.display = 'block';
+                        selectTarjetaDestino.required = true;
+                        
+                        campoBancoInteligente.style.display = 'block';
+                        inputSaldoBanco.required = true;
+                        labelSaldoBanco.innerText = 'Deuda Restante de la Tarjeta en la App (€):';
+                        
+                        // Ayudita: Auto-seleccionar Cuenta Taller y poner texto
+                        selectMetodoPago.value = 'CUENTA_TALLER';
+                        if (inputDesc.value === '') {
+                            inputDesc.value = 'PAGO CUOTA MENSUAL TARJETA';
+                        }
                     }
                 }
             }
 
+            // --- Lógica Específica para Deudas de Banco ---
+            function comprobarSiEsBanco() {
+                if (selectCat.value !== 'Pago de Deuda') return;
+                
+                const opcionElegida = selectDeuda.options[selectDeuda.selectedIndex];
+                if (!opcionElegida || !opcionElegida.value) {
+                    campoBancoInteligente.style.display = 'none';
+                    inputSaldoBanco.required = false;
+                    return;
+                }
+
+                // Leer el atributo de la base de datos
+                const esBanco = opcionElegida.getAttribute('data-es-banco') === 'true';
+                
+                if (esBanco) {
+                    campoBancoInteligente.style.display = 'block';
+                    inputSaldoBanco.required = true;
+                    labelSaldoBanco.innerText = 'Deuda Restante del Préstamo en el Banco (€):';
+                } else {
+                    campoBancoInteligente.style.display = 'none';
+                    inputSaldoBanco.required = false;
+                }
+            }
+
             selectCat.addEventListener('change', actualizarCampos);
+            selectDeuda.addEventListener('change', comprobarSiEsBanco);
+            
             actualizarCampos(); // Ejecutar al cargar la página
         });
-    </script> {% include 'taller/widget_ia.html' %}
+    </script> 
+    {% include 'taller/widget_ia.html' %}
 </body>
 </html>

@@ -17,11 +17,18 @@
         
         .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
         
+        /* Panel del Gran Total (Copiado de deudas pero en verde) */
+        .summary-grid { display: grid; grid-template-columns: 1fr; margin-bottom: 30px; margin-top: 20px; }
+        .total-card-header { background: #ecfdf5; border: 2px solid #a7f3d0; padding: 25px; border-radius: 16px; text-align: center; box-shadow: 0 4px 10px rgba(16,185,129,0.1); }
+        .total-card-header h4 { color: #047857; font-size: 1.1em; font-weight: 800; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 0.05em;}
+        .total-card-header .amount { font-size: 3.5em; font-weight: 800; margin: 0; color: #10b981; text-shadow: 1px 1px 0px rgba(0,0,0,0.05);}
+        .total-breakdown { display: flex; justify-content: center; gap: 30px; margin-top: 15px; font-size: 1em; color: #064e3b; background: rgba(255,255,255,0.6); padding: 10px; border-radius: 8px; display: inline-flex;}
+
         /* Panel de Filtros */
         .filter-card { 
             background: #ffffff; padding: 24px; border-radius: 16px; 
             border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); 
-            margin-bottom: 30px; margin-top: 20px;
+            margin-bottom: 30px;
         }
         .filter-grid { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
         .form-group { display: flex; flex-direction: column; gap: 8px; flex-grow: 1; min-width: 200px; }
@@ -58,22 +65,12 @@
         
         /* Efecto Click en Fila */
         .modern-table tbody tr { cursor: pointer; transition: all 0.2s; }
-        .modern-table tbody tr:hover { background-color: #fffbeb; transform: scale(1.002); box-shadow: 0 4px 10px rgba(0,0,0,0.05); z-index: 10; position: relative;}
+        .modern-table tbody tr:hover { background-color: #f0fdf4; transform: scale(1.002); box-shadow: 0 4px 10px rgba(0,0,0,0.05); z-index: 10; position: relative;}
         .modern-table tr:last-child td { border-bottom: none; }
 
         /* Elementos Tabla */
         .matricula-tag { background: #f1f5f9; padding: 4px 8px; border-radius: 6px; font-weight: 700; border: 1px solid #e2e8f0; font-family: monospace; font-size: 1.1em; color: #0f172a; margin-top: 4px; display: inline-block;}
-        .pending-amount { color: #d97706; font-weight: 800; font-size: 1.1em; background: #fef3c7; padding: 6px 12px; border-radius: 8px; border: 1px solid #fde68a; display: inline-block;}
-
-        /* Tarjeta de Total */
-        .total-card {
-            background: #f59e0b; color: white; padding: 25px 30px;
-            border-radius: 16px; display: flex; justify-content: space-between;
-            align-items: center; box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.3);
-            flex-wrap: wrap; gap: 15px;
-        }
-        .total-label { font-size: 1.1em; font-weight: 600; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.05em; }
-        .total-amount { font-size: 2.5em; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+        .pending-amount { color: #059669; font-weight: 800; font-size: 1.1em; background: #d1fae5; padding: 6px 12px; border-radius: 8px; border: 1px solid #a7f3d0; display: inline-block;}
 
         /* Estado Vacío */
         .empty-state { text-align: center; padding: 60px 20px; color: #64748b; }
@@ -81,10 +78,31 @@
 </head>
 <body>
     <div class="container">
-        <div style="margin-bottom: 20px;">
+        <div style="margin-bottom: 10px;">
             <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.95em;">← Volver al Panel Principal</a>
-            <h1 class="header-title" style="margin-top: 10px;">⚠️ Cuentas por Cobrar</h1>
-            <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Listado de clientes que tienen facturas o recibos pendientes de pago total o parcial.</p>
+            <h1 class="header-title" style="margin-top: 10px;">Cuentas por Cobrar</h1>
+            <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Listado de clientes que tienen facturas o recibos pendientes de pago.</p>
+        </div>
+
+        <div class="summary-grid">
+            <div class="total-card-header">
+                <h4>💰 Dinero Pendiente en la Calle</h4>
+                <p class="amount">{{ total_pendiente|floatformat:2 }} €</p>
+                <div style="text-align: center;">
+                    <div class="total-breakdown">
+                        <span>Filtro Actual: 
+                            <b>
+                                {% if mes_seleccionado or ano_seleccionado %}
+                                    {% if mes_seleccionado %}Mes {{ mes_seleccionado }} - {% endif %} 
+                                    {% if ano_seleccionado %}{{ ano_seleccionado }}{% else %}Todos los años{% endif %}
+                                {% else %}
+                                    Histórico Completo
+                                {% endif %}
+                            </b>
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <div class="filter-card">
@@ -119,7 +137,7 @@
                         <th>Cliente Deudor</th>
                         <th>Vehículo Asociado</th>
                         <th style="text-align: right;">Total Facturado</th>
-                        <th style="text-align: right; background: #fffbeb; color: #b45309;">Pendiente de Cobro</th>
+                        <th style="text-align: right; background: #ecfdf5; color: #047857;">Pendiente de Cobro</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -152,11 +170,6 @@
             </table>
         </div>
 
-        <div class="total-card">
-            <div class="total-label">Dinero Total Pendiente en la Calle</div>
-            <div class="total-amount">{{ total_pendiente|floatformat:2 }} €</div>
-        </div>
-
     </div>
 
     <script>
@@ -165,6 +178,7 @@
                 window.location.href = row.dataset.url;
             });
         });
-    </script> {% include 'taller/widget_ia.html' %}
+    </script> 
+    {% include 'taller/widget_ia.html' %}
 </body>
 </html>
