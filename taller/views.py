@@ -786,8 +786,23 @@ def crear_presupuesto(request):
 
 @login_required
 def lista_presupuestos(request):
+    # --- NUEVO: Capturar la orden de borrar presupuesto ---
+    if request.method == 'POST' and 'borrar_presupuesto' in request.POST:
+        if request.user.groups.filter(name='Solo Ver').exists() or not request.user.is_superuser:
+            return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para borrar presupuestos.</p>")
+        
+        presupuesto_id = request.POST.get('presupuesto_id')
+        try:
+            presupuesto_a_borrar = Presupuesto.objects.get(id=presupuesto_id)
+            presupuesto_a_borrar.delete()
+        except Presupuesto.DoesNotExist:
+            pass
+        return redirect('lista_presupuestos')
+    # ------------------------------------------------------
+
     estado_filtro = request.GET.get('estado'); ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
     presupuestos_qs = Presupuesto.objects.select_related('cliente', 'vehiculo').order_by('-fecha_creacion')
+    
     if estado_filtro and estado_filtro in [choice[0] for choice in Presupuesto.ESTADO_CHOICES]:
         presupuestos_qs = presupuestos_qs.filter(estado=estado_filtro)
     if ano_seleccionado:
@@ -799,8 +814,10 @@ def lista_presupuestos(request):
             if 1 <= mes_int <= 12: presupuestos_qs = presupuestos_qs.filter(fecha_creacion__month=mes_int)
             else: mes_seleccionado = None
          except (ValueError, TypeError): mes_seleccionado = None
+         
     anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
     ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None; mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
+    
     context = {
         'presupuestos': presupuestos_qs, 'estado_actual': estado_filtro, 'estados_posibles': Presupuesto.ESTADO_CHOICES,
         'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles, 'ano_seleccionado': ano_sel_int,
@@ -2642,14 +2659,55 @@ def asistente_ia(request):
 def agenda_taller(request):
     from django.utils import timezone
     from django.db.models.functions import ExtractYear
-    from datetime import timedelta
+    from datetime import timedelta, datetime
     
+    # --- ATRAMAPOS LOS FORMULARIOS DE LA AGENDA ---
+    if request.method == 'POST':
+        form_type = request.POST.get('form_type')
+        
+        # 1. Nueva cita manual
+        if form_type == 'nueva_cita_manual':
+            nombre = request.POST.get('nombre_cliente')
+            vehiculo = request.POST.get('vehiculo_info')
+            motivo = request.POST.get('motivo')
+            notas = request.POST.get('notas_adicionales')
+            fecha_str = request.POST.get('fecha')
+            hora_str = request.POST.get('hora')
+
+            if nombre and motivo and fecha_str and hora_str:
+                try:
+                    fecha_completa = f"{fecha_str} {hora_str}"
+                    fecha_obj = datetime.strptime(fecha_completa, "%Y-%m-%d %H:%M")
+                    fecha_aware = timezone.make_aware(fecha_obj)
+                    Cita.objects.create(
+                        nombre_cliente=nombre.upper(),
+                        vehiculo_info=vehiculo.upper() if vehiculo else '',
+                        motivo=motivo.upper(),
+                        notas_adicionales=notas,
+                        fecha_hora=fecha_aware,
+                        estado='Pendiente'
+                    )
+                except Exception:
+                    pass
+                    
+        # 2. Marcar como "Ya en taller"
+        elif form_type == 'marcar_llegada':
+            cita_id = request.POST.get('cita_id')
+            if cita_id:
+                try:
+                    cita = Cita.objects.get(id=cita_id)
+                    cita.estado = 'En taller'
+                    cita.save()
+                except Cita.DoesNotExist:
+                    pass
+                    
+        return redirect('agenda')
+    # ------------------------------------------------------------------
+
     hoy = timezone.now().date()
     
     # Atrapamos si queremos ver las pendientes o el historial
     filtro = request.GET.get('filtro', 'pendientes')
-    
-    # --- NUEVO: Atrapamos los datos del filtro ---
     ano_seleccionado = request.GET.get('ano', '')
     mes_seleccionado = request.GET.get('mes', '')
     
@@ -2657,16 +2715,14 @@ def agenda_taller(request):
         # Buscamos todos los que ya vinieron o cancelaron
         citas_historial = Cita.objects.filter(estado__in=['En taller', 'Cancelada'])
         
-        # Filtramos por Año / Mes si has tocado el desplegable
         if ano_seleccionado and ano_seleccionado.isdigit():
             citas_historial = citas_historial.filter(fecha_hora__year=int(ano_seleccionado))
         if mes_seleccionado and mes_seleccionado.isdigit():
             citas_historial = citas_historial.filter(fecha_hora__month=int(mes_seleccionado))
             
-        # MAGIA: Si no has tocado nada, por defecto filtramos SOLO ESTA SEMANA
         if not ano_seleccionado and not mes_seleccionado:
-            inicio_semana = hoy - timedelta(days=hoy.weekday()) # Busca el Lunes de esta semana
-            fin_semana = inicio_semana + timedelta(days=6)      # Busca el Domingo
+            inicio_semana = hoy - timedelta(days=hoy.weekday()) 
+            fin_semana = inicio_semana + timedelta(days=6)      
             citas_historial = citas_historial.filter(fecha_hora__date__gte=inicio_semana, fecha_hora__date__lte=fin_semana)
             
         citas_hoy = citas_historial.order_by('-fecha_hora')
@@ -2676,9 +2732,7 @@ def agenda_taller(request):
         citas_hoy = Cita.objects.filter(fecha_hora__date=hoy, estado='Pendiente').order_by('fecha_hora')
         citas_proximas = Cita.objects.filter(fecha_hora__date__gt=hoy, estado='Pendiente').order_by('fecha_hora')[:15]
     
-    # --- Sacar los años disponibles automáticamente para el desplegable ---
     anos_crudos = Cita.objects.filter(estado__in=['En taller', 'Cancelada']).annotate(year=ExtractYear('fecha_hora')).values_list('year', flat=True)
-    # ¡Magia pura!: set() elimina cualquier duplicado instantáneamente
     anos_disponibles = sorted(list(set(filter(None, anos_crudos))), reverse=True)
     if not anos_disponibles:
         anos_disponibles = [hoy.year]
@@ -2687,7 +2741,6 @@ def agenda_taller(request):
         'citas_hoy': citas_hoy,
         'citas_proximas': citas_proximas,
         'filtro': filtro,
-        # Variables nuevas para que el HTML sepa qué pintar
         'ano_seleccionado': int(ano_seleccionado) if ano_seleccionado.isdigit() else '',
         'mes_seleccionado': str(mes_seleccionado),
         'anos_disponibles': anos_disponibles,

@@ -75,6 +75,10 @@
 
         /* Estado Vacío */
         .empty-state { text-align: center; padding: 60px 20px; color: #64748b; }
+
+        /* Botón borrar (Papelera) */
+        .btn-borrar { background: none; border: none; color: #ef4444; font-size: 1.3em; cursor: pointer; padding: 5px; border-radius: 8px; transition: 0.2s; }
+        .btn-borrar:hover { background-color: #fee2e2; transform: scale(1.1); }
     </style>
 </head>
 <body>
@@ -138,6 +142,9 @@
                         <th style="text-align: right;">Total Estimado</th>
                         {% endif %}
                         <th style="text-align: center;">Estado</th>
+                        {% if request.user.is_superuser %}
+                        <th style="text-align: center;">Acciones</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -174,10 +181,20 @@
                                     {{ p.get_estado_display }}
                                 </span>
                             </td>
+                            {% if request.user.is_superuser %}
+                            <td style="text-align: center;" class="columna-accion">
+                                <form method="POST" style="margin: 0;" onsubmit="return confirm('⚠️ ¿Estás completamente seguro de que quieres BORRAR este presupuesto? Esta acción no se puede deshacer.');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="borrar_presupuesto" value="true">
+                                    <input type="hidden" name="presupuesto_id" value="{{ p.id }}">
+                                    <button type="submit" class="btn-borrar" title="Borrar presupuesto">🗑️</button>
+                                </form>
+                            </td>
+                            {% endif %}
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="6" class="empty-state">
+                            <td colspan="7" class="empty-state">
                                 <span style="font-size: 3em; display: block; margin-bottom: 10px;">📋</span>
                                 <strong style="font-size: 1.2em; color: #475569;">No hay presupuestos</strong><br>
                                 Prueba a cambiar los filtros o crea uno nuevo para empezar.
@@ -196,10 +213,14 @@
 
     <script>
         document.querySelectorAll('tr[data-url]').forEach(row => {
-            row.addEventListener('click', () => {
-                window.location.href = row.dataset.url;
+            row.addEventListener('click', (e) => {
+                // Evitar que nos mande al detalle si hemos hecho clic en la columna de acciones (la papelera)
+                if (!e.target.closest('.columna-accion')) {
+                    window.location.href = row.dataset.url;
+                }
             });
         });
-    </script> {% include 'taller/widget_ia.html' %}
+    </script> 
+    {% include 'taller/widget_ia.html' %}
 </body>
 </html>
