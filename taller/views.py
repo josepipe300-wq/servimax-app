@@ -30,6 +30,9 @@ from urllib.parse import quote
 import google.generativeai as genai
 from . import ai_tools
 
+# --- VISTA PARA SINCRONIZAR CORREOS DEL ESCÁNER ---
+from django.contrib import messages
+
 # ==============================================================
 # --- CANDADO DE SEGURIDAD PARA EL MODO LECTURA (PADRE) ---
 # ==============================================================
@@ -307,7 +310,11 @@ def ingresar_vehiculo(request):
         modelo_vehiculo = request.POST['vehiculo_modelo'].upper()
         kilometraje_vehiculo_str = request.POST.get('vehiculo_kilometraje')
         kilometraje_vehiculo = int(kilometraje_vehiculo_str) if kilometraje_vehiculo_str else 0
+        
         problema_reportado = request.POST['problema'].upper()
+        
+        # --- NUEVO: Atrapamos el texto de los daños previos ---
+        danos_previos = request.POST.get('danos_previos', '').upper()
 
         with transaction.atomic():
             if cliente_id:
@@ -348,15 +355,29 @@ def ingresar_vehiculo(request):
                          vehiculo.save()
                 except Presupuesto.DoesNotExist: pass
 
-            nueva_orden = OrdenDeReparacion.objects.create(cliente=cliente, vehiculo=vehiculo, problema=problema_reportado, presupuesto_origen=presupuesto)
+            # --- NUEVO: Añadimos danos_previos al crear la orden ---
+            nueva_orden = OrdenDeReparacion.objects.create(
+                cliente=cliente, vehiculo=vehiculo, problema=problema_reportado, 
+                presupuesto_origen=presupuesto, danos_previos=danos_previos
+            )
             if presupuesto:
                 presupuesto.estado = 'Convertido'; presupuesto.save()
 
+            # 1. Guardar las 5 fotos principales (Frontal, Trasera...)
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
                 if foto_campo in request.FILES:
                     FotoVehiculo.objects.create(orden=nueva_orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1])
+            
+            # 2. --- NUEVO: GUARDAR LAS FOTOS INFINITAS DE DAÑOS PREVIOS ---
+            fotos_danos = request.FILES.getlist('fotos_danos')
+            for index, foto in enumerate(fotos_danos):
+                FotoVehiculo.objects.create(
+                    orden=nueva_orden, 
+                    imagen=foto, 
+                    descripcion=f"DAÑO PREVIO {index + 1}"
+                )
 
         return redirect('detalle_orden', orden_id=nueva_orden.id)
 
@@ -2796,3 +2817,26 @@ def ver_historial_ia(request):
     conversaciones = HistorialIA.objects.all()[:50]
     
     return render(request, 'taller/historial_ia.html', {'conversaciones': conversaciones})
+
+@login_required
+@bloquear_lectura
+def sincronizar_escaner(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("🔒 Acceso denegado. Solo Administración puede sincronizar el escáner.")
+        
+    from .lector_correos import descargar_y_asignar_reportes
+    
+    # Ejecutamos el lector de correos
+    resultado = descargar_y_asignar_reportes()
+    
+    # Creamos un mensaje visual dependiendo de si fue bien o mal
+    if resultado['status'] == 'success':
+        messages.success(request, resultado['mensaje'])
+    elif resultado['status'] == 'warning':
+        messages.warning(request, resultado['mensaje'])
+    elif resultado['status'] == 'info':
+        messages.info(request, resultado['mensaje'])
+    else:
+        messages.error(request, resultado['mensaje'])
+        
+    return redirect('lista_ordenes')    

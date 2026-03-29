@@ -99,6 +99,7 @@ class OrdenDeReparacion(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     presupuesto_origen = models.ForeignKey('Presupuesto', null=True, blank=True, on_delete=models.SET_NULL)
     problema = models.TextField()
+    danos_previos = models.TextField(blank=True, null=True, verbose_name="Daños Previos (Rayones, golpes...)")
     estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='Recibido')
     fecha_entrada = models.DateTimeField(default=timezone.now)
     trabajo_interno = models.BooleanField(default=False, verbose_name="Vehículo del Taller")
@@ -567,3 +568,13 @@ class HistorialIA(models.Model):
 
     def __str__(self):
         return f"{self.fecha.strftime('%d/%m %H:%M')} | {self.usuario} -> {self.accion_ejecutada}"
+
+class ReporteEscaner(models.Model):
+    orden = models.ForeignKey(OrdenDeReparacion, related_name='reportes_escaner', on_delete=models.CASCADE)
+    archivo_pdf = models.FileField(upload_to='reportes_escaner/', blank=True, null=True, verbose_name="Archivo PDF del Escáner")
+    enlace_web = models.URLField(max_length=500, blank=True, null=True, verbose_name="Enlace del Escáner")
+    fecha_subida = models.DateTimeField(auto_now_add=True)
+    descripcion = models.CharField(max_length=255, default="Reporte de Diagnóstico Automático")
+
+    def __str__(self):
+        return f"Reporte Escáner - Orden #{self.orden.id}"        

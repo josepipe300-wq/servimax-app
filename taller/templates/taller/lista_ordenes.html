@@ -13,8 +13,17 @@
         
         .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
         
+        /* SISTEMA DE ALERTAS (MENSAJES DE SINCRONIZACIÓN) */
+        .alert { padding: 16px 20px; border-radius: 12px; margin-bottom: 20px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; animation: fadeIn 0.4s ease-in-out; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .alert-success { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .alert-warning { background-color: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+        .alert-info { background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+        .alert-error { background-color: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+        .btn-cerrar-alerta { background: none; border: none; font-size: 1.5em; font-weight: bold; cursor: pointer; opacity: 0.5; transition: 0.2s; line-height: 1; padding: 0; }
+        .btn-cerrar-alerta:hover { opacity: 1; }
+
         /* SISTEMA DE PESTAÑAS (TABS) */
-        .tabs-container { display: flex; gap: 15px; margin-top: 30px; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 0px; }
+        .tabs-container { display: flex; gap: 15px; margin-top: 20px; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 0px; }
         .tab-btn { 
             background: transparent; border: none; padding: 12px 24px; font-size: 1.1em; font-weight: 700; 
             color: #64748b; cursor: pointer; transition: 0.2s; border-bottom: 4px solid transparent; margin-bottom: -2px;
@@ -60,6 +69,10 @@
         .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); filter: brightness(1.1); }
         .btn-primary { background-color: #3b82f6; }
         
+        /* Botón de Escáner */
+        .btn-escaner { width: auto; background-color: #10b981; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); font-size: 1em;}
+        .btn-escaner:hover { background-color: #059669; box-shadow: 0 8px 15px rgba(16, 185, 129, 0.3); }
+
         .btn-move { background: none; border: none; color: #64748b; font-size: 0.8em; font-weight: 600; cursor: pointer; text-decoration: underline; margin-top: 15px; width: 100%; text-align: center; transition: color 0.2s; }
         .btn-move:hover { color: #0f172a; }
 
@@ -68,10 +81,30 @@
 </head>
 <body>
     <div class="container">
-        <div style="margin-bottom: 10px;">
-            <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em;">← Volver al Inicio</a>
-            <h1 class="header-title">Taller en Vivo</h1>
-            <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Controla el flujo de trabajo y los tiempos de reparación.</p>
+        
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    <span>{{ message }}</span>
+                    <button class="btn-cerrar-alerta" onclick="this.parentElement.style.display='none'">&times;</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em;">← Volver al Inicio</a>
+                <h1 class="header-title">Taller en Vivo</h1>
+                <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Controla el flujo de trabajo y los tiempos de reparación.</p>
+            </div>
+            
+            {% if request.user.is_superuser %}
+            <div>
+                <a href="{% url 'sincronizar_escaner' %}" class="btn-modern btn-escaner" title="Busca correos nuevos del escáner y los asigna automáticamente">
+                    📥 Sincronizar Escáner
+                </a>
+            </div>
+            {% endif %}
         </div>
 
         <div class="tabs-container">

@@ -32,6 +32,7 @@ urlpatterns = [
     path('ordenes/', views.lista_ordenes, name='lista_ordenes'),
     path('orden/<int:orden_id>/', views.detalle_orden, name='detalle_orden'),
     path('historial-ordenes/', views.historial_ordenes, name='historial_ordenes'),
+    path('sincronizar-escaner/', views.sincronizar_escaner, name='sincronizar_escaner'),
     
     # Facturas
     path('orden/<int:orden_id>/factura/generar/', views.generar_factura, name='generar_factura'),

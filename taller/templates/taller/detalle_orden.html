@@ -49,10 +49,10 @@
         .estado-badge { padding: 6px 14px; border-radius: 9999px; font-weight: 700; font-size: 0.9em; letter-spacing: 0.02em; display: inline-block;}
         .estado-recibido { background-color: #f1f5f9; color: #475569; }
         .estado-diagnostico { background-color: #fef3c7; color: #92400e; }
-        .estado-autorizacion { background-color: #ffedd5; color: #c2410c; border: 1px dashed #fdba74;} /* NUEVO */
+        .estado-autorizacion { background-color: #ffedd5; color: #c2410c; border: 1px dashed #fdba74;} 
         .estado-piezas { background-color: #ffe4e6; color: #e11d48; }
         .estado-reparacion { background-color: #dbeafe; color: #1e40af; }
-        .estado-pruebas { background-color: #e0e7ff; color: #4338ca; border: 1px solid #a5b4fc;} /* NUEVO */
+        .estado-pruebas { background-color: #e0e7ff; color: #4338ca; border: 1px solid #a5b4fc;} 
         .estado-listo { background-color: #dcfce7; color: #166534; }
         .estado-entregado { background-color: #10b981; color: white; }
 
@@ -71,6 +71,10 @@
         .btn-primary { background-color: #3b82f6; }
         .btn-whatsapp { background-color: #25D366; }
         
+        /* Botón Escáner */
+        .btn-escaner { background-color: #1e293b; border: 1px solid #334155; color: white; width: 100%; justify-content: flex-start; gap: 10px;}
+        .btn-escaner:hover { background-color: #0f172a; }
+
         /* Formularios UI */
         .modern-input { 
             border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 14px; 
@@ -126,7 +130,7 @@
         
         <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
             <div>
-                <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em;">← Volver al Inicio</a>
+                <a href="{% url 'lista_ordenes' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em;">← Volver al Taller en Vivo</a>
                 <h1 class="header-title">Detalle de la Orden #{{ orden.id }}</h1>
             </div>
             <div style="text-align: right;">
@@ -238,12 +242,31 @@
             <div class="section-panel" style="margin-bottom: 0;">
                 <h3 class="section-title">📋 Problema Reportado (Motivo de entrada)</h3>
                 <p style="white-space: pre-line; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; color: #1e293b; font-size: 1.05em; line-height: 1.5;">{{ orden.problema }}</p>
+                
                 {% if orden.presupuesto_origen %}
                     <p style="margin-top: 12px; font-size: 0.9em; color: #64748b; font-weight: 500;">
                         <em>↳ Esta orden proviene del <a href="{% url 'detalle_presupuesto' orden.presupuesto_origen.id %}" style="color: #3b82f6; text-decoration: none;">Presupuesto #{{ orden.presupuesto_origen.id }}</a></em>
                     </p>
                 {% endif %}
-            </div>
+
+                {% if orden.reportes_escaner.all %}
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 2px dashed #e2e8f0;">
+                    <h4 style="margin: 0 0 15px 0; color: #0f172a; font-size: 1em; display: flex; align-items: center; gap: 8px;">
+                        📡 Reportes de Escáner Digital (Sincronizados)
+                    </h4>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        {% for reporte in orden.reportes_escaner.all %}
+                            {% if reporte.enlace_web %}
+                                <a href="{{ reporte.enlace_web }}" target="_blank" class="btn-modern btn-escaner">
+                                    <span style="font-size: 1.2em;">📑</span> 
+                                    <span>Ver {{ reporte.descripcion }} <br><small style="color: #94a3b8; font-weight: 500;">(Capturado el {{ reporte.fecha_subida|date:"d/m/Y H:i" }})</small></span>
+                                </a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                </div>
 
             {% if not request.user.groups.all.0.name == 'Solo Ver' %}
             <div class="section-panel" style="margin-bottom: 0; border: 2px solid #e2e8f0;">
