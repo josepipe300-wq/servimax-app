@@ -27,13 +27,11 @@ def descargar_y_asignar_reportes():
         mail.login(CORREO_TALLER, PASSWORD_APP)
         mail.select("inbox")
         
-        # 1. CAMBIO MAGISTRAL: Buscamos TODOS los correos (Leídos y No Leídos)
         status, mensajes = mail.search(None, "ALL")
         if status != "OK" or not mensajes[0]:
             print("✅ No hay correos.")
             return {"status": "info", "mensaje": "La bandeja de entrada está vacía."}
         
-        # 2. Cogemos una base más amplia (los últimos 15 correos de la bandeja)
         id_lista = mensajes[0].split()[-15:] 
         print(f"📩 Revisando los últimos {len(id_lista)} correos del buzón. ¡Empezamos!")
         reportes_guardados = 0
@@ -68,14 +66,18 @@ def descargar_y_asignar_reportes():
                         except: pass
 
                     texto_completo = f"ASUNTO: {asunto}\nCUERPO:\n{cuerpo}"
+                    texto_lower = texto_completo.lower()
                     
                     print(f"   📧 Asunto: {asunto[:50]}...")
                     
-                    # --- FILTRO DE VELOCIDAD ANTI-TIMEOUT ---
-                    if "http" not in texto_completo.lower():
-                        print("   ⏩ No hay enlaces a simple vista. Saltando IA para ir rápido...")
+                    # --- FILTRO VIP SÚPER ESTRICTO ANTI-TIMEOUT ---
+                    palabras_escaner = ["informe", "report", "diagnost", "think", "launch", "autel", "bastidor"]
+                    es_escaner = any(p in texto_lower for p in palabras_escaner)
+                    
+                    if not es_escaner or "http" not in texto_lower:
+                        print("   ⏩ Basura detectada (No es de taller). Saltando IA...")
                         continue
-                    # ----------------------------------------
+                    # ----------------------------------------------
 
                     print("   🧠 Pensando...")
 
@@ -105,12 +107,10 @@ def descargar_y_asignar_reportes():
                         print("   ❌ No se encontró ningún enlace al reporte. Saltando...")
                         continue
 
-                    # 3. SISTEMA ANTI-DUPLICADOS (La joya de la corona)
                     if ReporteEscaner.objects.filter(enlace_web=url_reporte).exists():
                         print("   🔄 Este enlace ya está guardado en ServiMax. Saltando para no duplicar...")
                         continue
 
-                    # 4. Asignamos a la Orden
                     if codigo_vehiculo and codigo_vehiculo != "NADA":
                         orden_activa = OrdenDeReparacion.objects.exclude(estado='Entregado').filter(
                             vehiculo__matricula__icontains=codigo_vehiculo
