@@ -70,6 +70,13 @@ def descargar_y_asignar_reportes():
                     texto_completo = f"ASUNTO: {asunto}\nCUERPO:\n{cuerpo}"
                     
                     print(f"   📧 Asunto: {asunto[:50]}...")
+                    
+                    # --- FILTRO DE VELOCIDAD ANTI-TIMEOUT ---
+                    if "http" not in texto_completo.lower():
+                        print("   ⏩ No hay enlaces a simple vista. Saltando IA para ir rápido...")
+                        continue
+                    # ----------------------------------------
+
                     print("   🧠 Pensando...")
 
                     instruccion = """
