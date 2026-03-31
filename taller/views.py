@@ -241,7 +241,6 @@ def home(request):
         'mes_seleccionado': mes_actual,
         'meses_del_ano': range(1, 13),
         'notas_tablon': notas_tablon,
-        # --- NUEVO: Mandamos el estado del taller al Home ---
         'taller_cerrado': HistorialEstadoOrden.objects.filter(es_pausa_jornada=True, fecha_fin__isnull=True).exists()
     }
     return render(request, 'taller/home.html', context)
@@ -315,7 +314,6 @@ def ingresar_vehiculo(request):
         
         problema_reportado = request.POST['problema'].upper()
         
-        # --- NUEVO: Atrapamos el texto de los daños previos ---
         danos_previos = request.POST.get('danos_previos', '').upper()
 
         with transaction.atomic():
@@ -357,7 +355,6 @@ def ingresar_vehiculo(request):
                          vehiculo.save()
                 except Presupuesto.DoesNotExist: pass
 
-            # --- NUEVO: Añadimos danos_previos al crear la orden ---
             nueva_orden = OrdenDeReparacion.objects.create(
                 cliente=cliente, vehiculo=vehiculo, problema=problema_reportado, 
                 presupuesto_origen=presupuesto, danos_previos=danos_previos
@@ -365,14 +362,12 @@ def ingresar_vehiculo(request):
             if presupuesto:
                 presupuesto.estado = 'Convertido'; presupuesto.save()
 
-            # 1. Guardar las 5 fotos principales (Frontal, Trasera...)
             descripciones = ['Frontal', 'Trasera', 'Lateral Izquierdo', 'Lateral Derecho', 'Cuadro/Km']
             for i in range(1, 6):
                 foto_campo = f'foto{i}'
                 if foto_campo in request.FILES:
                     FotoVehiculo.objects.create(orden=nueva_orden, imagen=request.FILES[foto_campo], descripcion=descripciones[i-1])
             
-            # 2. --- NUEVO: GUARDAR LAS FOTOS INFINITAS DE DAÑOS PREVIOS ---
             fotos_danos = request.FILES.getlist('fotos_danos')
             for index, foto in enumerate(fotos_danos):
                 FotoVehiculo.objects.create(
@@ -487,9 +482,6 @@ def anadir_gasto(request):
                 except Empleado.DoesNotExist:
                     pass
             
-            # ======================================================
-            # --- MAGIA 1: PAGO DE TARJETA DE CRÉDITO ---
-            # ======================================================
             if categoria == 'PAGO_TARJETA':
                 tarjeta_destino = request.POST.get('tarjeta_destino')
                 saldo_real_str = request.POST.get('saldo_real_banco')
@@ -497,36 +489,27 @@ def anadir_gasto(request):
                 if tarjeta_destino and saldo_real_str:
                     saldo_real_banco = Decimal(saldo_real_str.replace(',', '.'))
                     
-                    # 1. ¿Cuánto se debe en la tarjeta ahora mismo?
                     gastos_tarjeta = Gasto.objects.filter(metodo_pago=tarjeta_destino).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
                     abonos_tarjeta = Ingreso.objects.filter(metodo_pago=tarjeta_destino).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
                     deuda_app_antes = gastos_tarjeta - abonos_tarjeta
-                    
-                    # 2. Si pago X, la deuda debería bajar a Y
                     deuda_app_despues = deuda_app_antes - importe_decimal
-                    
-                    # 3. Pero la app del banco dice que debo Z. La diferencia son intereses.
                     intereses = saldo_real_banco - deuda_app_despues
                     
                     with transaction.atomic():
-                        # A. Gasto en el Taller (sale el dinero del banco)
                         Gasto.objects.create(
                             metodo_pago=metodo_pago, fecha=fecha_gasto, categoria='PAGO_TARJETA',
                             importe=importe_decimal, descripcion=descripcion, empleado=empleado
                         )
-                        # B. Ingreso en la Tarjeta (entra el dinero para bajar la deuda de la tarjeta)
                         Ingreso.objects.create(
                             metodo_pago=tarjeta_destino, fecha=fecha_gasto, categoria='ABONO_TARJETA',
                             importe=importe_decimal, descripcion=f"ABONO DESDE {metodo_pago} - {descripcion}",
                             es_tpv=False
                         )
-                        # C. Si hay intereses, los cargamos a la tarjeta para que cuadre matemáticamente
                         if intereses > 0:
                             Gasto.objects.create(
                                 metodo_pago=tarjeta_destino, fecha=fecha_gasto, categoria='COMISIONES_INTERESES',
                                 importe=intereses, descripcion=f"INTERESES/COMISIONES - {descripcion}", empleado=empleado
                             )
-                        # D. Guardamos el histórico del cierre de la tarjeta
                         CierreTarjeta.objects.create(
                             fecha_cierre=fecha_gasto, tarjeta=tarjeta_destino, 
                             pago_cuota=importe_decimal, saldo_deuda_banco=saldo_real_banco, 
@@ -534,9 +517,6 @@ def anadir_gasto(request):
                         )
                     return redirect('home')
 
-            # ======================================================
-            # --- MAGIA 2: PAGO DE PRÉSTAMO DE BANCO ---
-            # ======================================================
             deuda_taller = None
             if categoria == 'Pago de Deuda' and deuda_id:
                 try:
@@ -564,7 +544,6 @@ def anadir_gasto(request):
                 except DeudaTaller.DoesNotExist:
                     pass
 
-            # Si NO es ni Tarjeta ni Banco Inteligente, guardamos un gasto normal
             Gasto.objects.create(
                 metodo_pago=metodo_pago, fecha=fecha_gasto, categoria=categoria,
                 importe=importe_decimal, descripcion=descripcion,
@@ -614,7 +593,6 @@ def registrar_ingreso(request):
         except (ValueError, TypeError, Decimal.InvalidOperation): 
             return redirect('registrar_ingreso')
 
-        # 1. Creamos el ingreso
         ingreso = Ingreso(
             fecha=fecha_ingreso, 
             categoria=categoria, 
@@ -624,7 +602,6 @@ def registrar_ingreso(request):
             metodo_pago=metodo_pago
         )
 
-        # 2. VINCULACIÓN CON ORDEN (Si es del taller)
         if categoria == 'Taller':
             orden_id = request.POST.get('orden')
             if orden_id:
@@ -635,13 +612,10 @@ def registrar_ingreso(request):
                 except OrdenDeReparacion.DoesNotExist: 
                     pass
         
-       # 3. MAGIA DE LOS PRÉSTAMOS
-        es_prestamo = (categoria == 'PRESTAMO') # <-- AHORA DEPENDE DE LA CATEGORÍA
+        es_prestamo = (categoria == 'PRESTAMO')
         if es_prestamo:
             deuda_existente_id = request.POST.get('deuda_existente')
-            # ... el resto sigue igual (Caso A y Caso B)
             
-            # Caso A: Crear una deuda totalmente nueva
             if deuda_existente_id == 'NUEVA':
                 nuevo_acreedor = request.POST.get('nueva_deuda_acreedor', '').upper()
                 if nuevo_acreedor:
@@ -653,43 +627,33 @@ def registrar_ingreso(request):
                     )
                     ingreso.deuda_asociada = nueva_deuda
 
-            # Caso B: Sumar a una deuda existente (Ej: Eduardo)
             elif deuda_existente_id:
                 try:
                     deuda_guardada = DeudaTaller.objects.get(id=deuda_existente_id)
-                    
-                    # Registramos el historial de la ampliación
                     AmpliacionDeuda.objects.create(
                         deuda=deuda_guardada,
                         importe=importe,
                         motivo=f"NUEVO PRÉSTAMO REGISTRADO: {descripcion.upper()}"
                     )
-                    
-                    # Le sumamos el dinero a lo que ya nos prestó antes
                     deuda_guardada.importe_inicial += importe
                     deuda_guardada.save()
-                    
                     ingreso.deuda_asociada = deuda_guardada
                 except DeudaTaller.DoesNotExist:
                     pass
 
-        # Finalmente, guardamos el ingreso con todas sus conexiones
         ingreso.save()
         return redirect('home')
 
-    # --- LO QUE SE ENVÍA A LA PANTALLA ---
     ordenes_filtradas = obtener_ordenes_relevantes().order_by('-fecha_entrada')
     categorias_ingreso = Ingreso.CATEGORIA_CHOICES
     metodos_pago = Ingreso.METODO_PAGO_CHOICES 
-    
-    # Enviamos la lista de deudas para el nuevo desplegable
     deudas_taller = DeudaTaller.objects.all().order_by('acreedor')
 
     context = { 
         'ordenes': ordenes_filtradas, 
         'categorias_ingreso': categorias_ingreso, 
         'metodos_pago': metodos_pago,
-        'deudas_taller': deudas_taller # <-- La pieza clave
+        'deudas_taller': deudas_taller 
     }
     return render(request, 'taller/registrar_ingreso.html', context)
 
@@ -809,7 +773,6 @@ def crear_presupuesto(request):
 
 @login_required
 def lista_presupuestos(request):
-    # --- NUEVO: Capturar la orden de borrar presupuesto ---
     if request.method == 'POST' and 'borrar_presupuesto' in request.POST:
         if request.user.groups.filter(name='Solo Ver').exists() or not request.user.is_superuser:
             return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para borrar presupuestos.</p>")
@@ -821,7 +784,6 @@ def lista_presupuestos(request):
         except Presupuesto.DoesNotExist:
             pass
         return redirect('lista_presupuestos')
-    # ------------------------------------------------------
 
     estado_filtro = request.GET.get('estado'); ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
     presupuestos_qs = Presupuesto.objects.select_related('cliente', 'vehiculo').order_by('-fecha_creacion')
@@ -907,9 +869,7 @@ def editar_presupuesto(request, presupuesto_id):
                 elif nombre_cliente_form and telefono_cliente_form:
                     cliente, created = Cliente.objects.get_or_create(telefono=telefono_cliente_form, defaults={'nombre': nombre_cliente_form})
                 
-                # --- AQUÍ ESTÁ LA MAGIA QUE FALTABA ---
                 if cliente:
-                    # Actualizamos SIEMPRE los datos, sea un cliente nuevo o uno existente
                     if nombre_cliente_form: cliente.nombre = nombre_cliente_form
                     if telefono_cliente_form: cliente.telefono = telefono_cliente_form
                     cliente.tipo_documento = tipo_documento
@@ -989,7 +949,6 @@ def editar_presupuesto(request, presupuesto_id):
 @login_required
 def lista_ordenes(request):
     if request.method == 'POST':
-        # Bloqueo de seguridad: Solo el jefe puede mover los coches
         if not request.user.is_superuser:
             return HttpResponseForbidden("🔒 Acceso denegado. Solo Administración puede cambiar el tipo de vehículo.")
             
@@ -1007,11 +966,9 @@ def lista_ordenes(request):
 
     ordenes_activas = OrdenDeReparacion.objects.exclude(estado='Entregado').select_related('vehiculo', 'cliente')
     
-    # 1. Separamos los de clientes de los del taller
     ordenes_clientes = ordenes_activas.filter(trabajo_interno=False)
     flota_interna = ordenes_activas.filter(trabajo_interno=True).order_by('id')
     
-    # 2. Organizamos los de CLIENTES en las pestañas del Ping-Pong
     ordenes_taller = ordenes_clientes.filter(estado__in=['Recibido', 'En Diagnostico', 'Esperando Piezas', 'En Reparacion', 'En Pruebas']).order_by('id')
     ordenes_pausadas = ordenes_clientes.filter(estado='Esperando Autorizacion').order_by('id')
     ordenes_listas = ordenes_clientes.filter(estado='Listo para Recoger').order_by('id')
@@ -1021,7 +978,6 @@ def lista_ordenes(request):
         'ordenes_pausadas': ordenes_pausadas,
         'ordenes_listas': ordenes_listas,
         'flota_interna': flota_interna,
-        # --- NUEVO: Mandamos el estado del taller para el Botón ---
         'taller_cerrado': HistorialEstadoOrden.objects.filter(es_pausa_jornada=True, fecha_fin__isnull=True).exists()
     })
 
@@ -1031,7 +987,6 @@ def detalle_orden(request, orden_id):
     repuestos = orden.gastos.filter(categoria='Repuestos')
     gastos_otros = orden.gastos.filter(categoria='Otros')
     
-    # SUMAMOS INGRESOS NORMALES + DEUDAS COMPENSADAS
     abonos_ingresos = sum(ing.importe for ing in orden.ingreso_set.all()) if hasattr(orden, 'ingreso_set') and orden.ingreso_set.exists() else Decimal('0.00')
     abonos_deuda = sum(g.importe for g in orden.gastos.all() if g.categoria == 'Pago de Deuda')
     abonos = abonos_ingresos + abonos_deuda
@@ -1040,13 +995,29 @@ def detalle_orden(request, orden_id):
     
     factura = None; pendiente_pago = Decimal('0.00'); whatsapp_url = None 
     
+    # ==============================================================
+    # --- NUEVO: ENLACE MÁGICO DEL ESTADO DEL COCHE PARA WHATSAPP ---
+    # ==============================================================
+    signer = Signer()
+    signed_orden_id = signer.sign(orden.id)
+    url_estado_publico = request.build_absolute_uri(reverse('estado_vehiculo_publico', args=[signed_orden_id]))
+    
+    whatsapp_estado_url = None
+    if orden.cliente.telefono:
+        telefono_limpio_estado = "".join(filter(str.isdigit, orden.cliente.telefono))
+        if not telefono_limpio_estado.startswith('34') and len(telefono_limpio_estado) == 9: 
+            telefono_limpio_estado = '34' + telefono_limpio_estado
+        mensaje_estado = f"Hola {orden.cliente.nombre}, somos el taller ServiMax 🔧.\n\nAquí tienes un enlace seguro para consultar el estado de tu {orden.vehiculo.marca} y ver las fotos de la reparación en tiempo real:\n\n{url_estado_publico}\n\n¡Gracias por confiar en nosotros!"
+        whatsapp_estado_url = f"https://wa.me/{telefono_limpio_estado}?text={quote(mensaje_estado)}"
+    # ==============================================================
+
     if request.user.is_superuser:
         try: 
             factura = orden.factura
             pendiente_pago = factura.total_final - abonos
             
             if orden.cliente.telefono:
-                signer = Signer(); signed_id = signer.sign(factura.id) 
+                signer_fac = Signer(); signed_id = signer_fac.sign(factura.id) 
                 public_url = request.build_absolute_uri(reverse('ver_factura_publica', args=[signed_id]))
                 telefono_limpio = "".join(filter(str.isdigit, orden.cliente.telefono))
                 if not telefono_limpio.startswith('34') and len(telefono_limpio) == 9: telefono_limpio = '34' + telefono_limpio
@@ -1064,7 +1035,6 @@ def detalle_orden(request, orden_id):
         if form_type == 'estado':
             nuevo_estado = request.POST.get('nuevo_estado')
             if nuevo_estado in [choice[0] for choice in OrdenDeReparacion.ESTADO_CHOICES]:
-                # --- NUEVO: Le inyectamos el usuario que ha pulsado el botón ---
                 orden._usuario_actual = request.user
                 orden.estado = nuevo_estado
                 orden.save()
@@ -1107,13 +1077,11 @@ def detalle_orden(request, orden_id):
             
             if importe > 0:
                 with transaction.atomic():
-                    # 1. El coche nos paga (Ingreso)
                     Ingreso.objects.create(
                         fecha=timezone.now().date(), categoria='Taller', importe=importe,
                         descripcion=f"COBRO FACTURA {orden.vehiculo.matricula}", metodo_pago=metodo,
                         orden=orden, es_tpv=(metodo not in ['EFECTIVO', 'COMPENSACION'])
                     )
-                    # 2. Si es compensación, matamos la deuda de tu hermano (Gasto)
                     if metodo == 'COMPENSACION' and deuda_id:
                         try:
                             deuda_taller = DeudaTaller.objects.get(id=deuda_id)
@@ -1131,7 +1099,12 @@ def detalle_orden(request, orden_id):
     context = {
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
         'abonos': abonos, 'pendiente_pago': pendiente_pago, 'tipos_consumible': tipos_consumible,
-        'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES, 'whatsapp_url': whatsapp_url,
+        'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES, 
+        'whatsapp_url': whatsapp_url,
+        
+        # 👇 AQUÍ FALTABA METER LA VARIABLE 👇
+        'whatsapp_estado_url': whatsapp_estado_url,
+        
         'notas_internas': orden.notas_internas.all(),
         'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes 
     }
@@ -1168,15 +1141,14 @@ def historial_ordenes(request):
 def historial_movimientos(request):
     from django.utils import timezone
     from django.db.models.functions import ExtractYear
-    from django.db.models import Q  # <--- NUEVO: Para poder buscar en dos sitios a la vez
-    from decimal import Decimal     # <--- NUEVO: Para detectar si busca un precio
+    from django.db.models import Q  
+    from decimal import Decimal     
 
     tipo_seleccionado = request.GET.get('tipo', '')
     ano_seleccionado = request.GET.get('ano', '')
     mes_seleccionado = request.GET.get('mes', '')
     matricula_seleccionada = request.GET.get('matricula', '')
     
-    # --- NUEVO: Atrapamos la palabra que manda J.A.R.V.I.S. ---
     buscar_seleccionado = request.GET.get('buscar', '').strip() 
 
     gastos_qs = Gasto.objects.select_related('orden', 'orden__vehiculo', 'deuda_asociada').all()
@@ -1200,18 +1172,15 @@ def historial_movimientos(request):
     if buscar_seleccionado:
         es_numero = False
         try:
-            # Intentamos ver si lo que ha dicho es un precio (ej: "120")
             cantidad = Decimal(buscar_seleccionado.replace(',', '.').replace('€', '').replace('euros', '').strip())
             es_numero = True
         except:
             pass
             
         if es_numero:
-            # Busca recibos que valgan ese dinero EXACTO o que lo ponga en el texto
             gastos_qs = gastos_qs.filter(Q(importe=cantidad) | Q(descripcion__icontains=buscar_seleccionado))
             ingresos_qs = ingresos_qs.filter(Q(importe=cantidad) | Q(descripcion__icontains=buscar_seleccionado))
         else:
-            # Si es texto (ej: "filtros"), busca en la descripción
             gastos_qs = gastos_qs.filter(descripcion__icontains=buscar_seleccionado)
             ingresos_qs = ingresos_qs.filter(descripcion__icontains=buscar_seleccionado)
     # =========================================================
@@ -1241,7 +1210,7 @@ def historial_movimientos(request):
         'ano_seleccionado': int(ano_seleccionado) if ano_seleccionado.isdigit() else '',
         'mes_seleccionado': str(mes_seleccionado),
         'matricula_seleccionada': matricula_seleccionada,
-        'buscar_seleccionado': buscar_seleccionado, # Pasamos la palabra al HTML por si la quieres usar
+        'buscar_seleccionado': buscar_seleccionado, 
         'anos_disponibles': anos_disponibles,
     }
     return render(request, 'taller/historial_movimientos.html', context)
@@ -1824,9 +1793,6 @@ def contabilidad(request):
     total_gastado = gastos_qs.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_ganancia = total_ingresado - total_gastado
     
-    # --- NUEVO: CÁLCULO DE DISPONIBLE EN TARJETAS DE CRÉDITO ---
-    # Lo calculamos sobre el total histórico (Gasto.objects.all()), no sobre el mes filtrado,
-    # porque la tarjeta arrastra la deuda de meses anteriores.
     gastos_totales_t1 = Gasto.objects.filter(metodo_pago='TARJETA_1').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     abonos_totales_t1 = Ingreso.objects.filter(metodo_pago='TARJETA_1').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     deuda_t1 = gastos_totales_t1 - abonos_totales_t1
@@ -1836,14 +1802,13 @@ def contabilidad(request):
     abonos_totales_t2 = Ingreso.objects.filter(metodo_pago='TARJETA_2').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     deuda_t2 = gastos_totales_t2 - abonos_totales_t2
     disponible_t2 = Decimal('1000.00') - deuda_t2
-    # -----------------------------------------------------------
 
     context = { 
         'total_ingresado': total_ingresado, 'total_gastado': total_gastado, 'total_ganancia': total_ganancia, 
         'anos_y_meses': anos_y_meses_data, 'anos_disponibles': anos_disponibles,
         'ano_seleccionado': ano_sel_int, 'mes_seleccionado': mes_sel_int, 'meses_del_ano': range(1, 13),
-        'disponible_t1': disponible_t1, # <-- Enviamos el oxígeno de T1 a la pantalla
-        'disponible_t2': disponible_t2  # <-- Enviamos el oxígeno de T2 a la pantalla
+        'disponible_t1': disponible_t1,
+        'disponible_t2': disponible_t2 
     }
     return render(request, 'taller/contabilidad.html', context)
 
@@ -2060,7 +2025,6 @@ def lista_deudas(request):
         motivo = request.POST.get('motivo')
         importe_inicial = request.POST.get('importe_inicial')
         
-        # Atrapamos si se ha marcado la casilla del banco
         es_banco = request.POST.get('es_credito_bancario') == 'True'
         
         if acreedor and motivo and importe_inicial:
@@ -2068,7 +2032,7 @@ def lista_deudas(request):
                 acreedor=acreedor,
                 motivo=motivo,
                 importe_inicial=importe_inicial,
-                es_credito_bancario=es_banco # <-- Añadimos esto
+                es_credito_bancario=es_banco 
             )
             return redirect('lista_deudas')
             
@@ -2076,15 +2040,12 @@ def lista_deudas(request):
     deudas_pendientes = [d for d in todas_las_deudas if d.estado == 'Pendiente']
     deudas_pagadas = [d for d in todas_las_deudas if d.estado == 'Pagada']
     
-    # --- CÁLCULO DEL GRAN TOTAL A PAGAR ---
     total_deudas_normales = sum(d.importe_pendiente for d in deudas_pendientes)
     
-    # Calculamos lo dispuesto en la Tarjeta 1
     gastos_t1 = Gasto.objects.filter(metodo_pago='TARJETA_1').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     abonos_t1 = Ingreso.objects.filter(metodo_pago='TARJETA_1').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     deuda_t1 = gastos_t1 - abonos_t1
     
-    # Calculamos lo dispuesto en la Tarjeta 2
     gastos_t2 = Gasto.objects.filter(metodo_pago='TARJETA_2').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     abonos_t2 = Ingreso.objects.filter(metodo_pago='TARJETA_2').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     deuda_t2 = gastos_t2 - abonos_t2
@@ -2112,7 +2073,6 @@ def detalle_deuda(request, deuda_id):
             
         form_type = request.POST.get('form_type')
         
-        # --- NUEVO: PAGO INTELIGENTE (BANCARIO) ---
         if form_type == 'pago_inteligente_banco':
             importe_pago_str = request.POST.get('importe_pago')
             saldo_real_str = request.POST.get('saldo_real_banco')
@@ -2142,7 +2102,6 @@ def detalle_deuda(request, deuda_id):
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
 
-        # --- AMPLIAR DEUDA (MANUAL) ---
         elif form_type == 'ampliar':
             importe_extra = request.POST.get('importe_extra')
             concepto_extra = request.POST.get('concepto_extra')
@@ -2157,7 +2116,6 @@ def detalle_deuda(request, deuda_id):
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
                     
-        # --- EDITAR DEUDA GENERAL ---
         elif form_type == 'editar':
             nuevo_acreedor = request.POST.get('acreedor')
             nuevo_motivo = request.POST.get('motivo')
@@ -2170,7 +2128,6 @@ def detalle_deuda(request, deuda_id):
                 except (ValueError, TypeError, Decimal.InvalidOperation):
                     pass
                     
-        # --- EDITAR UN MOVIMIENTO ESPECÍFICO ---
         elif form_type == 'editar_movimiento':
             mov_id = request.POST.get('mov_id'); mov_tipo = request.POST.get('mov_tipo')
             nueva_fecha_str = request.POST.get('fecha'); nuevo_importe_str = request.POST.get('importe')
@@ -2197,7 +2154,6 @@ def detalle_deuda(request, deuda_id):
             except (ValueError, TypeError, Decimal.InvalidOperation, Gasto.DoesNotExist, AmpliacionDeuda.DoesNotExist):
                 pass
 
-        # --- BORRAR UN MOVIMIENTO ---
         elif form_type == 'borrar_movimiento':
             mov_id = request.POST.get('mov_id'); mov_tipo = request.POST.get('mov_tipo')
             
@@ -2221,7 +2177,6 @@ def detalle_deuda(request, deuda_id):
 
         return redirect('detalle_deuda', deuda_id=deuda.id)
 
-    # --- COMBINAR HISTORIAL DE PAGOS Y AUMENTOS ---
     pagos = deuda.gastos_pagados.all()
     ampliaciones = deuda.ampliaciones.all()
     
@@ -2249,13 +2204,10 @@ def detalle_deuda(request, deuda_id):
             'orden': None
         })
         
-    # --- NUEVO: AÑADIR INTERESES AL HISTORIAL Y CALCULAR EL TOTAL ---
     total_intereses = Decimal('0.00')
     if deuda.es_credito_bancario:
         fechas_pagos = [p.fecha for p in pagos]
         
-        # Búsqueda inteligente: cualquier interés hecho los mismos días que los pagos, 
-        # o que contenga la palabra "INTERESES BANCARIOS" o el nombre del banco.
         intereses = Gasto.objects.filter(categoria='COMISIONES_INTERESES').filter(
             Q(fecha__in=fechas_pagos) | Q(descripcion__icontains=deuda.acreedor) | Q(descripcion__icontains="INTERESES BANCARIOS")
         ).distinct()
@@ -2283,7 +2235,7 @@ def detalle_deuda(request, deuda_id):
         'deuda': deuda,
         'historial': historial_combinado,
         'porcentaje_pagado': porcentaje,
-        'total_intereses': total_intereses # Pasamos el total a la plantilla HTML
+        'total_intereses': total_intereses
     }
     return render(request, 'taller/detalle_deuda.html', context)
 
@@ -2411,14 +2363,12 @@ def editar_consumible(request, tipo_id):
 def ver_presupuesto_publico(request, signed_id):
     signer = Signer()
     try:
-        # Extraemos el ID real quitándole la firma secreta
         presupuesto_id = signer.unsign(signed_id)
         presupuesto = get_object_or_404(Presupuesto, id=presupuesto_id)
     except BadSignature:
         return HttpResponseForbidden("El enlace de este presupuesto es inválido o ha caducado.")
 
-    # Generamos el PDF tal y como lo haces normalmente
-    template_path = 'taller/presupuesto_pdf.html' # Asegúrate de que este es tu nombre real del template
+    template_path = 'taller/presupuesto_pdf.html' 
     context = {'presupuesto': presupuesto}
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename="Presupuesto_{presupuesto.id}.pdf"'
@@ -2440,7 +2390,6 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from . import ai_tools
 
-# 🛡️ ¡CLAVE PROTEGIDA! Ahora lee desde tu ordenador o desde Render, no del código.
 api_key = os.environ.get("GOOGLE_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
@@ -2454,7 +2403,6 @@ def asistente_ia(request):
             data = json.loads(request.body)
             mensaje_usuario = data.get('mensaje', '')
 
-            # --- MÓDULO DE MEMORIA A CORTO PLAZO ---
             if 'memoria_ia' not in request.session:
                 request.session['memoria_ia'] = []
             
@@ -2465,11 +2413,8 @@ def asistente_ia(request):
                 contexto_conversacion += f"{linea}\n"
             contexto_conversacion += f"\nEL USUARIO AHORA DICE: {mensaje_usuario}"
 
-            # Instrucciones estrictas para J.A.R.V.I.S.
-            # --- NUEVO: Le damos un reloj a la IA ---
             from django.utils import timezone
             fecha_hoy = timezone.now().strftime("%Y-%m-%d")
-            # Instrucciones estrictas para J.A.R.V.I.S.
             instruccion = f"""
             Eres J.A.R.V.I.S., el asistente ejecutivo de Inteligencia Artificial del taller ServiMax.
             Tu trabajo es leer lo que pide el usuario y devolver UNICAMENTE un archivo JSON con la orden de lo que hay que hacer.
@@ -2552,7 +2497,6 @@ def asistente_ia(request):
             elif accion == 'rentabilidad_historial':
                 resultado = ai_tools.rentabilidad_vehiculo(matricula=decision_ia.get('matricula'), id_orden=decision_ia.get('id_orden'), solo_orden=False)
             
-            # --- CREACIÓN AUTOMÁTICA DE BORRADORES ---
             elif accion == 'crear_borrador':
                 resultado = ai_tools.crear_borrador_presupuesto(
                     matricula=decision_ia.get('matricula'), 
@@ -2561,7 +2505,6 @@ def asistente_ia(request):
                     precio=decision_ia.get('precio')
                 )
             
-            # --- AGENDA ---
             elif accion == 'crear_cita':
                 resultado = ai_tools.crear_cita_agenda(
                     cliente=decision_ia.get('cliente'),
@@ -2578,7 +2521,7 @@ def asistente_ia(request):
                     hora=decision_ia.get('hora'),
                     motivo=decision_ia.get('motivo'),
                     vehiculo=decision_ia.get('vehiculo'),
-                    nuevo_nombre=decision_ia.get('nuevo_nombre') # ¡Ahora sí coge el nombre nuevo!
+                    nuevo_nombre=decision_ia.get('nuevo_nombre')
                 )   
 
             elif accion == 'actualizar_cita':
@@ -2588,7 +2531,6 @@ def asistente_ia(request):
                     estado=decision_ia.get('estado', 'En taller')
                 )   
             
-            # --- MAGIA PURA: LA DOBLE LLAMADA DE PRESUPUESTOS PREDICTIVOS ---
             elif accion == 'presupuesto_predictivo':
                 reparacion_pedida = decision_ia.get('reparacion')
                 datos_historial = ai_tools.extraer_datos_presupuesto(reparacion_pedida, decision_ia.get('modelo', ''))
@@ -2611,26 +2553,20 @@ def asistente_ia(request):
                     Responde directamente con tu análisis.
                     """
                     
-                    # Llamamos a J.A.R.V.I.S. por segunda vez sin formato JSON para que nos hable normal
                     respuesta_razonada = model.generate_content(prompt_analisis)
                     resultado = {"status": "success", "mensaje": respuesta_razonada.text}
-            # -----------------------------------------------------------------
             
-            # --- MARKETING AUTOMÁTICO (RECORDATORIOS ANUALES) ---
             elif accion == 'marketing_revision':
                 resultado = ai_tools.clientes_para_revision(reparacion=decision_ia.get('reparacion', 'aceite'))
             
-            # --- CREACIÓN DE NOTAS EN EL TABLÓN ---
             elif accion == 'crear_nota':
                 resultado = ai_tools.crear_nota_tablon(
                     texto=decision_ia.get('texto'), 
                     usuario=request.user
                 )
-            # -----------------------------------------------------------------
                 
             elif accion == 'stock':
                 resultado = ai_tools.consultar_stock(decision_ia.get('articulo'))
-            # --- BUSCADOR DE CONTABILIDAD ---
             elif accion == 'buscar_movimiento':
                 resultado = ai_tools.buscar_movimiento(decision_ia.get('termino'))   
             elif accion == 'caja_hoy':
@@ -2652,25 +2588,22 @@ def asistente_ia(request):
             else:
                 resultado = {"status": "error", "mensaje": "No tengo una herramienta para hacer eso todavía."}
 
-            # Actualizamos la memoria
             memoria.append(f"Usuario: {mensaje_usuario}")
             memoria.append(f"J.A.R.V.I.S.: {resultado.get('mensaje', '')}")
             
             request.session['memoria_ia'] = memoria[-4:] 
             request.session.modified = True
 
-            # --- CORREGIDO: GUARDAR EN LA MEMORIA A LARGO PLAZO ---
             try:
                 from .models import HistorialIA
                 HistorialIA.objects.create(
                     usuario=request.user if request.user.is_authenticated else None,
-                    peticion=mensaje_usuario, # Usamos la variable correcta de arriba
+                    peticion=mensaje_usuario,
                     respuesta=resultado.get('mensaje', 'Sin respuesta textual'), 
                     accion_ejecutada=accion 
                 )
             except Exception as e:
                 print(f"Error guardando la memoria de J.A.R.V.I.S.: {e}")
-            # --------------------------------------------------
 
             return JsonResponse(resultado)
 
@@ -2686,11 +2619,9 @@ def agenda_taller(request):
     from django.db.models.functions import ExtractYear
     from datetime import timedelta, datetime
     
-    # --- ATRAMAPOS LOS FORMULARIOS DE LA AGENDA ---
     if request.method == 'POST':
         form_type = request.POST.get('form_type')
         
-        # 1. Nueva cita manual
         if form_type == 'nueva_cita_manual':
             nombre = request.POST.get('nombre_cliente')
             vehiculo = request.POST.get('vehiculo_info')
@@ -2715,7 +2646,6 @@ def agenda_taller(request):
                 except Exception:
                     pass
                     
-        # 2. Marcar como "Ya en taller"
         elif form_type == 'marcar_llegada':
             cita_id = request.POST.get('cita_id')
             if cita_id:
@@ -2727,17 +2657,14 @@ def agenda_taller(request):
                     pass
                     
         return redirect('agenda')
-    # ------------------------------------------------------------------
 
     hoy = timezone.now().date()
     
-    # Atrapamos si queremos ver las pendientes o el historial
     filtro = request.GET.get('filtro', 'pendientes')
     ano_seleccionado = request.GET.get('ano', '')
     mes_seleccionado = request.GET.get('mes', '')
     
     if filtro == 'historial':
-        # Buscamos todos los que ya vinieron o cancelaron
         citas_historial = Cita.objects.filter(estado__in=['En taller', 'Cancelada'])
         
         if ano_seleccionado and ano_seleccionado.isdigit():
@@ -2753,7 +2680,6 @@ def agenda_taller(request):
         citas_hoy = citas_historial.order_by('-fecha_hora')
         citas_proximas = []
     else:
-        # Los pendientes de hoy y del futuro
         citas_hoy = Cita.objects.filter(fecha_hora__date=hoy, estado='Pendiente').order_by('fecha_hora')
         citas_proximas = Cita.objects.filter(fecha_hora__date__gt=hoy, estado='Pendiente').order_by('fecha_hora')[:15]
     
@@ -2780,18 +2706,15 @@ def editar_cita(request, cita_id):
     from datetime import datetime
     from django.utils import timezone
 
-    # Buscamos la cita que queremos editar
     cita = get_object_or_404(Cita, id=cita_id)
 
     if request.method == 'POST':
-        # Recogemos los datos que has escrito en el formulario
         cita.nombre_cliente = request.POST.get('nombre_cliente')
         cita.vehiculo_info = request.POST.get('vehiculo_info')
         cita.motivo = request.POST.get('motivo')
         cita.estado = request.POST.get('estado')
         cita.notas_adicionales = request.POST.get('notas_adicionales')
 
-        # Juntamos la fecha y la hora
         fecha_str = request.POST.get('fecha')
         hora_str = request.POST.get('hora')
         if fecha_str and hora_str:
@@ -2800,15 +2723,13 @@ def editar_cita(request, cita_id):
                 fecha_obj = datetime.strptime(fecha_completa, "%Y-%m-%d %H:%M")
                 cita.fecha_hora = timezone.make_aware(fecha_obj)
             except Exception:
-                pass # Si hay un error raro, deja la fecha que ya tenía
+                pass 
 
         cita.save()
-        return redirect('agenda') # Te devuelve a la agenda automáticamente
+        return redirect('agenda') 
 
-    # Preparamos los datos para mostrarlos en la pantalla
     context = {
         'cita': cita,
-        # Separamos la fecha y la hora para que los calendarios del HTML lo entiendan
         'fecha_formato': cita.fecha_hora.strftime('%Y-%m-%d') if cita.fecha_hora else '',
         'hora_formato': cita.fecha_hora.strftime('%H:%M') if cita.fecha_hora else '',
     }
@@ -2817,7 +2738,6 @@ def editar_cita(request, cita_id):
 @login_required
 def ver_historial_ia(request):
     from .models import HistorialIA
-    # Cogemos las últimas 50 conversaciones para no saturar la pantalla
     conversaciones = HistorialIA.objects.all()[:50]
     
     return render(request, 'taller/historial_ia.html', {'conversaciones': conversaciones})
@@ -2830,10 +2750,8 @@ def sincronizar_escaner(request):
         
     from .lector_correos import descargar_y_asignar_reportes
     
-    # Ejecutamos el lector de correos
     resultado = descargar_y_asignar_reportes()
     
-    # Creamos un mensaje visual dependiendo de si fue bien o mal
     if resultado['status'] == 'success':
         messages.success(request, resultado['mensaje'])
     elif resultado['status'] == 'warning':
@@ -2845,35 +2763,27 @@ def sincronizar_escaner(request):
         
     return redirect('lista_ordenes')
 
-# ==============================================================
-# --- NUEVA FUNCIÓN: BOTÓN GLOBAL DE CIERRE DE TALLER ---
-# ==============================================================
 @login_required
 def alternar_estado_taller(request):
     """Cierra o abre el taller globalmente pausando/reanudando tiempos"""
     if not request.user.is_superuser:
         return HttpResponseForbidden("🔒 Acceso denegado. Solo Administración puede abrir/cerrar el taller.")
 
-    # Estados donde el mecánico está "manchándose las manos" y el cronómetro corre
     estados_activos = ['En Diagnostico', 'En Reparacion', 'En Pruebas']
     ahora = timezone.now()
     
-    # Comprobamos si el taller ya está cerrado (mirando si hay alguna pausa activa)
     pausas_activas = HistorialEstadoOrden.objects.filter(es_pausa_jornada=True, fecha_fin__isnull=True)
 
     if not pausas_activas.exists():
-        # --- CERRAR TALLER ---
         ordenes_a_pausar = OrdenDeReparacion.objects.filter(estado__in=estados_activos)
         count = 0
 
         for orden in ordenes_a_pausar:
-            # 1. Cerramos el tramo de trabajo actual
             ultimo = orden.historial_estados.filter(fecha_fin__isnull=True).first()
             if ultimo:
                 ultimo.fecha_fin = ahora
                 ultimo.save()
             
-            # 2. Creamos el tramo de "PAUSA POR CIERRE"
             HistorialEstadoOrden.objects.create(
                 orden=orden,
                 estado=f"PAUSA: {orden.estado}",
@@ -2886,15 +2796,12 @@ def alternar_estado_taller(request):
         messages.success(request, f"🌙 Taller cerrado. Se han pausado {count} coches activos.")
     
     else:
-        # --- ABRIR TALLER ---
         count = 0
 
         for pausa in pausas_activas:
-            # 1. Cerramos la pausa
             pausa.fecha_fin = ahora
             pausa.save()
 
-            # 2. Reanudamos el estado original que tenía el coche
             estado_original = pausa.estado.replace("PAUSA: ", "")
             HistorialEstadoOrden.objects.create(
                 orden=pausa.orden,
@@ -2906,5 +2813,20 @@ def alternar_estado_taller(request):
             
         messages.success(request, f"☀️ Taller abierto. Se han reanudado {count} coches.")
 
-    # Volvemos a la página desde la que pulsó el botón
     return redirect(request.META.get('HTTP_REFERER', 'home'))
+
+
+def estado_vehiculo_publico(request, signed_id):
+    """Vista pública y segura para que el cliente vea su coche sin precios"""
+    signer = Signer()
+    try:
+        original_id = signer.unsign(signed_id)
+        orden = get_object_or_404(OrdenDeReparacion.objects.select_related('cliente', 'vehiculo').prefetch_related('fotos'), id=original_id)
+    except BadSignature:
+        return HttpResponseForbidden("<h2>🔒 ENLACE INVÁLIDO</h2><p>Este enlace de seguimiento es incorrecto o ha caducado.</p>")
+    
+    context = {
+        'orden': orden,
+        'fotos': orden.fotos.all(),
+    }
+    return render(request, 'taller/estado_cliente.html', context)

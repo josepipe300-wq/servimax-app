@@ -11,6 +11,7 @@ urlpatterns = [
     path('', include('taller.urls')), 
     path('accounts/', include('django.contrib.auth.urls')), 
     path('taller/alternar/', views.alternar_estado_taller, name='alternar_taller'), # Ahora sí funcionará
+    path('estado-vehiculo/<str:signed_id>/', views.estado_vehiculo_publico, name='estado_vehiculo_publico'),
 ]
 
 # --- Añadir esto al final si quieres servir archivos media localmente (Cloudinary no lo necesita) ---
