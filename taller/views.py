@@ -241,6 +241,8 @@ def home(request):
         'mes_seleccionado': mes_actual,
         'meses_del_ano': range(1, 13),
         'notas_tablon': notas_tablon,
+        # --- NUEVO: Mandamos el estado del taller al Home ---
+        'taller_cerrado': HistorialEstadoOrden.objects.filter(es_pausa_jornada=True, fecha_fin__isnull=True).exists()
     }
     return render(request, 'taller/home.html', context)
 
@@ -1018,7 +1020,9 @@ def lista_ordenes(request):
         'ordenes_taller': ordenes_taller,
         'ordenes_pausadas': ordenes_pausadas,
         'ordenes_listas': ordenes_listas,
-        'flota_interna': flota_interna # <-- Enviamos los internos aparte
+        'flota_interna': flota_interna,
+        # --- NUEVO: Mandamos el estado del taller para el Botón ---
+        'taller_cerrado': HistorialEstadoOrden.objects.filter(es_pausa_jornada=True, fecha_fin__isnull=True).exists()
     })
 
 @login_required
@@ -2839,4 +2843,68 @@ def sincronizar_escaner(request):
     else:
         messages.error(request, resultado['mensaje'])
         
-    return redirect('lista_ordenes')    
+    return redirect('lista_ordenes')
+
+# ==============================================================
+# --- NUEVA FUNCIÓN: BOTÓN GLOBAL DE CIERRE DE TALLER ---
+# ==============================================================
+@login_required
+def alternar_estado_taller(request):
+    """Cierra o abre el taller globalmente pausando/reanudando tiempos"""
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("🔒 Acceso denegado. Solo Administración puede abrir/cerrar el taller.")
+
+    # Estados donde el mecánico está "manchándose las manos" y el cronómetro corre
+    estados_activos = ['En Diagnostico', 'En Reparacion', 'En Pruebas']
+    ahora = timezone.now()
+    
+    # Comprobamos si el taller ya está cerrado (mirando si hay alguna pausa activa)
+    pausas_activas = HistorialEstadoOrden.objects.filter(es_pausa_jornada=True, fecha_fin__isnull=True)
+
+    if not pausas_activas.exists():
+        # --- CERRAR TALLER ---
+        ordenes_a_pausar = OrdenDeReparacion.objects.filter(estado__in=estados_activos)
+        count = 0
+
+        for orden in ordenes_a_pausar:
+            # 1. Cerramos el tramo de trabajo actual
+            ultimo = orden.historial_estados.filter(fecha_fin__isnull=True).first()
+            if ultimo:
+                ultimo.fecha_fin = ahora
+                ultimo.save()
+            
+            # 2. Creamos el tramo de "PAUSA POR CIERRE"
+            HistorialEstadoOrden.objects.create(
+                orden=orden,
+                estado=f"PAUSA: {orden.estado}",
+                fecha_inicio=ahora,
+                es_pausa_jornada=True,
+                usuario=request.user
+            )
+            count += 1
+        
+        messages.success(request, f"🌙 Taller cerrado. Se han pausado {count} coches activos.")
+    
+    else:
+        # --- ABRIR TALLER ---
+        count = 0
+
+        for pausa in pausas_activas:
+            # 1. Cerramos la pausa
+            pausa.fecha_fin = ahora
+            pausa.save()
+
+            # 2. Reanudamos el estado original que tenía el coche
+            estado_original = pausa.estado.replace("PAUSA: ", "")
+            HistorialEstadoOrden.objects.create(
+                orden=pausa.orden,
+                estado=estado_original,
+                fecha_inicio=ahora,
+                usuario=request.user
+            )
+            count += 1
+            
+        messages.success(request, f"☀️ Taller abierto. Se han reanudado {count} coches.")
+
+    # Volvemos a la página desde la que pulsó el botón
+    return redirect(request.META.get('HTTP_REFERER', 'home'))

@@ -152,8 +152,16 @@ class HistorialEstadoOrden(models.Model):
     fecha_inicio = models.DateTimeField(default=timezone.now)
     fecha_fin = models.DateTimeField(null=True, blank=True)
     
-    # --- NUEVO: Columna para guardar quién hizo el cambio ---
+    # --- Columna para guardar quién hizo el cambio ---
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    # --- NUEVO: Campo para identificar pausas de jornada (Botón Rojo) ---
+    es_pausa_jornada = models.BooleanField(default=False)
+
+    @property
+    def duracion_segundos(self):
+        fin = self.fecha_fin or timezone.now()
+        return (fin - self.fecha_inicio).total_seconds()
 
     @property
     def duracion(self):
@@ -276,7 +284,6 @@ class Ingreso(models.Model):
         ('PRESTAMO', '🤝 Préstamo / Adelanto a Devolver'), # <-- NUESTRA NUEVA OPCIÓN
         ('Otros', 'Otros Ingresos'),
     ]
-    # ... (El resto del modelo Ingreso déjalo exactamente como lo tenías, con deuda_asociada)
     METODO_PAGO_CHOICES = Gasto.METODO_PAGO_CHOICES 
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
     fecha = models.DateField(default=timezone.now)
@@ -577,4 +584,4 @@ class ReporteEscaner(models.Model):
     descripcion = models.CharField(max_length=255, default="Reporte de Diagnóstico Automático")
 
     def __str__(self):
-        return f"Reporte Escáner - Orden #{self.orden.id}"        
+        return f"Reporte Escáner - Orden #{self.orden.id}"
