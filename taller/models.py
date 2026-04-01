@@ -527,6 +527,7 @@ class NotaInternaOrden(models.Model):
     texto = models.TextField()
     imagen = models.ImageField(upload_to='notas_internas/', null=True, blank=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
+    visible_cliente = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-fecha_creacion']

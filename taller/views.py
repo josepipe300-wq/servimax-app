@@ -158,11 +158,12 @@ def generar_pdf_response(factura):
     return response
 
 
-# --- VISTA HOME ---
 @login_required
 def home(request):
     hoy = timezone.now()
+    hoy_date = hoy.date()
 
+    # --- Lógica de Filtros por Fecha ---
     ano_seleccionado_str = request.GET.get('ano')
     mes_seleccionado_str = request.GET.get('mes')
 
@@ -178,12 +179,14 @@ def home(request):
         except (ValueError, TypeError): mes_actual = hoy.month
     else: mes_actual = hoy.month
     
+    # --- Datos de Ingresos y Gastos ---
     ingresos_mes = Ingreso.objects.filter(fecha__month=mes_actual, fecha__year=ano_actual)
     gastos_mes = Gasto.objects.filter(fecha__month=mes_actual, fecha__year=ano_actual)
     
     total_ingresos = ingresos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     total_gastos = gastos_mes.aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
 
+    # --- Balances de Cuentas ---
     ing_efectivo = Ingreso.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_efectivo = Gasto.objects.filter(metodo_pago='EFECTIVO').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_efectivo = ing_efectivo - gas_efectivo
@@ -191,6 +194,92 @@ def home(request):
     ing_taller = Ingreso.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     gas_taller = Gasto.objects.filter(metodo_pago='CUENTA_TALLER').aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
     balance_taller = ing_taller - gas_taller
+
+    # --- Balances de Tarjetas ---
+    def obtener_disponible_tarjeta(nombre_metodo, limite):
+        ing = Ingreso.objects.filter(metodo_pago=nombre_metodo).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        gas = Gasto.objects.filter(metodo_pago=nombre_metodo).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        return limite + (ing - gas)
+
+    tarjeta_1 = {'disponible': obtener_disponible_tarjeta('TARJETA_1', Decimal('2000.00'))}
+    tarjeta_2 = {'disponible': obtener_disponible_tarjeta('TARJETA_2', Decimal('1000.00'))}
+
+    # --- CITAS PARA EL RECORDATORIO DE HOY ---
+    citas_hoy = Cita.objects.filter(
+        fecha_hora__date=hoy_date,
+        estado='Pendiente'
+    ).order_by('fecha_hora')
+
+    # --- Alertas de Stock ---
+    tipos_consumible = TipoConsumible.objects.all()
+    alertas_stock = []
+    for tipo in tipos_consumible:
+        total_comprado = CompraConsumible.objects.filter(tipo=tipo).aggregate(total=Sum('cantidad'))['total'] or Decimal('0.00')
+        total_usado_ordenes = UsoConsumible.objects.filter(tipo=tipo).aggregate(total=Sum('cantidad_usada'))['total'] or Decimal('0.00')
+        total_ajustado = AjusteStockConsumible.objects.filter(tipo=tipo).aggregate(total=Sum('cantidad_ajustada'))['total'] or Decimal('0.00')
+        stock_actual = total_comprado - total_usado_ordenes + total_ajustado
+
+        if tipo.nivel_minimo_stock is not None and stock_actual <= tipo.nivel_minimo_stock:
+            alertas_stock.append({
+                'nombre': tipo.nombre, 'stock_actual': stock_actual,
+                'unidad': tipo.unidad_medida, 'minimo': tipo.nivel_minimo_stock
+            })
+
+    # --- DEUDA DE NÓMINAS PENDIENTES ---
+    total_deuda_nominas = Decimal('0.00')
+    empleados_taller = Empleado.objects.all()
+    for emp in empleados_taller:
+        dias_pendientes = Asistencia.objects.filter(
+            empleado=emp, pagado=False, hora_salida__isnull=False
+        ).values('fecha').distinct().count()
+        
+        sueldo_bruto = dias_pendientes * emp.sueldo_por_dia
+        
+        adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=emp, liquidado=False)
+        total_adelantos = sum(a.importe for a in adelantos_pendientes)
+        
+        neto_a_pagar = sueldo_bruto - total_adelantos
+        if neto_a_pagar > 0:
+            total_deuda_nominas += neto_a_pagar
+
+    # --- Otros Datos Generales ---
+    notas_tablon = NotaTablon.objects.filter(completada=False).order_by('-fecha_creacion')[:20]
+    is_read_only_user = request.user.groups.filter(name='Solo Ver').exists()
+    
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+
+    ultimos_gastos = Gasto.objects.order_by('-id')[:5]
+    ultimos_ingresos = Ingreso.objects.order_by('-id')[:5]
+    movimientos_combinados = sorted(
+        list(ultimos_gastos) + list(ultimos_ingresos),
+        key=lambda mov: mov.fecha if hasattr(mov, 'fecha') else hoy_date,
+        reverse=True
+    )
+    movimientos_recientes = movimientos_combinados[:5]
+
+    # AQUÍ ESTÁ EL FAMOSO DICCIONARIO PERFECTAMENTE CERRADO
+    context = {
+        'total_ingresos': total_ingresos,
+        'total_gastos': total_gastos,
+        'balance_efectivo': balance_efectivo,
+        'balance_taller': balance_taller,
+        'tarjeta_1': tarjeta_1,
+        'tarjeta_2': tarjeta_2,
+        'citas_hoy_recordatorio': citas_hoy,
+        'movimientos_recientes': movimientos_recientes,
+        'alertas_stock': alertas_stock,
+        'total_deuda_nominas': total_deuda_nominas,
+        'is_read_only_user': is_read_only_user,
+        'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_actual,
+        'mes_seleccionado': mes_actual,
+        'meses_del_ano': range(1, 13),
+        'notas_tablon': notas_tablon,
+        'taller_cerrado': HistorialEstadoOrden.objects.filter(es_pausa_jornada=True, fecha_fin__isnull=True).exists()
+    }
+    
+    return render(request, 'taller/home.html', context)
     
     def calcular_tarjeta(tag, limite):
         gastos = Gasto.objects.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
@@ -1073,6 +1162,16 @@ def detalle_orden(request, orden_id):
                 )
             return redirect('detalle_orden', orden_id=orden.id)
 
+        # --- AÑADIDO: BOTÓN MÁGICO PARA MOSTRAR LA NOTA AL CLIENTE ---
+        elif form_type == 'toggle_visibilidad_nota':
+            nota_id = request.POST.get('nota_id')
+            try:
+                nota = NotaInternaOrden.objects.get(id=nota_id, orden=orden)
+                nota.visible_cliente = not nota.visible_cliente
+                nota.save()
+            except NotaInternaOrden.DoesNotExist:
+                pass
+            return redirect('detalle_orden', orden_id=orden.id)
         
         elif form_type == 'registrar_pago':
             importe = Decimal(request.POST.get('importe_pago', '0'))
@@ -1128,9 +1227,9 @@ def detalle_orden(request, orden_id):
         'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES, 
         'whatsapp_url': whatsapp_url,
         'whatsapp_estado_url': whatsapp_estado_url,
-        'notas_internas': orden.notas_internas.all(),
+        'notas_internas': orden.notas_internas.all().order_by('-fecha_creacion'),
         'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes,
-        'empleados_taller': Empleado.objects.all() # MANDAMOS LOS MECÁNICOS AL HTML
+        'empleados_taller': Empleado.objects.all()
     }
     return render(request, 'taller/detalle_orden.html', context)
     
@@ -2075,14 +2174,32 @@ def lista_deudas(request):
     deuda_t2 = gastos_t2 - abonos_t2
     
     total_tarjetas = deuda_t1 + deuda_t2
-    gran_total_deuda = total_deudas_normales + total_tarjetas
+
+    # --- NUEVO: CÁLCULO DE DEUDA DE NÓMINAS ---
+    total_deuda_nominas = Decimal('0.00')
+    empleados_taller = Empleado.objects.all()
+    for emp in empleados_taller:
+        dias_pendientes = Asistencia.objects.filter(
+            empleado=emp, pagado=False, hora_salida__isnull=False
+        ).values('fecha').distinct().count()
+        sueldo_bruto = dias_pendientes * emp.sueldo_por_dia
+        adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=emp, liquidado=False)
+        total_adelantos = sum(a.importe for a in adelantos_pendientes)
+        
+        neto_a_pagar = sueldo_bruto - total_adelantos
+        if neto_a_pagar > 0:
+            total_deuda_nominas += neto_a_pagar
+
+    # Actualizamos el GRAN TOTAL sumando las nóminas
+    gran_total_deuda = total_deudas_normales + total_tarjetas + total_deuda_nominas
     
     context = {
         'deudas_pendientes': deudas_pendientes,
         'deudas_pagadas': deudas_pagadas,
         'gran_total_deuda': gran_total_deuda,
         'total_deudas_normales': total_deudas_normales,
-        'total_tarjetas': total_tarjetas
+        'total_tarjetas': total_tarjetas,
+        'total_deuda_nominas': total_deuda_nominas # Pasamos la nueva variable al HTML
     }
     return render(request, 'taller/lista_deudas.html', context)
 
@@ -2849,9 +2966,13 @@ def estado_vehiculo_publico(request, signed_id):
     except BadSignature:
         return HttpResponseForbidden("<h2>🔒 ENLACE INVÁLIDO</h2><p>Este enlace de seguimiento es incorrecto o ha caducado.</p>")
     
+    # Seleccionamos solo las notas que el mecánico haya marcado como visibles
+    notas_publicas = orden.notas_internas.filter(visible_cliente=True).order_by('-fecha_creacion')
+    
     context = {
         'orden': orden,
         'fotos': orden.fotos.all(),
+        'notas_publicas': notas_publicas, # PASAMOS LAS NOTAS AL HTML
     }
     return render(request, 'taller/estado_cliente.html', context)
 
@@ -2975,19 +3096,27 @@ def dar_adelanto(request):
         importe = request.POST.get('importe')
         motivo = request.POST.get('motivo', 'Adelanto de nómina')
         metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
+        fecha_str = request.POST.get('fecha_adelanto') # Atrapamos la fecha del formulario
         
         empleado = Empleado.objects.get(id=empleado_id)
         
-        # 1. Anotamos que nos debe este dinero de su sueldo
+        # Convertimos la fecha (si el usuario la dejó en blanco por error, usamos hoy)
+        try:
+            fecha_adelanto = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            fecha_adelanto = timezone.now().date()
+        
+        # 1. Anotamos que nos debe este dinero de su sueldo con la fecha correcta
         AdelantoSueldo.objects.create(
             empleado=empleado,
             importe=importe,
-            motivo=motivo
+            motivo=motivo,
+            fecha=fecha_adelanto # Usamos la fecha elegida
         )
         
-        # 2. Registramos la salida real del dinero de la caja/banco
+        # 2. Registramos la salida real del dinero de la caja/banco en ese día
         Gasto.objects.create(
-            fecha=timezone.now().date(),
+            fecha=fecha_adelanto, # Usamos la fecha elegida
             categoria='Sueldos',
             importe=importe,
             descripcion=f"ADELANTO NÓMINA: {empleado.nombre} - {motivo}",
@@ -2995,7 +3124,7 @@ def dar_adelanto(request):
             empleado=empleado
         )
         
-        messages.success(request, f"¡Adelanto de {importe}€ entregado a {empleado.nombre}! Gasto registrado.")
+        messages.success(request, f"¡Adelanto de {importe}€ registrado para el día {fecha_adelanto.strftime('%d/%m/%Y')}!")
         
     return redirect('panel_nominas')
 
@@ -3115,4 +3244,4 @@ def detalle_nomina(request, empleado_id):
         'ano_seleccionado': ano_seleccionado,
         'meses_del_ano': meses_del_ano,
         'anos_disponibles': anos_disponibles,
-    })      
+    })

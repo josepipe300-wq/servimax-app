@@ -20,9 +20,10 @@
         .total-card { background: #fef2f2; border: 2px solid #fecaca; padding: 25px; border-radius: 16px; text-align: center; box-shadow: 0 4px 10px rgba(239,68,68,0.1); }
         .total-card h4 { color: #b91c1c; font-size: 1.1em; font-weight: 800; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 0.05em;}
         .total-card .amount { font-size: 3.5em; font-weight: 800; margin: 0; color: #ef4444; text-shadow: 1px 1px 0px rgba(0,0,0,0.05);}
-        .total-breakdown { display: flex; justify-content: center; gap: 30px; margin-top: 15px; font-size: 1em; color: #7f1d1d; background: rgba(255,255,255,0.5); padding: 10px; border-radius: 8px; display: inline-flex;}
+        .total-breakdown { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; margin-top: 15px; font-size: 1em; color: #7f1d1d; background: rgba(255,255,255,0.5); padding: 10px; border-radius: 8px; display: inline-flex;}
         .total-breakdown span { font-weight: 500; }
         .total-breakdown b { font-weight: 800; color: #991b1b; font-size: 1.1em;}
+        .separator { color: #cbd5e1; }
 
         /* Formulario Nuevo */
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: end; }
@@ -49,6 +50,11 @@
         .badge-pendiente { background-color: #fee2e2; color: #b91c1c; }
         .badge-pagada { background-color: #d1fae5; color: #047857; }
         .badge-banco { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; margin-left: 8px; font-size: 0.7em;}
+
+        @media (max-width: 768px) {
+            .total-breakdown { gap: 10px; flex-direction: column; text-align: center; }
+            .separator { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -56,7 +62,7 @@
         <div style="margin-bottom: 20px;">
             <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver al Inicio</a>
             <h1 class="header-title">Cuentas por Pagar</h1>
-            <p style="color: #64748b; font-weight: 500; margin: 0;">Resumen del dinero que el taller debe a bancos, tarjetas y proveedores.</p>
+            <p style="color: #64748b; font-weight: 500; margin: 0;">Resumen del dinero que el taller debe a bancos, tarjetas, proveedores y empleados.</p>
         </div>
 
         <div class="summary-grid">
@@ -66,8 +72,10 @@
                 <div style="text-align: center;">
                     <div class="total-breakdown">
                         <span>Préstamos y Proveedores: <b>{{ total_deudas_normales|floatformat:2 }} €</b></span>
-                        <span style="color: #cbd5e1;">|</span>
+                        <span class="separator">|</span>
                         <span>Deuda en Tarjetas: <b>{{ total_tarjetas|floatformat:2 }} €</b></span>
+                        <span class="separator">|</span>
+                        <span>Nóminas Pendientes: <b style="color: #b91c1c;">{{ total_deuda_nominas|floatformat:2 }} €</b></span>
                     </div>
                 </div>
             </div>

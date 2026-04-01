@@ -7,7 +7,7 @@
     <title>Inicio - ServiMax</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         /* ========================================= */
         /* ESTILO MINIMALISTA Y LIMPIO               */
@@ -111,6 +111,10 @@
         .btn-ordenes { background-color: #0f172a; color: white; }
         .btn-fichar { background-color: #8b5cf6; color: white; }
 
+        /* Estilo para las filas de citas en el aviso */
+        .cita-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(30, 64, 175, 0.1); }
+        .cita-row:last-child { border-bottom: none; }
+
         @media (max-width: 1024px) {
             .layout-wrapper { flex-direction: column; }
             .sidebar-col { width: 100%; position: static; margin-bottom: 30px; }
@@ -205,13 +209,24 @@
 
                     </div>
 
-                    {% if not is_read_only_user %}
-                        {% now "d" as dia_actual %}
-                        {% if dia_actual <= "10" %}
-                        <div style="background-color: #fef3c7; border-left: 5px solid #f59e0b; padding: 15px; border-radius: 10px; margin-bottom: 24px; color: #92400e;">
-                            <strong style="font-weight: 700;">⚠️ RECORDATORIO DE PRINCIPIOS DE MES:</strong> No olvides ir a <a href="{% url 'informe_tarjeta' %}" style="color: #b45309; text-decoration: underline; font-weight: bold;">💳 Bancos / TPV</a> para registrar el pago de las Tarjetas.
+                    {% if citas_hoy_recordatorio %}
+                    <div style="background-color: #dbeafe; border-left: 5px solid #3b82f6; padding: 15px; border-radius: 12px; margin-bottom: 24px; color: #1e40af;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong style="font-weight: 800; font-size: 1.1em;">📅 CITAS AGENDADAS PARA HOY:</strong>
+                            <a href="{% url 'agenda' %}" style="color: #1d4ed8; font-weight: 700; text-decoration: none; font-size: 0.85em;">Ver Agenda Completa ➔</a>
                         </div>
-                        {% endif %}
+                        <div style="background: rgba(255, 255, 255, 0.5); border-radius: 8px; padding: 10px;">
+                            {% for cita in citas_hoy_recordatorio %}
+                            <div class="cita-row">
+                                <span>
+                                    <strong style="color: #0f172a;">{{ cita.fecha_hora|time:"H:i" }}</strong> - 
+                                    {{ cita.nombre_cliente }} {% if cita.vehiculo_info %}({{ cita.vehiculo_info }}){% endif %}
+                                </span>
+                                <em style="font-size: 0.85em; color: #475569;">{{ cita.motivo|truncatechars:30 }}</em>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
                     {% endif %}
 
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; margin-top: 10px;">
@@ -275,6 +290,21 @@
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <span style="font-size: 0.8em; margin:0; color:#94a3b8; font-weight: 500;">Disponible</span>
                                     <span style="font-size: 0.85em; color: #64748b; font-weight: 600;">Ver historial ➔</span>
+                                </div>
+                            </div>
+                        </a>
+
+                        <a href="{% url 'panel_nominas' %}" style="text-decoration: none; color: inherit;">
+                            <div class="card" style="border-top-color: #f43f5e;">
+                                <h3 style="display: flex; align-items: center; gap: 5px; margin-bottom: 2px;">👨‍🔧 Nóminas Pendientes</h3>
+                                <p style="font-size: 0.75em; color: #64748b; margin: 0 0 5px 0;">Sueldos por liquidar</p>
+                                
+                                <div class="amount" style="color: #ef4444;">
+                                    - {{ total_deuda_nominas|floatformat:2 }} €
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 0.8em; margin:0; color:#94a3b8; font-weight: 500;">Deuda actual</span>
+                                    <span style="font-size: 0.85em; color: #64748b; font-weight: 600;">Ir a pagar ➔</span>
                                 </div>
                             </div>
                         </a>

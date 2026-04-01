@@ -88,6 +88,34 @@
             {% endif %}
         </div>
 
+        {% if notas_publicas %}
+        <div class="card" style="border-top: 4px solid #3b82f6;">
+            <p class="title" style="color: #1e40af;">📋 Actualizaciones del Taller</p>
+            <p style="color: #64748b; font-size: 0.9em; margin-bottom: 25px;">Comentarios de nuestros mecánicos sobre tu vehículo.</p>
+            
+            <div style="position: relative; padding-left: 20px; border-left: 2px solid #bfdbfe; margin-left: 10px;">
+                {% for nota in notas_publicas %}
+                <div style="margin-bottom: 25px; position: relative;">
+                    <div style="position: absolute; left: -27px; top: 0; width: 12px; height: 12px; background: #3b82f6; border-radius: 50%; box-shadow: 0 0 0 3px #eff6ff;"></div>
+                    
+                    <div style="background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                        <span style="display: block; font-size: 0.85em; color: #64748b; font-weight: 600; margin-bottom: 5px;">{{ nota.fecha_creacion|date:"d/m/Y - H:i" }}</span>
+                        <p style="margin: 0; color: #1e293b; line-height: 1.4;">{{ nota.texto }}</p>
+                        
+                        {% if nota.imagen %}
+                        <div style="margin-top: 10px;">
+                            <a href="{{ nota.imagen.url }}" target="_blank">
+                                <img src="{{ nota.imagen.url }}" alt="Imagen adjunta" style="max-width: 100px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         {% if orden.reportes_escaner.all %}
         <div class="card">
             <p class="title">📡 Reportes de Diagnóstico Electrónico</p>

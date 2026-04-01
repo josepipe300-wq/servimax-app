@@ -129,6 +129,9 @@
                                         {% csrf_token %}
                                         <input type="hidden" name="empleado_id" value="{{ dato.empleado.id }}">
                                         
+                                        <label style="font-size: 0.8em; color: #64748b; font-weight: bold;">Fecha del adelanto:</label>
+                                        <input type="date" name="fecha_adelanto" value="{% now 'Y-m-d' %}" required style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
+
                                         <label style="font-size: 0.8em; color: #64748b; font-weight: bold;">Importe (€):</label>
                                         <input type="number" name="importe" step="0.01" placeholder="Ej: 50.00" required style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
                                         
@@ -137,8 +140,9 @@
                                         
                                         <label style="font-size: 0.8em; color: #64748b; font-weight: bold;">El dinero sale de:</label>
                                         <select name="metodo_pago" style="width: 100%; padding: 8px; margin-bottom: 15px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                                            <option value="EFECTIVO">Caja (Efectivo)</option>
-                                            <option value="CUENTA_TALLER">Banco</option>
+                                            <option value="EFECTIVO">🪙 Caja (Efectivo)</option>
+                                            <option value="CUENTA_TALLER">🏦 Banco</option>
+                                            <option value="COMPENSACION">🤝 Compensación (Descuento por Reparación)</option>
                                         </select>
                                         
                                         <button type="submit" style="width: 100%; background: #3b82f6; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s;">
