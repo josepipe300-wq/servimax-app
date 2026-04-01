@@ -1339,30 +1339,32 @@ def generar_factura(request, orden_id):
         notas = request.POST.get('notas_cliente', '')
 
         with transaction.atomic():
-            factura_anterior = Factura.objects.filter(orden=orden).first()
-            numero_a_conservar = None; fecha_a_conservar = None
-            if factura_anterior:
-                if factura_anterior.es_factura and factura_anterior.numero_factura: numero_a_conservar = factura_anterior.numero_factura
-                fecha_a_conservar = factura_anterior.fecha_emision
-
-            Factura.objects.filter(orden=orden).delete(); UsoConsumible.objects.filter(orden=orden).delete()
-
-            nuevo_numero_factura = None
-            if es_factura:
-                if numero_a_conservar: nuevo_numero_factura = numero_a_conservar
-                else:
+            factura = Factura.objects.filter(orden=orden).first()
+            
+            if factura:
+                # ¡AQUÍ ESTÁ LA MAGIA! En vez de borrarla, la actualizamos.
+                factura.es_factura = es_factura
+                factura.notas_cliente = notas
+                # Si antes era un recibo sin IVA y ahora es factura oficial, le damos número:
+                if es_factura and not factura.numero_factura:
                     ultima_factura = Factura.objects.select_for_update().filter(numero_factura__isnull=False).order_by('-numero_factura').first()
-                    if ultima_factura and ultima_factura.numero_factura: nuevo_numero_factura = ultima_factura.numero_factura + 1
-                    else: nuevo_numero_factura = 1
-            
-            factura = Factura.objects.create(orden=orden, es_factura=es_factura, notas_cliente=notas, numero_factura=nuevo_numero_factura )
-            
-            if fecha_a_conservar:
-                Factura.objects.filter(id=factura.id).update(fecha_emision=fecha_a_conservar)
-                factura.fecha_emision = fecha_a_conservar
+                    factura.numero_factura = (ultima_factura.numero_factura + 1) if (ultima_factura and ultima_factura.numero_factura) else 1
+                
+                # Borramos solo las líneas y los consumibles usados para volver a crearlos limpios
+                factura.lineas.all().delete()
+                UsoConsumible.objects.filter(orden=orden).delete()
+            else:
+                # Si no existe, creamos una nueva desde cero
+                nuevo_numero_factura = None
+                if es_factura:
+                    ultima_factura = Factura.objects.select_for_update().filter(numero_factura__isnull=False).order_by('-numero_factura').first()
+                    nuevo_numero_factura = (ultima_factura.numero_factura + 1) if (ultima_factura and ultima_factura.numero_factura) else 1
+                
+                factura = Factura.objects.create(orden=orden, es_factura=es_factura, notas_cliente=notas, numero_factura=nuevo_numero_factura)
             
             subtotal = Decimal('0.00')
-            repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos'); gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
+            repuestos_qs = Gasto.objects.filter(orden=orden, categoria='Repuestos')
+            gastos_otros_qs = Gasto.objects.filter(orden=orden, categoria='Otros')
             
             for repuesto in repuestos_qs:
                 pvp_str = request.POST.get(f'pvp_repuesto_{repuesto.id}')
@@ -1416,6 +1418,8 @@ def generar_factura(request, orden_id):
             iva_calculado = Decimal('0.00'); subtotal_positivo = max(subtotal, Decimal('0.00'))
             if es_factura: iva_calculado = (subtotal_positivo * Decimal('0.21')).quantize(Decimal('0.01'))
             total_final = subtotal_positivo + iva_calculado
+            
+            # Guardamos los nuevos totales en la factura original
             factura.subtotal = subtotal; factura.iva = iva_calculado; factura.total_final = total_final
             factura.save() 
             
@@ -1450,9 +1454,7 @@ def editar_factura(request, factura_id):
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo__cliente'), id=factura.orden_id)
 
     if request.method == 'POST':
-        with transaction.atomic():
-            UsoConsumible.objects.filter(orden=orden).delete()
-            factura.delete()
+        # Ya no borramos la factura aquí, de eso se encarga generar_factura de forma inteligente
         try:
              original_request = getattr(request, '_request', request)
              return generar_factura(original_request, orden.id)
