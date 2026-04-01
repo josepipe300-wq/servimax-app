@@ -2,6 +2,7 @@
 # --- LIBRERÍAS ESTÁNDAR DE PYTHON ---
 import os
 import json
+import calendar
 from datetime import datetime, timedelta
 from decimal import Decimal
 from itertools import groupby
@@ -36,6 +37,17 @@ from .models import (
     HistorialEstadoOrden, Cita, HistorialIA, ReporteEscaner,
     Asistencia, AdelantoSueldo # <- Los nuevos de Recursos Humanos
 )
+
+
+def obtener_dias_laborables_mes(fecha):
+    """Calcula cuántos días de Lunes a Viernes tiene el mes de la fecha dada"""
+    dias_en_mes = calendar.monthrange(fecha.year, fecha.month)[1]
+    dias_laborables = 0
+    for dia in range(1, dias_en_mes + 1):
+        # weekday() devuelve 0 para Lunes, 1 Martes... 4 Viernes.
+        if calendar.weekday(fecha.year, fecha.month, dia) < 5:
+            dias_laborables += 1
+    return Decimal(str(dias_laborables))
 
 # ==============================================================
 # --- CANDADO DE SEGURIDAD PARA EL MODO LECTURA (PADRE) ---
@@ -233,7 +245,12 @@ def home(request):
             empleado=emp, pagado=False, hora_salida__isnull=False
         ).values('fecha').distinct().count()
         
-        sueldo_bruto = dias_pendientes * emp.sueldo_por_dia
+        # --- CÁLCULO INTELIGENTE ---
+        if emp.es_sueldo_fijo:
+            dias_laborables_mes = obtener_dias_laborables_mes(hoy_date)
+            sueldo_bruto = Decimal(dias_pendientes) * (emp.sueldo_fijo_mensual / dias_laborables_mes)
+        else:
+            sueldo_bruto = dias_pendientes * emp.sueldo_por_dia
         
         adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=emp, liquidado=False)
         total_adelantos = sum(a.importe for a in adelantos_pendientes)
@@ -258,7 +275,6 @@ def home(request):
     )
     movimientos_recientes = movimientos_combinados[:5]
 
-    # AQUÍ ESTÁ EL FAMOSO DICCIONARIO PERFECTAMENTE CERRADO
     context = {
         'total_ingresos': total_ingresos,
         'total_gastos': total_gastos,
@@ -280,63 +296,7 @@ def home(request):
     }
     
     return render(request, 'taller/home.html', context)
-    
-    def calcular_tarjeta(tag, limite):
-        gastos = Gasto.objects.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-        abonos = Ingreso.objects.filter(metodo_pago=tag).aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
-        dispuesto = gastos - abonos
-        return {'limite': limite, 'dispuesto': dispuesto, 'disponible': limite - dispuesto}
 
-    tarjeta_1 = calcular_tarjeta('TARJETA_1', Decimal('2000.00'))
-    tarjeta_2 = calcular_tarjeta('TARJETA_2', Decimal('1000.00'))
-
-    ultimos_gastos = Gasto.objects.order_by('-id')[:5]
-    ultimos_ingresos = Ingreso.objects.order_by('-id')[:5]
-    movimientos_combinados = sorted(
-        list(ultimos_gastos) + list(ultimos_ingresos),
-        key=lambda mov: mov.fecha if hasattr(mov, 'fecha') else timezone.now().date(),
-        reverse=True
-    )
-    movimientos_recientes = movimientos_combinados[:5]
-
-    tipos_consumible = TipoConsumible.objects.all()
-    alertas_stock = []
-    for tipo in tipos_consumible:
-        total_comprado = CompraConsumible.objects.filter(tipo=tipo).aggregate(total=Sum('cantidad'))['total'] or Decimal('0.00')
-        total_usado_ordenes = UsoConsumible.objects.filter(tipo=tipo).aggregate(total=Sum('cantidad_usada'))['total'] or Decimal('0.00')
-        total_ajustado = AjusteStockConsumible.objects.filter(tipo=tipo).aggregate(total=Sum('cantidad_ajustada'))['total'] or Decimal('0.00')
-        stock_actual = total_comprado - total_usado_ordenes + total_ajustado
-
-        if tipo.nivel_minimo_stock is not None and stock_actual <= tipo.nivel_minimo_stock:
-            alertas_stock.append({
-                'nombre': tipo.nombre, 'stock_actual': stock_actual,
-                'unidad': tipo.unidad_medida, 'minimo': tipo.nivel_minimo_stock
-            })
-    
-    is_read_only_user = request.user.groups.filter(name='Solo Ver').exists()
-    anos_y_meses_data = get_anos_y_meses_con_datos()
-    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
-
-    notas_tablon = NotaTablon.objects.filter(completada=False).order_by('-fecha_creacion')[:20]
-
-    context = {
-        'total_ingresos': total_ingresos,
-        'total_gastos': total_gastos,
-        'balance_efectivo': balance_efectivo,
-        'balance_taller': balance_taller,
-        'tarjeta_1': tarjeta_1,
-        'tarjeta_2': tarjeta_2,
-        'movimientos_recientes': movimientos_recientes,
-        'alertas_stock': alertas_stock,
-        'is_read_only_user': is_read_only_user,
-        'anos_disponibles': anos_disponibles,
-        'ano_seleccionado': ano_actual,
-        'mes_seleccionado': mes_actual,
-        'meses_del_ano': range(1, 13),
-        'notas_tablon': notas_tablon,
-        'taller_cerrado': HistorialEstadoOrden.objects.filter(es_pausa_jornada=True, fecha_fin__isnull=True).exists()
-    }
-    return render(request, 'taller/home.html', context)
 
 @login_required
 @bloquear_lectura 
@@ -2178,11 +2138,20 @@ def lista_deudas(request):
     # --- NUEVO: CÁLCULO DE DEUDA DE NÓMINAS ---
     total_deuda_nominas = Decimal('0.00')
     empleados_taller = Empleado.objects.all()
+    hoy_date = timezone.now().date()
+    
     for emp in empleados_taller:
         dias_pendientes = Asistencia.objects.filter(
             empleado=emp, pagado=False, hora_salida__isnull=False
         ).values('fecha').distinct().count()
-        sueldo_bruto = dias_pendientes * emp.sueldo_por_dia
+        
+        # --- CÁLCULO INTELIGENTE ---
+        if emp.es_sueldo_fijo:
+            dias_laborables_mes = obtener_dias_laborables_mes(hoy_date)
+            sueldo_bruto = Decimal(dias_pendientes) * (emp.sueldo_fijo_mensual / dias_laborables_mes)
+        else:
+            sueldo_bruto = dias_pendientes * emp.sueldo_por_dia
+            
         adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=emp, liquidado=False)
         total_adelantos = sum(a.importe for a in adelantos_pendientes)
         
@@ -3022,16 +2991,23 @@ def fichador_mecanicos(request):
     })
 
 
+@login_required
 def panel_nominas(request):
     if request.method == 'POST':
         empleado_id = request.POST.get('empleado_id')
-        # NUEVO: Cogemos el método de pago que elija tu hermano en el desplegable
         metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO') 
         empleado = Empleado.objects.get(id=empleado_id)
         
         asistencias_pendientes = Asistencia.objects.filter(empleado=empleado, pagado=False, hora_salida__isnull=False)
         dias_trabajados = asistencias_pendientes.values('fecha').distinct().count()
-        sueldo_bruto = dias_trabajados * empleado.sueldo_por_dia
+        
+        # --- CÁLCULO INTELIGENTE FIJO VS DIARIO ---
+        if empleado.es_sueldo_fijo:
+            dias_mes = obtener_dias_laborables_mes(timezone.now().date())
+            valor_dia = empleado.sueldo_fijo_mensual / dias_mes
+            sueldo_bruto = Decimal(dias_trabajados) * valor_dia
+        else:
+            sueldo_bruto = dias_trabajados * empleado.sueldo_por_dia
         
         adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=empleado, liquidado=False)
         total_adelantos = sum(a.importe for a in adelantos_pendientes)
@@ -3052,7 +3028,7 @@ def panel_nominas(request):
             adelantos_pendientes.update(liquidado=True)
             messages.success(request, f"¡Nómina de {empleado.nombre} liquidada correctamente mediante {metodo_pago}!")
             
-        elif total_a_pagar == 0 and sueldo_bruto > 0:
+        elif total_a_pagar <= 0 and sueldo_bruto > 0:
             # Si lo que se le debe es exactamente 0 porque los adelantos cubren todo el mes
             asistencias_pendientes.update(pagado=True)
             adelantos_pendientes.update(liquidado=True)
@@ -3073,7 +3049,16 @@ def panel_nominas(request):
         fechas_exactas = asistencias_pendientes.values_list('fecha', flat=True).distinct()
         fechas_str = ", ".join([f.strftime('%d/%m') for f in fechas_exactas])
         
-        sueldo_bruto = dias_pendientes * emp.sueldo_por_dia
+        # --- CÁLCULO INTELIGENTE FIJO VS DIARIO ---
+        if emp.es_sueldo_fijo:
+            dias_mes = obtener_dias_laborables_mes(timezone.now().date())
+            valor_dia = emp.sueldo_fijo_mensual / dias_mes
+            sueldo_bruto = Decimal(dias_pendientes) * valor_dia
+        else:
+            valor_dia = emp.sueldo_por_dia
+            sueldo_bruto = dias_pendientes * valor_dia
+            dias_mes = 0 # No aplica para diarios
+            
         adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=emp, liquidado=False)
         total_adelantos = sum(a.importe for a in adelantos_pendientes)
         total_neto = sueldo_bruto - total_adelantos
@@ -3084,7 +3069,9 @@ def panel_nominas(request):
             'fechas_str': fechas_str,
             'bruto': sueldo_bruto,
             'adelantos': total_adelantos,
-            'neto': total_neto
+            'neto': total_neto,
+            'valor_dia': valor_dia,
+            'dias_mes': dias_mes
         })
 
     return render(request, 'taller/panel_nominas.html', {'datos_nominas': datos_nominas})

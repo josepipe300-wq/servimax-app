@@ -190,6 +190,8 @@ class Empleado(models.Model):
     nombre = models.CharField(max_length=100)
     telefono = models.CharField(max_length=20, blank=True, null=True)
     sueldo_por_dia = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
+    es_sueldo_fijo = models.BooleanField(default=False)
+    sueldo_fijo_mensual = models.DecimalField(max_digits=8, decimal_places=2, default=1000.00)
     
     def __str__(self):
         return self.nombre

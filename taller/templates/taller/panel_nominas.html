@@ -79,7 +79,14 @@
                             <a href="{% url 'detalle_nomina' dato.empleado.id %}" style="text-decoration: none;">
                                 <span class="mecanico-nombre" style="color: #3b82f6; text-decoration: underline;">{{ dato.empleado.nombre }} 🔍</span>
                             </a>
-                            <span class="mecanico-sueldo">{{ dato.empleado.sueldo_por_dia }}€ / día</span>
+                            {% if dato.empleado.es_sueldo_fijo %}
+                                <span class="mecanico-sueldo" style="color: #8b5cf6; font-weight: 600;">
+                                    FIJO: {{ dato.empleado.sueldo_fijo_mensual|floatformat:0 }}€/mes<br>
+                                    <small style="color: #94a3b8; font-weight: normal;">({{ dato.valor_dia|floatformat:2 }}€/día este mes de {{ dato.dias_mes }} días laborables)</small>
+                                </span>
+                            {% else %}
+                                <span class="mecanico-sueldo">{{ dato.empleado.sueldo_por_dia }}€ / día</span>
+                            {% endif %}
                         </td>
                         
                         <td>
