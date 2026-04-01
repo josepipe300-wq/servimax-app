@@ -109,6 +109,7 @@
         .btn-vehiculo { background-color: #3b82f6; color: white; }
         .btn-presupuestos { background-color: #f97316; color: white; }
         .btn-ordenes { background-color: #0f172a; color: white; }
+        .btn-fichar { background-color: #8b5cf6; color: white; }
 
         @media (max-width: 1024px) {
             .layout-wrapper { flex-direction: column; }
@@ -189,9 +190,17 @@
                         </div>
 
                         <p class="section-title" style="margin-top: 25px;">🤝 Gestión de Cobros y Deudas</p>
-                        <div class="nav-buttons" style="margin-bottom: 0;">
+                        <div class="nav-buttons">
                             <a href="{% url 'cuentas_por_cobrar' %}" class="nav-btn" style="background: #f43f5e;">🚨 Por Cobrar (Clientes)</a>
                             <a href="{% url 'lista_deudas' %}" class="nav-btn" style="background: #eab308; color:#1e293b;">📓 Por Pagar (Préstamos)</a>
+                        </div>
+
+                        <p class="section-title" style="margin-top: 25px;">👥 Recursos Humanos y Nóminas</p>
+                        <div class="nav-buttons" style="margin-bottom: 0;">
+                            <a href="{% url 'fichador' %}" class="nav-btn" style="background: #8b5cf6;">⏱️ Abrir Fichador</a>
+                            {% if not is_read_only_user %}
+                            <a href="{% url 'panel_nominas' %}" class="nav-btn" style="background: #14b8a6;">💰 Pagar Nóminas</a>
+                            {% endif %}
                         </div>
 
                     </div>
@@ -323,6 +332,9 @@
                     <div class="mecanico-panel">
                         <h2 style="color: #0f172a; font-size: 2.2em; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 30px;">🛠️ Panel de Trabajo</h2>
                         <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 15px;">
+                            <a href="{% url 'fichador' %}" class="btn-giant btn-fichar">
+                                ⏱️ Fichar Entrada / Salida
+                            </a>
                             <a href="{% url 'ingresar_vehiculo' %}" class="btn-giant btn-vehiculo">
                                 🚗 Nuevo Vehículo
                             </a>

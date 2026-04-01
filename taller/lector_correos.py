@@ -5,9 +5,9 @@ import os
 import google.generativeai as genai
 from taller.models import OrdenDeReparacion, ReporteEscaner
 
-# --- CREDENCIALES DEL ESCÁNER ---
-CORREO_TALLER = "servimaxm7@gmail.com"
-PASSWORD_APP = "mcoi yxyp wgxg rzzj"
+# --- CREDENCIALES DEL ESCÁNER (PROTEGIDAS) ---
+CORREO_TALLER = os.environ.get("EMAIL_USUARIO")
+PASSWORD_APP = os.environ.get("EMAIL_CONTRASENA")
 
 def decodificar_texto(texto_codificado):
     if not texto_codificado: return ""
@@ -22,6 +22,11 @@ def decodificar_texto(texto_codificado):
 
 def descargar_y_asignar_reportes():
     try:
+        # Validación de seguridad: si no están las variables, cortamos para no provocar un error fatal
+        if not CORREO_TALLER or not PASSWORD_APP:
+            print("❌ ERROR: Faltan las credenciales del correo en las variables de entorno.")
+            return {"status": "error", "mensaje": "Las llaves del correo no están configuradas en el servidor."}
+
         print("⏳ Conectando al correo de Gmail...")
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(CORREO_TALLER, PASSWORD_APP)

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fichador - ServiMax</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: white; text-align: center; padding: 20px; margin: 0; }
+        
+        /* NUEVO: Contenedor para el botón de volver */
+        .header-top { display: flex; justify-content: flex-start; max-width: 800px; margin: 0 auto 20px auto; padding-top: 10px;}
+        .btn-volver { background: #1e293b; color: #94a3b8; padding: 10px 20px; text-decoration: none; border-radius: 10px; font-weight: 600; border: 1px solid #334155; transition: 0.2s;}
+        .btn-volver:hover { background: #334155; color: white; }
+
+        h1 { font-size: 2.5em; margin-bottom: 10px; color: #3b82f6; margin-top: 0;}
+        .mensaje { background: #10b981; color: white; padding: 15px; border-radius: 10px; font-weight: bold; margin-bottom: 20px; display: inline-block;}
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; max-width: 800px; margin: 0 auto; }
+        .tarjeta { background: #1e293b; padding: 30px; border-radius: 15px; border: 2px solid #334155; }
+        .nombre { font-size: 2em; font-weight: 800; margin-bottom: 20px; }
+        .btn { width: 100%; padding: 20px; font-size: 1.5em; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; }
+        .btn-entrar { background: #10b981; color: white; }
+        .btn-entrar:hover { background: #059669; }
+        .btn-salir { background: #ef4444; color: white; }
+        .btn-salir:hover { background: #dc2626; }
+        .estado { margin-top: 15px; font-size: 1.1em; color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+    <div class="header-top">
+        <a href="{% url 'home' %}" class="btn-volver">⬅️ Volver a Inicio</a>
+    </div>
+
+    <h1>ServiMax - Control de Asistencia</h1>
+    <p>Toca tu nombre al entrar y al salir del taller</p>
+
+    {% if mensaje %}
+        <div class="mensaje">{{ mensaje }}</div>
+    {% endif %}
+
+    <div class="grid">
+        {% for emp in empleados %}
+        <div class="tarjeta">
+            <div class="nombre">{{ emp.nombre }}</div>
+            
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="empleado_id" value="{{ emp.id }}">
+                
+                {% if not emp.trabajando_ahora %}
+                    <button type="submit" name="accion" value="entrar" class="btn btn-entrar">🟢 ENTRAR</button>
+                    <div class="estado">Actualmente: Fuera del taller</div>
+                {% else %}
+                    <button type="submit" name="accion" value="salir" class="btn btn-salir">🔴 SALIR</button>
+                    <div class="estado" style="color: #10b981;">Actualmente: Trabajando</div>
+                {% endif %}
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+
+</body>
+</html>

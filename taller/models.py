@@ -183,9 +183,13 @@ class HistorialEstadoOrden(models.Model):
 
 
 # =========================================================
+# --- MODULO DE NÓMINAS Y RECURSOS HUMANOS ---
+# =========================================================
 
 class Empleado(models.Model):
     nombre = models.CharField(max_length=100)
+    telefono = models.CharField(max_length=20, blank=True, null=True)
+    sueldo_por_dia = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
     
     def __str__(self):
         return self.nombre
@@ -193,6 +197,28 @@ class Empleado(models.Model):
     def save(self, *args, **kwargs):
         self.nombre = self.nombre.upper()
         super(Empleado, self).save(*args, **kwargs)
+
+class Asistencia(models.Model):
+    empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='asistencias')
+    fecha = models.DateField(default=timezone.now)
+    hora_entrada = models.TimeField(auto_now_add=True)
+    hora_salida = models.TimeField(null=True, blank=True)
+    pagado = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.empleado.nombre} - {self.fecha}"
+
+class AdelantoSueldo(models.Model):
+    empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='adelantos')
+    fecha = models.DateField(default=timezone.now)
+    importe = models.DecimalField(max_digits=10, decimal_places=2)
+    motivo = models.CharField(max_length=200, default="Adelanto de nómina")
+    liquidado = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.empleado.nombre} - {self.importe}€"
+
+# =========================================================
 
 class DeudaTaller(models.Model):
     acreedor = models.CharField(max_length=150, help_text="A quién se le debe (Ej: Hermano, Cliente X)")

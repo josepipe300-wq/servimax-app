@@ -69,4 +69,10 @@ urlpatterns = [
 
     # --- INTELIGENCIA ARTIFICIAL ---
     path('asistente/', views.asistente_ia, name='asistente_ia'),
+
+    path('fichar/', views.fichador_mecanicos, name='fichador'),
+
+    path('nominas/', views.panel_nominas, name='panel_nominas'),
+    path('nominas/detalle/<int:empleado_id>/', views.detalle_nomina, name='detalle_nomina'),
+    path('nominas/adelanto/', views.dar_adelanto, name='dar_adelanto'),
 ]

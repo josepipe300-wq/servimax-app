@@ -1,37 +1,41 @@
 # taller/views.py
+# --- LIBRERÍAS ESTÁNDAR DE PYTHON ---
+import os
+import json
+from datetime import datetime, timedelta
+from decimal import Decimal
+from itertools import groupby
+from collections import defaultdict
+from urllib.parse import quote
+from functools import wraps
+
+# --- LIBRERÍAS DE TERCEROS ---
+from xhtml2pdf import pisa
+import google.generativeai as genai
+
+# --- CORE DE DJANGO ---
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.template.loader import get_template
+from django.conf import settings
+from django.utils import timezone
+from django.urls import reverse
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.db.models import Sum, F, Q
+from django.db import transaction
+from django.core.signing import Signer, BadSignature
+
+# --- ARCHIVOS LOCALES DE LA APP ---
+from . import ai_tools
 from .models import (
     Ingreso, Gasto, Cliente, Vehiculo, OrdenDeReparacion, Empleado,
     TipoConsumible, CompraConsumible, Factura, LineaFactura, FotoVehiculo,
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
     CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller, AmpliacionDeuda, 
-    HistorialEstadoOrden, Cita, HistorialIA 
+    HistorialEstadoOrden, Cita, HistorialIA, ReporteEscaner,
+    Asistencia, AdelantoSueldo # <- Los nuevos de Recursos Humanos
 )
-from django.db.models import Sum, F, Q
-from django.db import transaction
-from datetime import datetime, timedelta
-from decimal import Decimal
-from itertools import groupby
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
-from django.template.loader import get_template
-from xhtml2pdf import pisa
-import os
-from django.conf import settings
-from django.utils import timezone
-import json
-from django.urls import reverse
-from django.contrib.auth.decorators import login_required
-from functools import wraps
-
-from django.core.signing import Signer, BadSignature
-from urllib.parse import quote
-
-# --- IMPORTS PARA LA INTELIGENCIA ARTIFICIAL ---
-import google.generativeai as genai
-from . import ai_tools
-
-# --- VISTA PARA SINCRONIZAR CORREOS DEL ESCÁNER ---
-from django.contrib import messages
 
 # ==============================================================
 # --- CANDADO DE SEGURIDAD PARA EL MODO LECTURA (PADRE) ---
@@ -1074,23 +1078,45 @@ def detalle_orden(request, orden_id):
             importe = Decimal(request.POST.get('importe_pago', '0'))
             metodo = request.POST.get('metodo_pago')
             deuda_id = request.POST.get('deuda_id')
+            empleado_id = request.POST.get('empleado_id') # NUEVO CAMPO PARA NÓMINAS
             
             if importe > 0:
                 with transaction.atomic():
+                    # 1. Ingreso de la orden (queda pagada)
                     Ingreso.objects.create(
                         fecha=timezone.now().date(), categoria='Taller', importe=importe,
                         descripcion=f"COBRO FACTURA {orden.vehiculo.matricula}", metodo_pago=metodo,
                         orden=orden, es_tpv=(metodo not in ['EFECTIVO', 'COMPENSACION'])
                     )
-                    if metodo == 'COMPENSACION' and deuda_id:
-                        try:
-                            deuda_taller = DeudaTaller.objects.get(id=deuda_id)
-                            Gasto.objects.create(
-                                fecha=timezone.now().date(), categoria='Pago de Deuda', importe=importe,
-                                descripcion=f"COMPENSACIÓN POR REPARACIÓN {orden.vehiculo.matricula}",
-                                metodo_pago='COMPENSACION', orden=orden, deuda_asociada=deuda_taller
-                            )
-                        except DeudaTaller.DoesNotExist: pass
+                    
+                    # 2. Lógica mágica de Compensación Doble
+                    if metodo == 'COMPENSACION':
+                        if deuda_id: # Opción 1: Compensar deuda del taller
+                            try:
+                                deuda_taller = DeudaTaller.objects.get(id=deuda_id)
+                                Gasto.objects.create(
+                                    fecha=timezone.now().date(), categoria='Pago de Deuda', importe=importe,
+                                    descripcion=f"COMPENSACIÓN POR REPARACIÓN {orden.vehiculo.matricula}",
+                                    metodo_pago='COMPENSACION', orden=orden, deuda_asociada=deuda_taller
+                                )
+                            except DeudaTaller.DoesNotExist: pass
+                            
+                        elif empleado_id: # Opción 2: Descontar de nómina
+                            try:
+                                empleado_comp = Empleado.objects.get(id=empleado_id)
+                                # Le inyectamos el adelanto
+                                AdelantoSueldo.objects.create(
+                                    empleado=empleado_comp, importe=importe,
+                                    motivo=f"REPARACIÓN PROPIA: {orden.vehiculo.matricula} (Ord. #{orden.id})"
+                                )
+                                # Compensamos el gasto en caja
+                                Gasto.objects.create(
+                                    fecha=timezone.now().date(), categoria='Sueldos', importe=importe,
+                                    descripcion=f"ADELANTO NÓMINA (REPARACIÓN {orden.vehiculo.matricula})",
+                                    metodo_pago='COMPENSACION', orden=orden, empleado=empleado_comp
+                                )
+                            except Empleado.DoesNotExist: pass
+
             return redirect('detalle_orden', orden_id=orden.id)
 
     metodos_pago = Ingreso.METODO_PAGO_CHOICES
@@ -1101,12 +1127,10 @@ def detalle_orden(request, orden_id):
         'abonos': abonos, 'pendiente_pago': pendiente_pago, 'tipos_consumible': tipos_consumible,
         'fotos': orden.fotos.all(), 'estados_orden': OrdenDeReparacion.ESTADO_CHOICES, 
         'whatsapp_url': whatsapp_url,
-        
-        # 👇 AQUÍ FALTABA METER LA VARIABLE 👇
         'whatsapp_estado_url': whatsapp_estado_url,
-        
         'notas_internas': orden.notas_internas.all(),
-        'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes 
+        'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes,
+        'empleados_taller': Empleado.objects.all() # MANDAMOS LOS MECÁNICOS AL HTML
     }
     return render(request, 'taller/detalle_orden.html', context)
     
@@ -2830,3 +2854,265 @@ def estado_vehiculo_publico(request, signed_id):
         'fotos': orden.fotos.all(),
     }
     return render(request, 'taller/estado_cliente.html', context)
+
+def fichador_mecanicos(request):
+    mensaje = ""
+    # Usamos localtime() para asegurarnos de que coge el día exacto de España
+    hoy = timezone.localtime().date()
+    
+    if request.method == 'POST':
+        empleado_id = request.POST.get('empleado_id')
+        accion = request.POST.get('accion')
+        empleado = Empleado.objects.get(id=empleado_id)
+        
+        if accion == 'entrar':
+            # Evitamos que fichen entrada dos veces seguidas por error
+            turno_abierto = Asistencia.objects.filter(empleado=empleado, fecha=hoy, hora_salida__isnull=True).exists()
+            if not turno_abierto:
+                # FORZAMOS LA HORA LOCAL DE ESPAÑA AL ENTRAR
+                hora_exacta = timezone.localtime().time()
+                Asistencia.objects.create(empleado=empleado, fecha=hoy, hora_entrada=hora_exacta)
+                mensaje = f"¡Hola {empleado.nombre}! Entrada registrada a las {hora_exacta.strftime('%H:%M')}."
+            else:
+                mensaje = f"¡Oye {empleado.nombre}, ya estabas trabajando!"
+                
+        elif accion == 'salir':
+            asistencia = Asistencia.objects.filter(empleado=empleado, fecha=hoy, hora_salida__isnull=True).first()
+            if asistencia:
+                # FORZAMOS LA HORA LOCAL DE ESPAÑA AL SALIR
+                hora_exacta = timezone.localtime().time()
+                asistencia.hora_salida = hora_exacta
+                asistencia.save()
+                mensaje = f"¡Hasta luego {empleado.nombre}! Salida registrada a las {hora_exacta.strftime('%H:%M')}."
+
+    empleados_data = []
+    empleados_db = Empleado.objects.all()
+    for emp in empleados_db:
+        turno_abierto = Asistencia.objects.filter(empleado=emp, fecha=hoy, hora_salida__isnull=True).exists()
+        empleados_data.append({
+            'id': emp.id,
+            'nombre': emp.nombre,
+            'trabajando_ahora': turno_abierto
+        })
+        
+    return render(request, 'taller/fichador.html', {
+        'empleados': empleados_data,
+        'mensaje': mensaje
+    })
+
+
+def panel_nominas(request):
+    if request.method == 'POST':
+        empleado_id = request.POST.get('empleado_id')
+        # NUEVO: Cogemos el método de pago que elija tu hermano en el desplegable
+        metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO') 
+        empleado = Empleado.objects.get(id=empleado_id)
+        
+        asistencias_pendientes = Asistencia.objects.filter(empleado=empleado, pagado=False, hora_salida__isnull=False)
+        dias_trabajados = asistencias_pendientes.values('fecha').distinct().count()
+        sueldo_bruto = dias_trabajados * empleado.sueldo_por_dia
+        
+        adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=empleado, liquidado=False)
+        total_adelantos = sum(a.importe for a in adelantos_pendientes)
+        
+        total_a_pagar = sueldo_bruto - total_adelantos
+
+        if total_a_pagar > 0:
+            # Crea el gasto con el método que hayamos elegido (Banco o Efectivo)
+            Gasto.objects.create(
+                fecha=timezone.now().date(),
+                categoria='Sueldos',
+                importe=total_a_pagar,
+                descripcion=f"NÓMINA {empleado.nombre} ({dias_trabajados} días). Descontados {total_adelantos}€.",
+                metodo_pago=metodo_pago, 
+                empleado=empleado
+            )
+            asistencias_pendientes.update(pagado=True)
+            adelantos_pendientes.update(liquidado=True)
+            messages.success(request, f"¡Nómina de {empleado.nombre} liquidada correctamente mediante {metodo_pago}!")
+            
+        elif total_a_pagar == 0 and sueldo_bruto > 0:
+            # Si lo que se le debe es exactamente 0 porque los adelantos cubren todo el mes
+            asistencias_pendientes.update(pagado=True)
+            adelantos_pendientes.update(liquidado=True)
+            messages.success(request, f"Nómina de {empleado.nombre} liquidada a cero (los adelantos cubrían todo el sueldo).")
+        else:
+            messages.warning(request, f"No hay saldo a favor para {empleado.nombre} o los adelantos superan lo que ha trabajado.")
+            
+        return redirect('panel_nominas')
+
+    # --- LÓGICA DE MOSTRAR PANTALLA ---
+    empleados = Empleado.objects.all()
+    datos_nominas = []
+    
+    for emp in empleados:
+        asistencias_pendientes = Asistencia.objects.filter(empleado=emp, pagado=False, hora_salida__isnull=False)
+        dias_pendientes = asistencias_pendientes.values('fecha').distinct().count()
+        
+        fechas_exactas = asistencias_pendientes.values_list('fecha', flat=True).distinct()
+        fechas_str = ", ".join([f.strftime('%d/%m') for f in fechas_exactas])
+        
+        sueldo_bruto = dias_pendientes * emp.sueldo_por_dia
+        adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=emp, liquidado=False)
+        total_adelantos = sum(a.importe for a in adelantos_pendientes)
+        total_neto = sueldo_bruto - total_adelantos
+        
+        datos_nominas.append({
+            'empleado': emp,
+            'dias': dias_pendientes,
+            'fechas_str': fechas_str,
+            'bruto': sueldo_bruto,
+            'adelantos': total_adelantos,
+            'neto': total_neto
+        })
+
+    return render(request, 'taller/panel_nominas.html', {'datos_nominas': datos_nominas})
+
+# --- NUEVA FUNCIÓN MÁGICA PARA DAR ADELANTOS ---
+def dar_adelanto(request):
+    if request.method == 'POST':
+        empleado_id = request.POST.get('empleado_id')
+        importe = request.POST.get('importe')
+        motivo = request.POST.get('motivo', 'Adelanto de nómina')
+        metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
+        
+        empleado = Empleado.objects.get(id=empleado_id)
+        
+        # 1. Anotamos que nos debe este dinero de su sueldo
+        AdelantoSueldo.objects.create(
+            empleado=empleado,
+            importe=importe,
+            motivo=motivo
+        )
+        
+        # 2. Registramos la salida real del dinero de la caja/banco
+        Gasto.objects.create(
+            fecha=timezone.now().date(),
+            categoria='Sueldos',
+            importe=importe,
+            descripcion=f"ADELANTO NÓMINA: {empleado.nombre} - {motivo}",
+            metodo_pago=metodo_pago,
+            empleado=empleado
+        )
+        
+        messages.success(request, f"¡Adelanto de {importe}€ entregado a {empleado.nombre}! Gasto registrado.")
+        
+    return redirect('panel_nominas')
+
+def detalle_nomina(request, empleado_id):
+    empleado = get_object_or_404(Empleado, id=empleado_id)
+    hoy = timezone.now().date()
+    
+    # --- FILTRO DE MES Y AÑO ---
+    mes_seleccionado = int(request.GET.get('mes', hoy.month))
+    ano_seleccionado = int(request.GET.get('ano', hoy.year))
+    
+    asistencias_db = Asistencia.objects.filter(
+        empleado=empleado, 
+        hora_salida__isnull=False,
+        fecha__year=ano_seleccionado,
+        fecha__month=mes_seleccionado
+    ).order_by('-fecha', '-hora_entrada')
+    
+    adelantos = AdelantoSueldo.objects.filter(
+        empleado=empleado,
+        fecha__year=ano_seleccionado,
+        fecha__month=mes_seleccionado
+    ).order_by('-fecha')
+    
+    pagos = Gasto.objects.filter(
+        empleado=empleado, 
+        categoria='Sueldos',
+        fecha__year=ano_seleccionado,
+        fecha__month=mes_seleccionado
+    ).order_by('-fecha')
+
+    # --- LÓGICA DE CÁLCULO ESTRICTO DE HORAS ---
+    def formatear_segundos(segs):
+        horas = int(segs // 3600)
+        minutos = int((segs % 3600) // 60)
+        return f"{horas}h {minutos}m"
+
+    # Agrupamos todos los fichajes por día
+    agrupado_por_dia = defaultdict(list)
+    for a in asistencias_db:
+        agrupado_por_dia[a.fecha].append(a)
+
+    dias_procesados = []
+    semanas_dict = defaultdict(lambda: {'segundos': 0, 'dias': set()})
+    total_mes_segundos = 0
+
+    for fecha, registros in agrupado_por_dia.items():
+        total_dia_segundos = 0
+        fichajes_str = []
+        pagado_dia = True
+        
+        # Sacamos a qué semana del año pertenece este día
+        semana_iso = fecha.isocalendar()[1]
+        
+        for r in registros:
+            if not r.pagado: pagado_dia = False
+            
+            # Calculamos duración exacta del turno
+            t1 = datetime.combine(fecha, r.hora_entrada)
+            t2 = datetime.combine(fecha, r.hora_salida)
+            
+            # ESCUDO ANTIBALAS: Control de clics rápidos vs turnos de noche
+            if t2 < t1: 
+                if (t1 - t2).total_seconds() < 300: # Menos de 5 min de diferencia (clic de prueba)
+                    t2 = t1 
+                else:
+                    t2 += timedelta(days=1) # Turno de noche real (salió al día siguiente)
+                    
+            segundos_turno = (t2 - t1).total_seconds()
+            total_dia_segundos += segundos_turno
+            total_mes_segundos += segundos_turno
+            
+            # Sumamos a la semana correspondiente
+            semanas_dict[semana_iso]['segundos'] += segundos_turno
+            semanas_dict[semana_iso]['dias'].add(fecha)
+            
+            # Guardamos los tramos de horas para enseñarlos (Ej: 08:00-14:00)
+            fichajes_str.append(f"{r.hora_entrada.strftime('%H:%M')}-{r.hora_salida.strftime('%H:%M')}")
+
+        dias_procesados.append({
+            'fecha': fecha,
+            'fichajes': " | ".join(fichajes_str),
+            'total_horas': formatear_segundos(total_dia_segundos),
+            'pagado': pagado_dia
+        })
+
+    # Ordenamos de más reciente a más antiguo
+    dias_procesados = sorted(dias_procesados, key=lambda x: x['fecha'], reverse=True)
+
+    # Procesamos el resumen semanal para la pantalla
+    semanas_list = []
+    for sem, data in semanas_dict.items():
+        dias_ordenados = sorted(list(data['dias']))
+        inicio = dias_ordenados[0].strftime('%d/%m')
+        fin = dias_ordenados[-1].strftime('%d/%m')
+        rango = f"{inicio} al {fin}" if inicio != fin else f"{inicio}"
+        
+        semanas_list.append({
+            'semana': sem,
+            'rango': rango,
+            'total_horas': formatear_segundos(data['segundos'])
+        })
+    semanas_list = sorted(semanas_list, key=lambda x: x['semana'], reverse=True)
+
+    # Listas para el filtro HTML
+    meses_del_ano = list(range(1, 13))
+    anos_disponibles = list(range(2024, hoy.year + 2))
+    
+    return render(request, 'taller/detalle_nomina.html', {
+        'empleado': empleado,
+        'dias_procesados': dias_procesados,
+        'semanas_list': semanas_list,
+        'total_mes_horas': formatear_segundos(total_mes_segundos),
+        'adelantos': adelantos,
+        'pagos': pagos,
+        'mes_seleccionado': mes_seleccionado,
+        'ano_seleccionado': ano_seleccionado,
+        'meses_del_ano': meses_del_ano,
+        'anos_disponibles': anos_disponibles,
+    })      

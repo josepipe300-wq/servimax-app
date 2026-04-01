@@ -21,6 +21,7 @@ from .models import (
 )
 from django.db.models import Sum
 from decimal import Decimal
+from .models import Empleado, Asistencia, AdelantoSueldo
 
 # Personalización para OrdenDeReparacion
 class OrdenDeReparacionAdmin(admin.ModelAdmin):
@@ -81,3 +82,15 @@ class CitaAdmin(admin.ModelAdmin):
     list_filter = ('estado', 'fecha_hora')
     search_fields = ('nombre_cliente', 'vehiculo_info', 'motivo')
     date_hierarchy = 'fecha_hora'
+
+
+@admin.register(Asistencia)
+class AsistenciaAdmin(admin.ModelAdmin):
+    list_display = ('empleado', 'fecha', 'hora_entrada', 'hora_salida', 'pagado')
+    list_filter = ('fecha', 'pagado', 'empleado')
+    search_fields = ('empleado__nombre',)
+
+@admin.register(AdelantoSueldo)
+class AdelantoSueldoAdmin(admin.ModelAdmin):
+    list_display = ('empleado', 'fecha', 'importe', 'motivo', 'liquidado')
+    list_filter = ('liquidado', 'empleado', 'fecha')

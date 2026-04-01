@@ -152,7 +152,15 @@
                                         </a>
                                     </div>
                                 {% endif %}
-                            </td>
+
+                                {% if mov.tipo == 'gasto' and mov.categoria == 'Sueldos' and mov.empleado %}
+                                    <div style="margin-top: 6px;">
+                                        <a href="{% url 'detalle_nomina' mov.empleado.id %}" style="display: inline-flex; align-items: center; gap: 5px; background: #f3e8ff; color: #7e22ce; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 600; text-decoration: none; border: 1px solid #e9d5ff; transition: 0.2s;">
+                                            🔗 Ver Ficha de {{ mov.empleado.nombre }}
+                                        </a>
+                                    </div>
+                                {% endif %}
+                                </td>
                             
                             <td style="text-align: right; font-weight: 800; font-size: 1.15em; {% if mov.tipo == 'gasto' %}color: #ef4444;{% else %}color: #10b981;{% endif %}">
                                 {% if mov.tipo == 'gasto' %}-{% else %}+{% endif %}{{ mov.importe|floatformat:2 }} €

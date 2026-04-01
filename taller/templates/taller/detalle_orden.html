@@ -185,33 +185,83 @@
                                 {% endfor %}
                             </select>
                             
-                            <div id="caja-deuda" style="display: none; margin-bottom: 15px; background: #fff5f5; padding: 10px; border-radius: 8px; border-left: 4px solid #ef4444;">
-                                <label style="font-size: 0.85em; font-weight: bold; color: #ef4444; display: block; margin-bottom: 5px;">¿Qué deuda compensamos?</label>
-                                <select name="deuda_id" id="deuda-select" style="width: 100%; border: 1px solid #fca5a5; border-radius: 8px; padding: 10px; box-sizing: border-box; background-color: white;">
-                                    <option value="">-- Elige la deuda a saldar --</option>
-                                    {% for d in deudas_pendientes %}
-                                        <option value="{{ d.id }}">{{ d.acreedor }} (Resta: {{ d.importe_pendiente }}€)</option>
-                                    {% endfor %}
-                                </select>
+                            <div id="caja-compensacion" style="display: none; margin-bottom: 15px; background: #fff5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #ef4444;">
+                                <label style="font-size: 0.85em; font-weight: bold; color: #ef4444; display: block; margin-bottom: 8px;">¿Hacia dónde va esta compensación?</label>
+                                
+                                <div style="display: flex; gap: 15px; margin-bottom: 15px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #fca5a5;">
+                                    <label style="cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 5px;">
+                                        <input type="radio" name="tipo_compensacion" value="deuda" onclick="toggleCompensacion('deuda')" checked> 🏢 Saldar Deuda del Taller
+                                    </label>
+                                    <label style="cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 5px;">
+                                        <input type="radio" name="tipo_compensacion" value="empleado" onclick="toggleCompensacion('empleado')"> 👨‍🔧 Descontar Nómina (Mecánico)
+                                    </label>
+                                </div>
+
+                                <div id="div-deuda">
+                                    <select name="deuda_id" id="deuda-select" style="width: 100%; border: 1px solid #fca5a5; border-radius: 8px; padding: 10px; box-sizing: border-box; background-color: white;">
+                                        <option value="">-- Elige la deuda a saldar --</option>
+                                        {% for d in deudas_pendientes %}
+                                            <option value="{{ d.id }}">{{ d.acreedor }} (Resta: {{ d.importe_pendiente }}€)</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div id="div-empleado" style="display: none;">
+                                    <select name="empleado_id" id="empleado-select" style="width: 100%; border: 1px solid #fca5a5; border-radius: 8px; padding: 10px; box-sizing: border-box; background-color: white;">
+                                        <option value="">-- Elige a qué mecánico descontar --</option>
+                                        {% for emp in empleados_taller %}
+                                            <option value="{{ emp.id }}">{{ emp.nombre }} (Gana: {{ emp.sueldo_por_dia }}€/día)</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
                             </div>
                             
                             <button type="submit" style="background: #10b981; color: white; font-weight: 700; width: 100%; border: none; padding: 12px; border-radius: 8px; cursor: pointer; transition: 0.2s;">✅ Liquidar Importe</button>
                         </form>
                     </div>
+
                     <script>
+                        // Lógica Javascript para ocultar/mostrar las cajas
+                        function toggleCompensacion(tipo) {
+                            if(tipo === 'deuda') {
+                                document.getElementById('div-deuda').style.display = 'block';
+                                document.getElementById('deuda-select').required = true;
+                                document.getElementById('div-empleado').style.display = 'none';
+                                document.getElementById('empleado-select').required = false;
+                                document.getElementById('empleado-select').value = '';
+                            } else {
+                                document.getElementById('div-deuda').style.display = 'none';
+                                document.getElementById('deuda-select').required = false;
+                                document.getElementById('deuda-select').value = '';
+                                document.getElementById('div-empleado').style.display = 'block';
+                                document.getElementById('empleado-select').required = true;
+                            }
+                        }
+
                         document.getElementById('metodo-pago-select').addEventListener('change', function() {
-                            var caja = document.getElementById('caja-deuda');
-                            var select = document.getElementById('deuda-select');
+                            var caja = document.getElementById('caja-compensacion');
+                            var selectDeuda = document.getElementById('deuda-select');
+                            var selectEmpleado = document.getElementById('empleado-select');
+                            var radios = document.getElementsByName('tipo_compensacion');
+                            var tipoSeleccionado = 'deuda';
+                            
+                            for(var i = 0; i < radios.length; i++){ 
+                                if(radios[i].checked){ tipoSeleccionado = radios[i].value; break; } 
+                            }
+
                             if(this.value === 'COMPENSACION') {
                                 caja.style.display = 'block';
-                                select.required = true;
+                                if(tipoSeleccionado === 'deuda') selectDeuda.required = true;
+                                else selectEmpleado.required = true;
                             } else {
                                 caja.style.display = 'none';
-                                select.required = false;
+                                selectDeuda.required = false; selectDeuda.value = '';
+                                selectEmpleado.required = false; selectEmpleado.value = '';
                             }
                         });
                     </script>
-                    {% else %}
+                    
+                {% else %}
                     <div class="success-box">
                         ✅ <strong>COBRADO:</strong> Esta orden está totalmente pagada.
                     </div>
