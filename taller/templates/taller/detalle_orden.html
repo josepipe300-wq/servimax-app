@@ -418,7 +418,7 @@
                                     <span style="background: #10b981; color: white; font-size: 0.7em; padding: 2px 8px; border-radius: 9999px; margin-left: 10px; font-weight: bold; letter-spacing: 0.05em;">VISIBLE AL CLIENTE</span>
                                 {% endif %}
                             </div>
-                            <p style="margin: 0; color: #1e293b; font-size: 1.05em; line-height: 1.4;">{{ nota.texto }}</p>
+                            <p class="texto-nota-magica" style="margin: 0; color: #1e293b; font-size: 1.05em; line-height: 1.4;">{{ nota.texto }}</p>
                             
                             {% if nota.imagen %}
                             <div style="margin-top: 10px;">
@@ -507,6 +507,38 @@
         </div>
 
         {% if request.user.is_superuser %}
+
+        <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const notas = document.querySelectorAll('.texto-nota-magica');
+            const ytRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:\S*)/i;
+
+            notas.forEach(nota => {
+                const text = nota.innerText;
+                const match = text.match(ytRegex);
+                
+                if (match && match[1]) {
+                    const videoId = match[1];
+                    const fullLink = match[0]; 
+                    
+                    // Reproductor de YouTube BÁSICO (sin parámetros que puedan dar error) + Botón de emergencia
+                    const iframeHtml = `
+                    <div style="margin-top: 10px; max-width: 320px; border-radius: 8px; overflow: hidden; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.05); background-color: #f8fafc; padding-bottom: 8px;">
+                        <div style="padding-bottom: 56.25%; position: relative; height: 0; background-color: #000;">
+                            <iframe src="https://www.youtube.com/embed/${videoId}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                        </div>
+                        <div style="text-align: center; margin-top: 8px;">
+                            <a href="https://youtu.be/${videoId}" target="_blank" style="display: inline-block; font-size: 0.85em; color: #3b82f6; text-decoration: none; font-weight: 600; padding: 6px 12px; background-color: #eff6ff; border-radius: 6px; border: 1px solid #bfdbfe;">
+                                🔗 Ver vídeo completo
+                            </a>
+                        </div>
+                    </div>`;
+                    
+                    nota.innerHTML = text.replace(fullLink, '') + iframeHtml;
+                }
+            });
+        });
+    </script>
             <div style="margin: 50px 0 30px 0; text-align: center;">
                 <span style="background: #0f172a; color: white; padding: 8px 20px; border-radius: 9999px; font-weight: 700; font-size: 0.9em; letter-spacing: 0.1em; text-transform: uppercase;">Zona de Administración Financiera</span>
             </div>
