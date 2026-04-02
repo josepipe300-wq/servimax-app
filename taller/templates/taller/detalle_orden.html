@@ -459,7 +459,7 @@
                 
                 <label style="cursor: pointer; background: #fef3c7; padding: 10px 14px; border-radius: 10px; border: 1px solid #fde68a; font-size: 1.2em; transition: 0.2s;" title="Adjuntar foto" onmouseover="this.style.background='#fde68a'" onmouseout="this.style.background='#fef3c7'">
                     📷
-                    <input type="file" name="imagen_nota" accept="image/*" style="display: none;">
+                    <input type="file" name="imagen_nota" accept="image/*" capture="environment" style="display: none;">
                 </label>
 
                 <button type="submit" class="btn-modern" style="background: #92400e; padding: 12px 24px;">Guardar Nota</button>
@@ -495,11 +495,11 @@
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="subir_fotos">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 20px;">
-                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Frontal:</label><br><input type="file" name="foto1" accept="image/*" style="margin-top: 5px;"></div>
-                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Trasera:</label><br><input type="file" name="foto2" accept="image/*" style="margin-top: 5px;"></div>
-                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Lateral Izq:</label><br><input type="file" name="foto3" accept="image/*" style="margin-top: 5px;"></div>
-                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Lateral Der:</label><br><input type="file" name="foto4" accept="image/*" style="margin-top: 5px;"></div>
-                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Cuadro (KM):</label><br><input type="file" name="foto5" accept="image/*" style="margin-top: 5px;"></div>
+                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Frontal:</label><br><input type="file" name="foto1" accept="image/*" capture="environment" style="margin-top: 5px;"></div>
+                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Trasera:</label><br><input type="file" name="foto2" accept="image/*" capture="environment" style="margin-top: 5px;"></div>
+                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Lateral Izq:</label><br><input type="file" name="foto3" accept="image/*" capture="environment" style="margin-top: 5px;"></div>
+                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Lateral Der:</label><br><input type="file" name="foto4" accept="image/*" capture="environment" style="margin-top: 5px;"></div>
+                    <div><label style="font-weight: 600; color: #475569; font-size: 0.9em;">Cuadro (KM):</label><br><input type="file" name="foto5" accept="image/*" capture="environment" style="margin-top: 5px;"></div>
                 </div>
                 <button type="submit" class="btn-modern btn-success">💾 Guardar Fotos Seleccionadas</button>
             </form>
