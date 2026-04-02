@@ -270,7 +270,7 @@ class Gasto(models.Model):
         ('Compra de Consumibles', 'Compra de Consumibles (Stock Taller)'),
         ('COMISIONES_INTERESES', 'Comisiones e Intereses Bancarios'),
         ('Pago de Deuda', 'Pago de Deuda (Taller)'),
-        ('PAGO_TARJETA', '💳 Pago de Tarjeta de Crédito'), # <-- NUESTRA NUEVA CATEGORÍA
+        ('PAGO_TARJETA', '💳 Pago de Tarjeta de Crédito'),
     ]
     
     METODO_PAGO_CHOICES = [
@@ -278,8 +278,8 @@ class Gasto(models.Model):
         ('CUENTA_TALLER', 'Cuenta Taller (Banco)'),
         ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
         ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'),
-        # ¡Adiós Cuenta Erika!
         ('COMPENSACION', '🤝 Compensación (Trueque / Sin dinero)'),
+        ('FIADO', '📝 Dejado a Deber / Fiado (Genera Deuda)'), # <-- NUESTRA NUEVA MAGIA
     ]
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
     
@@ -299,9 +299,21 @@ class Gasto(models.Model):
         return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€"
 
     def save(self, *args, **kwargs):
+        es_nuevo = self.pk is None # Detectamos si es un gasto recién creado
+        
         if self.descripcion: self.descripcion = self.descripcion.upper()
         if self.metodo_pago in ['TARJETA_1', 'TARJETA_2']: self.pagado_con_tarjeta = True
+        
         super(Gasto, self).save(*args, **kwargs)
+
+        # --- AUTOMATIZACIÓN DE DEUDAS (FIADO) ---
+        if es_nuevo and self.metodo_pago == 'FIADO':
+            DeudaTaller.objects.create(
+                acreedor=self.descripcion or "PROVEEDOR EXTERNO",
+                motivo=f"Trabajo externo/Pieza para la Orden #{self.orden.id}" if self.orden else "Gasto Fiado General",
+                importe_inicial=self.importe,
+                orden=self.orden # <-- AQUÍ QUEDA ENGANCHADA LA ORDEN DE POR VIDA
+            )
 
 class Ingreso(models.Model):
     CATEGORIA_CHOICES = [

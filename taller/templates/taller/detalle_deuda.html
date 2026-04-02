@@ -51,7 +51,14 @@
                         Expediente de Deuda 
                         {% if deuda.es_credito_bancario %} <span style="font-size: 0.5em; background: #dbeafe; color: #1e40af; padding: 5px 12px; border-radius: 8px; vertical-align: middle; border: 1px solid #bfdbfe;">🏦 PRÉSTAMO</span> {% endif %}
                     </h1>
-                    <p style="color: #64748b; font-weight: 500; margin: 0; line-height: 1.5;">Acreedor: <strong style="color:#0f172a;">{{ deuda.acreedor }}</strong><br> Motivo Inicial: {{ deuda.motivo }}</p>
+                    <p style="color: #64748b; font-weight: 500; margin: 0 0 10px 0; line-height: 1.5;">Acreedor: <strong style="color:#0f172a;">{{ deuda.acreedor }}</strong><br> Motivo Inicial: {{ deuda.motivo }}</p>
+                    
+                    {% if deuda.orden %}
+                        <a href="{% url 'detalle_orden' deuda.orden.id %}" style="display: inline-flex; align-items: center; gap: 6px; background-color: #eff6ff; color: #3b82f6; font-size: 0.85em; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; border: 1px solid #bfdbfe; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.02);" onmouseover="this.style.backgroundColor='#dbeafe'" onmouseout="this.style.backgroundColor='#eff6ff'">
+                            <span>🔗</span> Ver la Orden #{{ deuda.orden.id }} Asociada
+                        </a>
+                    {% endif %}
+                    
                 </div>
                 {% if not request.user.groups.all.0.name == 'Solo Ver' %}
                 <div>
