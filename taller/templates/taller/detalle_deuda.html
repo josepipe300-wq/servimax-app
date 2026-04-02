@@ -141,6 +141,43 @@
         </div>
 
         {% if not request.user.groups.all.0.name == 'Solo Ver' and deuda.estado == 'Pendiente' %}
+            <div class="section-panel" style="background: #f0fdf4; border: 1px dashed #4ade80; padding: 25px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 15px 0; color: #166534; font-size: 1.2em; display: flex; align-items: center; gap: 8px;">💰 Registrar Pago a {{ deuda.acreedor }}</h4>
+                
+                <form method="POST" style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="registrar_pago">
+                    
+                    <div style="width: 140px;">
+                        <label style="font-size: 0.85em; font-weight: 600; color: #166534; margin-bottom: 5px; display: block;">Importe (€)</label>
+                        <input type="number" step="0.01" min="0.01" max="{{ deuda.importe_pendiente|stringformat:'f' }}" name="importe_pago" class="modern-input" style="border-color: #86efac; background: white;" placeholder="Ej: 150.00" required>
+                    </div>
+
+                    <div style="flex-grow: 1; min-width: 200px;">
+                        <label style="font-size: 0.85em; font-weight: 600; color: #166534; margin-bottom: 5px; display: block;">Método de Pago</label>
+                        <select name="metodo_pago" class="modern-input" style="border-color: #86efac; background: white;" required>
+                            {% for val, label in metodos_pago %}
+                                {% if val != 'FIADO' %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div style="width: 160px;">
+                        <label style="font-size: 0.85em; font-weight: 600; color: #166534; margin-bottom: 5px; display: block;">Fecha de Pago</label>
+                        <input type="date" id="fecha_pago_input" name="fecha_pago" class="modern-input" style="border-color: #86efac; background: white;" required>
+                    </div>
+
+                    <button type="submit" style="background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; white-space: nowrap; font-size: 1em; font-family: 'Inter';" onmouseover="this.style.backgroundColor='#059669'" onmouseout="this.style.backgroundColor='#10b981'">
+                        Confirmar Pago
+                    </button>
+                </form>
+                
+                <script>document.getElementById('fecha_pago_input').valueAsDate = new Date();</script>
+            </div>
+        {% endif %}
+        {% if not request.user.groups.all.0.name == 'Solo Ver' and deuda.estado == 'Pendiente' %}
             <div class="section-panel" style="background: #eff6ff; border: 1px dashed #93c5fd; padding: 25px;">
                 <h4 style="margin: 0 0 10px 0; color: #1e40af; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">➕ Ampliar Deuda Manualmente</h4>
                 <p style="font-size: 0.95em; color: #3b82f6; margin-bottom: 15px; margin-top: 0;">¿Te han prestado más dinero o se ha sumado algún recargo excepcional? Añádelo aquí.</p>

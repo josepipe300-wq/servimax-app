@@ -2287,6 +2287,30 @@ def detalle_deuda(request, deuda_id):
             except (Gasto.DoesNotExist, AmpliacionDeuda.DoesNotExist):
                 pass
 
+        # --- AQUÍ VA NUESTRO BLOQUE NUEVO PARA PAGAR DESDE EL PANEL ---
+        elif form_type == 'registrar_pago':
+            importe_pago_str = request.POST.get('importe_pago')
+            metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO')
+            fecha_str = request.POST.get('fecha_pago')
+            
+            if importe_pago_str:
+                try:
+                    importe_pago = Decimal(importe_pago_str.replace(',', '.'))
+                    fecha_pago = datetime.strptime(fecha_str, '%Y-%m-%d').date() if fecha_str else timezone.now().date()
+                    
+                    if importe_pago > 0:
+                        Gasto.objects.create(
+                            fecha=fecha_pago,
+                            categoria='Pago de Deuda',
+                            importe=importe_pago,
+                            descripcion=f"AMORTIZACIÓN DE DEUDA - {deuda.acreedor}",
+                            metodo_pago=metodo_pago,
+                            deuda_asociada=deuda,
+                            orden=deuda.orden
+                        )
+                except (ValueError, TypeError, Decimal.InvalidOperation):
+                    pass
+
         return redirect('detalle_deuda', deuda_id=deuda.id)
 
     pagos = deuda.gastos_pagados.all()
@@ -2347,7 +2371,8 @@ def detalle_deuda(request, deuda_id):
         'deuda': deuda,
         'historial': historial_combinado,
         'porcentaje_pagado': porcentaje,
-        'total_intereses': total_intereses
+        'total_intereses': total_intereses,
+        'metodos_pago': Gasto.METODO_PAGO_CHOICES
     }
     return render(request, 'taller/detalle_deuda.html', context)
 
