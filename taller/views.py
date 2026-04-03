@@ -3409,72 +3409,80 @@ def enviar_zip_gestor(request):
     if not request.user.is_superuser:
         return redirect('home')
 
-    # 1. Filtros de fecha (Igual que antes)
-    ano_sel = request.GET.get('ano')
-    mes_sel = request.GET.get('mes')
-    trim_sel = request.GET.get('trimestre')
-
-    facturas_emitidas = Factura.objects.filter(es_factura=True)
-    facturas_recibidas = FacturaProveedor.objects.all()
-
-    if ano_sel:
-        facturas_emitidas = facturas_emitidas.filter(fecha_emision__year=ano_sel)
-        facturas_recibidas = facturas_recibidas.filter(fecha_factura__year=ano_sel)
-
-    if trim_sel:
-        trim_int = int(trim_sel)
-        meses = [1,2,3] if trim_int==1 else [4,5,6] if trim_int==2 else [7,8,9] if trim_int==3 else [10,11,12]
-        facturas_emitidas = facturas_emitidas.filter(fecha_emision__month__in=meses)
-        facturas_recibidas = facturas_recibidas.filter(fecha_factura__month__in=meses)
-    elif mes_sel:
-        facturas_emitidas = facturas_emitidas.filter(fecha_emision__month=mes_sel)
-        facturas_recibidas = facturas_recibidas.filter(fecha_factura__month=mes_sel)
-
-    # 2. Creamos el ZIP con carpetas
-    import io, zipfile, requests
-    buffer = io.BytesIO()
-    
-    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # CARPETA 1: EMITIDAS (Clientes)
-        for fac in facturas_emitidas:
-            pdf = generar_pdf_response(fac)
-            nombre = f"Emitidas/Factura_{fac.fecha_emision.year}_{fac.numero_factura:04d}_{fac.orden.cliente.nombre}.pdf"
-            zip_file.writestr(nombre, pdf.content)
-
-        # CARPETA 2: RECIBIDAS (Proveedores)
-        for fac in facturas_recibidas:
-            # Como están en Cloudinary, tenemos que descargar el archivo
-            response = requests.get(fac.archivo.url)
-            extension = fac.archivo.name.split('.')[-1]
-            nombre = f"Recibidas/Compra_{fac.fecha_factura}_{fac.proveedor or 'SinNombre'}.{extension}"
-            zip_file.writestr(nombre, response.content)
-
-    # 3. PREPARAMOS Y ENVIAMOS EL CORREO MÁGICO
-    correo_gestor = "josepipe300@gmail.com"  # <--- ⚠️ PON AQUÍ EL CORREO REAL DEL GESTOR
-    asunto = f"Facturas Oficiales ServiMax - {nombre_zip}"
-    cuerpo = f"""
-Hola,
-
-Adjunto enviamos el archivo ZIP con todas las facturas oficiales emitidas por el taller ServiMax correspondientes a este periodo.
-
-El archivo contiene {facturas_qs.count()} facturas en formato PDF listas para su procesamiento.
-
-Un saludo,
-Taller ServiMax.
-"""
     try:
-        email = EmailMessage(
-            asunto,
-            cuerpo,
-            settings.EMAIL_HOST_USER, # Usa el correo que sacó de tu variable de Render
-            [correo_gestor],
-        )
+        # 1. Recuperamos filtros (Asegurando que no fallen si vienen vacíos)
+        ano_sel = request.GET.get('ano')
+        mes_sel = request.GET.get('mes')
+        trim_sel = request.GET.get('trimestre')
+
+        facturas_emitidas = Factura.objects.filter(es_factura=True).select_related('orden__cliente')
+        facturas_recibidas = FacturaProveedor.objects.all()
+
+        if ano_sel and ano_sel.isdigit():
+            facturas_emitidas = facturas_emitidas.filter(fecha_emision__year=int(ano_sel))
+            facturas_recibidas = facturas_recibidas.filter(fecha_factura__year=int(ano_sel))
+
+        if trim_sel and trim_sel.isdigit():
+            trim_int = int(trim_sel)
+            meses = [1,2,3] if trim_int==1 else [4,5,6] if trim_int==2 else [7,8,9] if trim_int==3 else [10,11,12]
+            facturas_emitidas = facturas_emitidas.filter(fecha_emision__month__in=meses)
+            facturas_recibidas = facturas_recibidas.filter(fecha_factura__month__in=meses)
+        elif mes_sel and mes_sel.isdigit():
+            facturas_emitidas = facturas_emitidas.filter(fecha_emision__month=int(mes_sel))
+            facturas_recibidas = facturas_recibidas.filter(fecha_factura__month=int(mes_sel))
+
+        import io
+        import zipfile
+        import urllib.request # Usamos la librería nativa de Python (a prueba de fallos)
+        
+        buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            
+            # CARPETA 1: EMITIDAS (Clientes)
+            for fac in facturas_emitidas:
+                # Usamos TU vista real para generar los PDFs
+                pdf_response = ver_factura_pdf(request, fac.id) 
+                if pdf_response and pdf_response.status_code == 200:
+                    cliente_nombre = "".join(c if c.isalnum() else "_" for c in fac.orden.cliente.nombre)
+                    nombre = f"Emitidas/Factura_{fac.fecha_emision.year}_{fac.numero_factura:04d}_{cliente_nombre}.pdf"
+                    zip_file.writestr(nombre, pdf_response.content)
+
+            # CARPETA 2: RECIBIDAS (Proveedores)
+            for fac in facturas_recibidas:
+                if fac.archivo:
+                    # Descargamos la foto de Cloudinary sin usar librerías externas
+                    req = urllib.request.Request(fac.archivo.url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req) as response:
+                        file_content = response.read()
+                    
+                    extension = fac.archivo.name.split('.')[-1]
+                    prov_nombre = "".join(c if c.isalnum() else "_" for c in (fac.proveedor or 'SinNombre'))
+                    nombre = f"Recibidas/Compra_{fac.fecha_factura}_{prov_nombre}.{extension}"
+                    zip_file.writestr(nombre, file_content)
+
+        # 3. Enviar el Email
+        nombre_zip = "Facturas_Gestoria"
+        if trim_sel: nombre_zip += f"_T{trim_sel}"
+        elif mes_sel: nombre_zip += f"_Mes{mes_sel}"
+        if ano_sel: nombre_zip += f"_{ano_sel}"
+
+        correo_gestor = "josepipe300@gmail.com"  # <--- ⚠️ RECUERDA PONER EL CORREO REAL DE TU GESTORÍA
+        asunto = f"Facturas Oficiales ServiMax - {nombre_zip}"
+        cuerpo = f"Hola,\n\nAdjunto enviamos el archivo ZIP con todas las facturas de clientes (Emitidas) y compras a proveedores (Recibidas).\n\nTotal Emitidas: {facturas_emitidas.count()}\nTotal Recibidas: {facturas_recibidas.count()}\n\nUn saludo,\nTaller ServiMax."
+        
+        from django.core.mail import EmailMessage
+        from django.conf import settings
+        
+        email = EmailMessage(asunto, cuerpo, settings.EMAIL_HOST_USER, [correo_gestor])
         email.attach(f"{nombre_zip}.zip", buffer.getvalue(), 'application/zip')
         email.send()
         
-        messages.success(request, f"¡Éxito! El archivo ZIP se ha enviado directamente al gestor ({correo_gestor}) 📧✅")
+        messages.success(request, f"¡Éxito! ZIP enviado a {correo_gestor} con {facturas_emitidas.count()} facturas emitidas y {facturas_recibidas.count()} recibidas. 📧✅")
+
     except Exception as e:
-        messages.error(request, f"Hubo un error al intentar enviar el correo: {str(e)}")
+        # ¡MAGIA ANTI-CRASHES! Si algo falla, te lo muestra en pantalla en rojo en vez de romper la app.
+        messages.error(request, f"Error interno al generar el ZIP: {str(e)}")
 
     return redirect('lista_facturas_legales')
 
