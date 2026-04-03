@@ -151,3 +151,13 @@ LOGIN_URL = '/accounts/login/'
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600
+
+# =========================================================
+# CONFIGURACIÓN DE CORREO ELECTRÓNICO (SMTP) - SEGURO
+# =========================================================
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'  # Asumiendo que el correo que usas es de Gmail
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_USUARIO')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_CONTRASENA')

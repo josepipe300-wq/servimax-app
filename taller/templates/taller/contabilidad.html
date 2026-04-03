@@ -38,7 +38,7 @@
         .btn-modern { 
             background: #0f172a; color: white; border: none; padding: 12px 30px; 
             border-radius: 10px; font-weight: 700; font-size: 1em; cursor: pointer; 
-            transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; height: 46px;
+            transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; height: 46px; text-decoration: none;
         }
         .btn-modern:hover { background: #1e293b; transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
 
@@ -79,10 +79,17 @@
 </head>
 <body>
     <div class="container">
-        <div style="margin-bottom: 20px;">
-            <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.95em;">← Volver al Inicio</a>
-            <h1 class="header-title" style="margin-top: 10px;">⚖️ Balance Contable</h1>
-            <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Resumen general del rendimiento financiero del taller.</p>
+        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.95em;">← Volver al Inicio</a>
+                <h1 class="header-title" style="margin-top: 10px;">⚖️ Balance Contable</h1>
+                <p style="color: #64748b; font-weight: 500; margin-top: 5px;">Resumen general del rendimiento financiero del taller.</p>
+            </div>
+            
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <a href="{% url 'lista_facturas_legales' %}" class="btn-modern" style="background-color: #1e40af;">🏛️ Ver Facturas Oficiales</a>
+                <a href="{% url 'gestion_facturas_proveedores' %}" class="btn-modern" style="background-color: #047857;">📥 Buzón de Compras</a>
+            </div>
         </div>
         
         <div class="filter-card">
@@ -166,6 +173,7 @@
 
         <h2 class="section-title" style="margin-top: 40px;">📑 Informes Detallados</h2>
         <div class="nav-links">
+            <a href="{% url 'lista_facturas_legales' %}" class="nav-btn" style="border-color: #bfdbfe; background: #eff6ff; color: #1e40af;">🏛️ Panel de Gestoría (IVA)</a>
             <a href="{% url 'informe_ingresos' %}" class="nav-btn">📈 Desglose de Ingresos</a>
             <a href="{% url 'informe_gastos' %}" class="nav-btn">📉 Desglose de Gastos</a>
             <a href="{% url 'informe_rentabilidad' %}" class="nav-btn">💰 Rentabilidad Real por Coche</a>

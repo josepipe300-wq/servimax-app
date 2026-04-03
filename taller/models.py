@@ -626,3 +626,12 @@ class ReporteEscaner(models.Model):
 
     def __str__(self):
         return f"Reporte Escáner - Orden #{self.orden.id}"
+
+class FacturaProveedor(models.Model):
+    archivo = models.FileField(upload_to='facturas_proveedores/')
+    fecha_factura = models.DateField(verbose_name="Fecha de la Factura")
+    proveedor = models.CharField(max_length=200, blank=True, null=True, verbose_name="Nombre del Proveedor")
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Factura {self.proveedor or 'Sin Nombre'} - {self.fecha_factura}"        

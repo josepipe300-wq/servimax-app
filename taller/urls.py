@@ -75,4 +75,8 @@ urlpatterns = [
     path('nominas/', views.panel_nominas, name='panel_nominas'),
     path('nominas/detalle/<int:empleado_id>/', views.detalle_nomina, name='detalle_nomina'),
     path('nominas/adelanto/', views.dar_adelanto, name='dar_adelanto'),
+    path('facturas-legales/', views.lista_facturas_legales, name='lista_facturas_legales'),
+    path('facturas-legales/descargar-zip/', views.descargar_facturas_zip, name='descargar_facturas_zip'),
+    path('facturas-legales/enviar-gestor/', views.enviar_zip_gestor, name='enviar_zip_gestor'),
+    path('facturas-proveedores/', views.gestion_facturas_proveedores, name='gestion_facturas_proveedores'),
 ]

@@ -13,6 +13,8 @@ from functools import wraps
 # --- LIBRERÍAS DE TERCEROS ---
 from xhtml2pdf import pisa
 import google.generativeai as genai
+import zipfile
+import io
 
 # --- CORE DE DJANGO ---
 from django.shortcuts import render, redirect, get_object_or_404
@@ -26,6 +28,7 @@ from django.contrib import messages
 from django.db.models import Sum, F, Q
 from django.db import transaction
 from django.core.signing import Signer, BadSignature
+from django.core.mail import EmailMessage
 
 # --- ARCHIVOS LOCALES DE LA APP ---
 from . import ai_tools
@@ -35,7 +38,7 @@ from .models import (
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
     CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller, AmpliacionDeuda, 
     HistorialEstadoOrden, Cita, HistorialIA, ReporteEscaner,
-    Asistencia, AdelantoSueldo # <- Los nuevos de Recursos Humanos
+    Asistencia, AdelantoSueldo, FacturaProveedor # <--- ¡AQUÍ ESTÁ EL NUEVO! 📥
 )
 
 
@@ -1850,14 +1853,19 @@ def contabilidad(request):
     hoy = timezone.now().date()
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
-    ano_seleccionado = request.GET.get('ano')
-    mes_seleccionado = request.GET.get('mes')
+    
+    # MAGIA: Si no hay filtro en la URL, forzamos el año y mes actuales
+    ano_param = request.GET.get('ano')
+    mes_param = request.GET.get('mes')
+    
+    ano_seleccionado = hoy.year if ano_param is None else ano_param
+    mes_seleccionado = hoy.month if mes_param is None else mes_param
 
     ingresos_qs = Ingreso.objects.all()
     gastos_qs = Gasto.objects.all()
 
     ano_sel_int = None
-    if ano_seleccionado:
+    if ano_seleccionado and ano_seleccionado != '':
         try:
             ano_sel_int = int(ano_seleccionado)
             ingresos_qs = ingresos_qs.filter(fecha__year=ano_sel_int)
@@ -1865,7 +1873,7 @@ def contabilidad(request):
         except (ValueError, TypeError): ano_seleccionado = None
     
     mes_sel_int = None
-    if mes_seleccionado:
+    if mes_seleccionado and mes_seleccionado != '':
          try:
             mes_sel_int = int(mes_seleccionado)
             if 1 <= mes_sel_int <= 12:
@@ -3259,3 +3267,233 @@ def detalle_nomina(request, empleado_id):
         'meses_del_ano': meses_del_ano,
         'anos_disponibles': anos_disponibles,
     })
+
+
+@login_required
+def lista_facturas_legales(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
+    # Filtramos SOLO las facturas oficiales (con IVA)
+    facturas_qs = Factura.objects.filter(es_factura=True).select_related('orden__cliente', 'orden__vehiculo').order_by('-fecha_emision', '-numero_factura')
+
+    hoy = timezone.now().date()
+    # Por defecto, seleccionamos el año actual para que no se mezclen los trimestres de distintos años
+    ano_seleccionado = request.GET.get('ano', str(hoy.year)) 
+    mes_seleccionado = request.GET.get('mes')
+    trimestre_seleccionado = request.GET.get('trimestre')
+
+    ano_sel_int = hoy.year
+    if ano_seleccionado:
+        try: 
+            ano_sel_int = int(ano_seleccionado)
+            facturas_qs = facturas_qs.filter(fecha_emision__year=ano_sel_int)
+        except (ValueError, TypeError): 
+            pass
+
+    mes_sel_int = None
+    trimestre_sel_int = None
+
+    # Lógica Inteligente de Trimestres
+    if trimestre_seleccionado:
+        try:
+            trimestre_sel_int = int(trimestre_seleccionado)
+            if trimestre_sel_int == 1: meses_trimestre = [1, 2, 3]
+            elif trimestre_sel_int == 2: meses_trimestre = [4, 5, 6]
+            elif trimestre_sel_int == 3: meses_trimestre = [7, 8, 9]
+            elif trimestre_sel_int == 4: meses_trimestre = [10, 11, 12]
+            else: meses_trimestre = []
+            
+            if meses_trimestre:
+                facturas_qs = facturas_qs.filter(fecha_emision__month__in=meses_trimestre)
+        except (ValueError, TypeError): pass
+        
+    elif mes_seleccionado: # Solo aplica el mes si no han elegido un trimestre
+        try:
+            mes_sel_int = int(mes_seleccionado)
+            if 1 <= mes_sel_int <= 12: 
+                facturas_qs = facturas_qs.filter(fecha_emision__month=mes_sel_int)
+        except (ValueError, TypeError): pass
+
+    # Calculamos los totales para que se los des masticados al gestor
+    total_base = facturas_qs.aggregate(total=Sum('subtotal'))['total'] or Decimal('0.00')
+    total_iva = facturas_qs.aggregate(total=Sum('iva'))['total'] or Decimal('0.00')
+    total_final = facturas_qs.aggregate(total=Sum('total_final'))['total'] or Decimal('0.00')
+
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    if ano_sel_int not in anos_disponibles:
+        anos_disponibles.insert(0, ano_sel_int)
+        anos_disponibles.sort(reverse=True)
+
+    context = {
+        'facturas': facturas_qs,
+        'total_base': total_base,
+        'total_iva': total_iva,
+        'total_final': total_final,
+        'anos_disponibles': anos_disponibles,
+        'ano_seleccionado': ano_sel_int,
+        'mes_seleccionado': mes_sel_int,
+        'trimestre_seleccionado': trimestre_sel_int,
+        'meses_del_ano': range(1, 13)
+    }
+    return render(request, 'taller/lista_facturas_legales.html', context)
+
+
+@login_required
+def descargar_facturas_zip(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
+    # 1. Recuperamos los mismos filtros que tienes en la pantalla
+    facturas_qs = Factura.objects.filter(es_factura=True).select_related('orden__cliente', 'orden__vehiculo')
+
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+    trimestre_seleccionado = request.GET.get('trimestre')
+
+    if ano_seleccionado:
+        try: facturas_qs = facturas_qs.filter(fecha_emision__year=int(ano_seleccionado))
+        except (ValueError, TypeError): pass
+
+    if trimestre_seleccionado:
+        try:
+            trim_int = int(trimestre_seleccionado)
+            if trim_int == 1: meses = [1, 2, 3]
+            elif trim_int == 2: meses = [4, 5, 6]
+            elif trim_int == 3: meses = [7, 8, 9]
+            elif trim_int == 4: meses = [10, 11, 12]
+            else: meses = []
+            if meses: facturas_qs = facturas_qs.filter(fecha_emision__month__in=meses)
+        except (ValueError, TypeError): pass
+    elif mes_seleccionado:
+        try: facturas_qs = facturas_qs.filter(fecha_emision__month=int(mes_seleccionado))
+        except (ValueError, TypeError): pass
+
+    # 2. Preparamos el archivo ZIP en memoria
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for factura in facturas_qs:
+            # Generamos el PDF usando tu función ya existente
+            pdf_response = generar_pdf_response(factura)
+            
+            if pdf_response.status_code == 200:
+                # Limpiamos el nombre del cliente para que no tenga caracteres raros
+                cliente_nombre = "".join(c if c.isalnum() else "_" for c in factura.orden.cliente.nombre)
+                matricula = factura.orden.vehiculo.matricula if factura.orden.vehiculo else 'SIN_MATRICULA'
+                numero_fac = str(factura.numero_factura).zfill(4)
+                ano_fac = factura.fecha_emision.year
+                
+                # Nombre perfecto para el gestor: Factura_2026_0001_JUAN_1234ABC.pdf
+                nombre_archivo = f"Factura_{ano_fac}_{numero_fac}_{cliente_nombre}_{matricula}.pdf"
+                
+                # Metemos el PDF en el ZIP
+                zip_file.writestr(nombre_archivo, pdf_response.content)
+
+    # 3. Descargamos el ZIP
+    buffer.seek(0)
+    response = HttpResponse(buffer, content_type='application/zip')
+    
+    # Le ponemos un nombre chulo al ZIP dependiendo de lo que hayas filtrado
+    nombre_zip = "Facturas_Gestoria"
+    if trimestre_seleccionado: nombre_zip += f"_T{trimestre_seleccionado}"
+    elif mes_seleccionado: nombre_zip += f"_Mes{mes_seleccionado}"
+    if ano_seleccionado: nombre_zip += f"_{ano_seleccionado}"
+    
+    response['Content-Disposition'] = f'attachment; filename="{nombre_zip}.zip"'
+    return response
+
+
+@login_required
+def enviar_zip_gestor(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+
+    # 1. Filtros de fecha (Igual que antes)
+    ano_sel = request.GET.get('ano')
+    mes_sel = request.GET.get('mes')
+    trim_sel = request.GET.get('trimestre')
+
+    facturas_emitidas = Factura.objects.filter(es_factura=True)
+    facturas_recibidas = FacturaProveedor.objects.all()
+
+    if ano_sel:
+        facturas_emitidas = facturas_emitidas.filter(fecha_emision__year=ano_sel)
+        facturas_recibidas = facturas_recibidas.filter(fecha_factura__year=ano_sel)
+
+    if trim_sel:
+        trim_int = int(trim_sel)
+        meses = [1,2,3] if trim_int==1 else [4,5,6] if trim_int==2 else [7,8,9] if trim_int==3 else [10,11,12]
+        facturas_emitidas = facturas_emitidas.filter(fecha_emision__month__in=meses)
+        facturas_recibidas = facturas_recibidas.filter(fecha_factura__month__in=meses)
+    elif mes_sel:
+        facturas_emitidas = facturas_emitidas.filter(fecha_emision__month=mes_sel)
+        facturas_recibidas = facturas_recibidas.filter(fecha_factura__month=mes_sel)
+
+    # 2. Creamos el ZIP con carpetas
+    import io, zipfile, requests
+    buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # CARPETA 1: EMITIDAS (Clientes)
+        for fac in facturas_emitidas:
+            pdf = generar_pdf_response(fac)
+            nombre = f"Emitidas/Factura_{fac.fecha_emision.year}_{fac.numero_factura:04d}_{fac.orden.cliente.nombre}.pdf"
+            zip_file.writestr(nombre, pdf.content)
+
+        # CARPETA 2: RECIBIDAS (Proveedores)
+        for fac in facturas_recibidas:
+            # Como están en Cloudinary, tenemos que descargar el archivo
+            response = requests.get(fac.archivo.url)
+            extension = fac.archivo.name.split('.')[-1]
+            nombre = f"Recibidas/Compra_{fac.fecha_factura}_{fac.proveedor or 'SinNombre'}.{extension}"
+            zip_file.writestr(nombre, response.content)
+
+    # 3. PREPARAMOS Y ENVIAMOS EL CORREO MÁGICO
+    correo_gestor = "josepipe300@gmail.com"  # <--- ⚠️ PON AQUÍ EL CORREO REAL DEL GESTOR
+    asunto = f"Facturas Oficiales ServiMax - {nombre_zip}"
+    cuerpo = f"""
+Hola,
+
+Adjunto enviamos el archivo ZIP con todas las facturas oficiales emitidas por el taller ServiMax correspondientes a este periodo.
+
+El archivo contiene {facturas_qs.count()} facturas en formato PDF listas para su procesamiento.
+
+Un saludo,
+Taller ServiMax.
+"""
+    try:
+        email = EmailMessage(
+            asunto,
+            cuerpo,
+            settings.EMAIL_HOST_USER, # Usa el correo que sacó de tu variable de Render
+            [correo_gestor],
+        )
+        email.attach(f"{nombre_zip}.zip", buffer.getvalue(), 'application/zip')
+        email.send()
+        
+        messages.success(request, f"¡Éxito! El archivo ZIP se ha enviado directamente al gestor ({correo_gestor}) 📧✅")
+    except Exception as e:
+        messages.error(request, f"Hubo un error al intentar enviar el correo: {str(e)}")
+
+    return redirect('lista_facturas_legales')
+
+
+@login_required
+def gestion_facturas_proveedores(request):
+    if not request.user.is_superuser:
+        return redirect('home')
+        
+    if request.method == 'POST' and request.FILES.get('archivo'):
+        fecha = request.POST.get('fecha_factura')
+        proveedor = request.POST.get('proveedor')
+        FacturaProveedor.objects.create(
+            archivo=request.FILES['archivo'],
+            fecha_factura=fecha,
+            proveedor=proveedor
+        )
+        messages.success(request, "¡Factura de compra guardada en el buzón!")
+        return redirect('gestion_facturas_proveedores')
+
+    facturas = FacturaProveedor.objects.all().order_by('-fecha_factura')
+    return render(request, 'taller/gestion_facturas_proveedores.html', {'facturas': facturas})
