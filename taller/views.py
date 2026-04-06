@@ -3492,6 +3492,7 @@ def gestion_facturas_proveedores(request):
     if not request.user.is_superuser:
         return redirect('home')
         
+    # --- PROCESAR SUBIDA ---
     if request.method == 'POST' and request.FILES.get('archivo'):
         fecha = request.POST.get('fecha_factura')
         proveedor = request.POST.get('proveedor')
@@ -3500,8 +3501,51 @@ def gestion_facturas_proveedores(request):
             fecha_factura=fecha,
             proveedor=proveedor
         )
-        messages.success(request, "¡Factura de compra guardada en el buzón!")
+        messages.success(request, "¡Factura de compra guardada en el buzón! ✅")
         return redirect('gestion_facturas_proveedores')
 
-    facturas = FacturaProveedor.objects.all().order_by('-fecha_factura')
-    return render(request, 'taller/gestion_facturas_proveedores.html', {'facturas': facturas})
+    # --- LÓGICA DE FILTROS ---
+    facturas_qs = FacturaProveedor.objects.all()
+    
+    hoy = timezone.now().date()
+    ano_sel = request.GET.get('ano', str(hoy.year))
+    mes_sel = request.GET.get('mes')
+    trim_sel = request.GET.get('trimestre')
+
+    if ano_sel:
+        facturas_qs = facturas_qs.filter(fecha_factura__year=int(ano_sel))
+    
+    if trim_sel:
+        trim_int = int(trim_sel)
+        meses = [1,2,3] if trim_int==1 else [4,5,6] if trim_int==2 else [7,8,9] if trim_int==3 else [10,11,12]
+        facturas_qs = facturas_qs.filter(fecha_factura__month__in=meses)
+    elif mes_sel:
+        facturas_qs = facturas_qs.filter(fecha_factura__month=int(mes_sel))
+
+    # Años para el desplegable
+    anos_disponibles = sorted(list(set(FacturaProveedor.objects.dates('fecha_factura', 'year'))), reverse=True)
+    anos_lista = [a.year for a in anos_disponibles]
+    if hoy.year not in anos_lista: anos_lista.insert(0, hoy.year)
+
+    context = {
+        'facturas': facturas_qs.order_by('-fecha_factura'),
+        'anos_disponibles': anos_lista,
+        'ano_seleccionado': int(ano_sel) if ano_sel else hoy.year,
+        'mes_seleccionado': int(mes_sel) if mes_sel else None,
+        'trimestre_seleccionado': int(trim_sel) if trim_sel else None,
+        'meses_del_ano': range(1, 13)
+    }
+    return render(request, 'taller/gestion_facturas_proveedores.html', context)
+
+# --- NUEVA FUNCIÓN PARA ELIMINAR ---
+@login_required
+def eliminar_factura_proveedor(request, pk):
+    if not request.user.is_superuser:
+        return redirect('home')
+        
+    # ¡AQUÍ ESTABA EL ERROR! Ya está corregido 👇
+    factura = get_object_or_404(FacturaProveedor, pk=pk) 
+    
+    factura.delete()
+    messages.success(request, "Factura eliminada correctamente. 🗑️")
+    return redirect('gestion_facturas_proveedores')
