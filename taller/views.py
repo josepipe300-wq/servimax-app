@@ -2760,11 +2760,20 @@ def asistente_ia(request):
 
 @login_required
 def agenda_taller(request):
+    # ¡NUEVO CANDADO DE SEGURIDAD! 🔒
+    # Si no eres jefe, Y TAMPOCO tienes el permiso de ver citas, te echamos al inicio.
+    if not request.user.is_superuser and not request.user.has_perm('taller.view_cita'):
+        return redirect('home')
+
     from django.utils import timezone
     from django.db.models.functions import ExtractYear
     from datetime import timedelta, datetime
     
     if request.method == 'POST':
+        # Si no eres jefe y no tienes permiso para añadir/editar (add_cita/change_cita), no te dejamos usar los botones
+        if not request.user.is_superuser and not (request.user.has_perm('taller.add_cita') or request.user.has_perm('taller.change_cita')):
+            return redirect('agenda')
+
         form_type = request.POST.get('form_type')
         
         if form_type == 'nueva_cita_manual':

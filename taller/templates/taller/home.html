@@ -106,10 +106,13 @@
         .mecanico-panel { text-align: center; padding: 60px 20px; background: #ffffff; border-radius: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.03); margin-top: 10px; border: 1px solid #e2e8f0; }
         .btn-giant { display: inline-flex; align-items: center; justify-content: center; padding: 24px 40px; font-size: 1.3em; border-radius: 16px; text-decoration: none; font-weight: 700; margin: 10px; transition: all 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .btn-giant:hover { transform: translateY(-5px); box-shadow: 0 15px 25px rgba(0,0,0,0.1); filter: brightness(1.05); }
+        
         .btn-vehiculo { background-color: #3b82f6; color: white; }
         .btn-presupuestos { background-color: #f97316; color: white; }
         .btn-ordenes { background-color: #0f172a; color: white; }
         .btn-fichar { background-color: #8b5cf6; color: white; }
+        /* NUEVO COLOR PARA LA AGENDA */
+        .btn-agenda { background-color: #10b981; color: white; } 
 
         /* Estilo para las filas de citas en el aviso */
         .cita-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(30, 64, 175, 0.1); }
@@ -365,6 +368,13 @@
                             <a href="{% url 'fichador' %}" class="btn-giant btn-fichar">
                                 ⏱️ Fichar Entrada / Salida
                             </a>
+                            
+                            {% if perms.taller.view_cita %}
+                            <a href="{% url 'agenda' %}" class="btn-giant btn-agenda">
+                                📅 Ver Agenda
+                            </a>
+                            {% endif %}
+
                             <a href="{% url 'ingresar_vehiculo' %}" class="btn-giant btn-vehiculo">
                                 🚗 Nuevo Vehículo
                             </a>
