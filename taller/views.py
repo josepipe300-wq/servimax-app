@@ -841,23 +841,47 @@ def lista_presupuestos(request):
             pass
         return redirect('lista_presupuestos')
 
-    estado_filtro = request.GET.get('estado'); ano_seleccionado = request.GET.get('ano'); mes_seleccionado = request.GET.get('mes')
+    hoy = timezone.now().date()
+    estado_filtro = request.GET.get('estado')
+    
+    # 🟢 MEJORA: Filtro automático del mes actual si entramos por primera vez
+    if 'mes' not in request.GET and 'ano' not in request.GET:
+        ano_seleccionado = str(hoy.year)
+        mes_seleccionado = str(hoy.month)
+    else:
+        ano_seleccionado = request.GET.get('ano')
+        mes_seleccionado = request.GET.get('mes')
+
     presupuestos_qs = Presupuesto.objects.select_related('cliente', 'vehiculo').order_by('-fecha_creacion')
     
     if estado_filtro and estado_filtro in [choice[0] for choice in Presupuesto.ESTADO_CHOICES]:
         presupuestos_qs = presupuestos_qs.filter(estado=estado_filtro)
+    
     if ano_seleccionado:
-        try: ano_int = int(ano_seleccionado); presupuestos_qs = presupuestos_qs.filter(fecha_creacion__year=ano_int)
-        except (ValueError, TypeError): ano_seleccionado = None
+        try: 
+            ano_int = int(ano_seleccionado)
+            presupuestos_qs = presupuestos_qs.filter(fecha_creacion__year=ano_int)
+        except (ValueError, TypeError): 
+            ano_seleccionado = None
+            
     if mes_seleccionado:
          try:
             mes_int = int(mes_seleccionado)
-            if 1 <= mes_int <= 12: presupuestos_qs = presupuestos_qs.filter(fecha_creacion__month=mes_int)
-            else: mes_seleccionado = None
-         except (ValueError, TypeError): mes_seleccionado = None
+            if 1 <= mes_int <= 12: 
+                presupuestos_qs = presupuestos_qs.filter(fecha_creacion__month=mes_int)
+            else: 
+                mes_seleccionado = None
+         except (ValueError, TypeError): 
+            mes_seleccionado = None
          
-    anos_y_meses_data = get_anos_y_meses_con_datos(); anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
-    ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None; mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    if hoy.year not in anos_disponibles:
+        anos_disponibles.insert(0, hoy.year)
+        anos_disponibles.sort(reverse=True)
+        
+    ano_sel_int = int(ano_seleccionado) if ano_seleccionado else None
+    mes_sel_int = int(mes_seleccionado) if mes_seleccionado else None
     
     context = {
         'presupuestos': presupuestos_qs, 'estado_actual': estado_filtro, 'estados_posibles': Presupuesto.ESTADO_CHOICES,
@@ -1228,12 +1252,14 @@ def historial_movimientos(request):
     from django.utils import timezone
     from django.db.models.functions import ExtractYear
     from django.db.models import Q  
-    from decimal import Decimal     
+    from decimal import Decimal      
 
     tipo_seleccionado = request.GET.get('tipo', '')
     ano_seleccionado = request.GET.get('ano', '')
     mes_seleccionado = request.GET.get('mes', '')
-    matricula_seleccionada = request.GET.get('matricula', '')
+    
+    # 🟢 MEJORA: Buscador Global (Matrícula O Concepto)
+    termino_busqueda = request.GET.get('matricula', '').strip() 
     
     buscar_seleccionado = request.GET.get('buscar', '').strip() 
 
@@ -1248,9 +1274,16 @@ def historial_movimientos(request):
         gastos_qs = gastos_qs.filter(fecha__month=int(mes_seleccionado))
         ingresos_qs = ingresos_qs.filter(fecha__month=int(mes_seleccionado))
 
-    if matricula_seleccionada:
-        gastos_qs = gastos_qs.filter(orden__vehiculo__matricula__icontains=matricula_seleccionada)
-        ingresos_qs = ingresos_qs.filter(orden__vehiculo__matricula__icontains=matricula_seleccionada)
+    # 🟢 APLICAMOS LA MAGIA: Si escribes algo, busca en la matrícula y en la descripción a la vez.
+    if termino_busqueda:
+        gastos_qs = gastos_qs.filter(
+            Q(orden__vehiculo__matricula__icontains=termino_busqueda) | 
+            Q(descripcion__icontains=termino_busqueda)
+        )
+        ingresos_qs = ingresos_qs.filter(
+            Q(orden__vehiculo__matricula__icontains=termino_busqueda) | 
+            Q(descripcion__icontains=termino_busqueda)
+        )
 
     # =========================================================
     # EL MOTOR DE BÚSQUEDA DE J.A.R.V.I.S.
@@ -1295,7 +1328,7 @@ def historial_movimientos(request):
         'tipo_seleccionado': tipo_seleccionado,
         'ano_seleccionado': int(ano_seleccionado) if ano_seleccionado.isdigit() else '',
         'mes_seleccionado': str(mes_seleccionado),
-        'matricula_seleccionada': matricula_seleccionada,
+        'matricula_seleccionada': termino_busqueda,
         'buscar_seleccionado': buscar_seleccionado, 
         'anos_disponibles': anos_disponibles,
     }
