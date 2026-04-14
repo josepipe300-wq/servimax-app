@@ -144,8 +144,16 @@
                                 {% endif %}
                                 <br>
                                 <span style="color: #64748b; font-size: 0.85em;">{{ deuda.motivo }}</span>
+                                
+                                {% if "IVA T" in deuda.motivo %}
+                                    <br>
+                                    <a href="{% url 'desglose_iva_deuda' deuda.id %}" onclick="event.stopPropagation();" style="display: inline-block; margin-top: 6px; background-color: #0f172a; color: white; padding: 4px 10px; border-radius: 6px; text-decoration: none; font-size: 0.8em; font-weight: 600;">
+                                        🔍 Ver Desglose de IVA
+                                    </a>
+                                {% endif %}
+
                                 {% if deuda.orden %}
-                                    <br><a href="{% url 'detalle_orden' deuda.orden.id %}" style="font-size: 0.85em; color: #3b82f6; text-decoration: none; font-weight: 600;">🚗 {{ deuda.orden.vehiculo.matricula }}</a>
+                                    <br><a href="{% url 'detalle_orden' deuda.orden.id %}" onclick="event.stopPropagation();" style="font-size: 0.85em; color: #3b82f6; text-decoration: none; font-weight: 600;">🚗 {{ deuda.orden.vehiculo.matricula }}</a>
                                 {% endif %}
                             </td>
                             <td class="money-col" style="color: #64748b;">{{ deuda.importe_inicial|floatformat:2 }} €</td>
@@ -193,6 +201,14 @@
                                 {% endif %}
                                 <br>
                                 <span style="color: #94a3b8; font-size: 0.85em;">{{ deuda.motivo }}</span>
+
+                                {% if "IVA T" in deuda.motivo %}
+                                    <br>
+                                    <a href="{% url 'desglose_iva_deuda' deuda.id %}" onclick="event.stopPropagation();" style="display: inline-block; margin-top: 6px; background-color: #64748b; color: white; padding: 4px 10px; border-radius: 6px; text-decoration: none; font-size: 0.8em; font-weight: 600;">
+                                        🔍 Ver Desglose de IVA
+                                    </a>
+                                {% endif %}
+
                             </td>
                             <td class="money-col" style="color: #047857; font-weight: 700;">{{ deuda.importe_inicial|floatformat:2 }} €</td>
                             <td style="text-align: center;">
@@ -206,6 +222,7 @@
         </div>
         {% endif %}
 
-    </div> {% include 'taller/widget_ia.html' %}
+    </div> 
+    {% include 'taller/widget_ia.html' %}
 </body>
 </html>

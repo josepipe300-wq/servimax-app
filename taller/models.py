@@ -631,7 +631,68 @@ class FacturaProveedor(models.Model):
     archivo = models.FileField(upload_to='facturas_proveedores/')
     fecha_factura = models.DateField(verbose_name="Fecha de la Factura")
     proveedor = models.CharField(max_length=200, blank=True, null=True, verbose_name="Nombre del Proveedor")
+    
+    # --- NUEVA CASILLA PARA EL IVA DE LA COMPRA ---
+    iva = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="IVA Pagado")
+    
     fecha_registro = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Factura {self.proveedor or 'Sin Nombre'} - {self.fecha_factura}"        
+        return f"Factura {self.proveedor or 'Sin Nombre'} - {self.fecha_factura}"
+
+# =========================================================
+# --- AUTOMATIZACIÓN DE DEUDA DE IVA CON HACIENDA ---
+# =========================================================
+from django.db.models.signals import post_save
+
+import math
+
+def actualizar_deuda_hacienda(fecha_referencia):
+    year = fecha_referencia.year
+    trimestre = math.ceil(fecha_referencia.month / 3)
+    meses = [1,2,3] if trimestre==1 else [4,5,6] if trimestre==2 else [7,8,9] if trimestre==3 else [10,11,12]
+    
+    # 1. Sumamos el IVA que HEMOS COBRADO (Facturas Legales a Clientes)
+    iva_clientes = Factura.objects.filter(
+        es_factura=True, 
+        fecha_emision__year=year, 
+        fecha_emision__month__in=meses
+    ).aggregate(total=Sum('iva'))['total'] or Decimal('0.00')
+    
+    # 2. Sumamos el IVA que HEMOS PAGADO (Buzón de Compras a Proveedores)
+    iva_proveedores = FacturaProveedor.objects.filter(
+        fecha_factura__year=year, 
+        fecha_factura__month__in=meses
+    ).aggregate(total=Sum('iva'))['total'] or Decimal('0.00')
+    
+    # 3. Calculamos la diferencia exacta
+    iva_neto = iva_clientes - iva_proveedores
+    motivo_deuda = f"IVA T{trimestre} {year}"
+    
+    # 4. Actualizamos o Creamos la Deuda Oficial
+    if iva_neto > 0:
+        deuda, created = DeudaTaller.objects.get_or_create(
+            acreedor="HACIENDA",
+            motivo=motivo_deuda,
+            defaults={'importe_inicial': iva_neto, 'fecha_creacion': fecha_referencia}
+        )
+        if not created:
+            deuda.importe_inicial = iva_neto
+            deuda.save()
+    else:
+        # Si el IVA es negativo o cero, Hacienda no nos cobra (o nos debe). Ponemos la deuda a 0.
+        DeudaTaller.objects.filter(acreedor="HACIENDA", motivo=motivo_deuda).update(importe_inicial=Decimal('0.00'))
+
+# --- Disparadores ---
+# Cada vez que se guarda o se borra una factura legal...
+@receiver(post_save, sender=Factura)
+@receiver(pre_delete, sender=Factura)
+def trigger_iva_factura(sender, instance, **kwargs):
+    if instance.es_factura:
+        actualizar_deuda_hacienda(instance.fecha_emision)
+
+# Cada vez que se guarda o se borra un ticket de compra...
+@receiver(post_save, sender=FacturaProveedor)
+@receiver(pre_delete, sender=FacturaProveedor)
+def trigger_iva_proveedor(sender, instance, **kwargs):
+    actualizar_deuda_hacienda(instance.fecha_factura)                

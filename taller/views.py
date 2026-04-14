@@ -3505,10 +3505,19 @@ def gestion_facturas_proveedores(request):
     if request.method == 'POST' and request.FILES.get('archivo'):
         fecha = request.POST.get('fecha_factura')
         proveedor = request.POST.get('proveedor')
+        
+        # 🟢 NUEVO: Recogemos el IVA del formulario
+        iva_str = request.POST.get('iva', '0')
+        try:
+            iva_val = float(iva_str)
+        except ValueError:
+            iva_val = 0.00
+
         FacturaProveedor.objects.create(
             archivo=request.FILES['archivo'],
             fecha_factura=fecha,
-            proveedor=proveedor
+            proveedor=proveedor,
+            iva=iva_val  # 🟢 NUEVO: Lo guardamos en la base de datos
         )
         messages.success(request, "¡Factura de compra guardada en el buzón! ✅")
         return redirect('gestion_facturas_proveedores')
@@ -3558,3 +3567,71 @@ def eliminar_factura_proveedor(request, pk):
     factura.delete()
     messages.success(request, "Factura eliminada correctamente. 🗑️")
     return redirect('gestion_facturas_proveedores')
+
+
+import re
+from django.urls import reverse
+
+@login_required
+def desglose_iva_deuda(request, deuda_id):
+    if not request.user.is_superuser:
+        return redirect('home')
+
+    deuda = get_object_or_404(DeudaTaller, id=deuda_id)
+    
+    # Extraemos el Trimestre y Año del motivo (Ej: "IVA T1 2026")
+    match = re.search(r'IVA T(\d) (\d{4})', deuda.motivo)
+    if not match:
+        messages.error(request, "Esta deuda no tiene el formato automático de IVA trimestral.")
+        return redirect('lista_deudas')
+        
+    trimestre = int(match.group(1))
+    year = int(match.group(2))
+    
+    # Averiguamos los meses de ese trimestre
+    meses = [1,2,3] if trimestre==1 else [4,5,6] if trimestre==2 else [7,8,9] if trimestre==3 else [10,11,12]
+
+    facturas_clientes = Factura.objects.filter(es_factura=True, fecha_emision__year=year, fecha_emision__month__in=meses)
+    facturas_proveedores = FacturaProveedor.objects.filter(fecha_factura__year=year, fecha_factura__month__in=meses)
+
+    movimientos = []
+    
+    # 1. Añadimos el IVA cobrado a los clientes (Suma a la deuda)
+    for f in facturas_clientes:
+        if f.iva > 0:
+            try:
+                url_pdf = reverse('ver_factura_pdf', args=[f.id])
+            except:
+                url_pdf = "#"
+                
+            movimientos.append({
+                'fecha': f.fecha_emision,
+                'tipo': 'COBRADO (Cliente)',
+                'concepto': f.orden.cliente.nombre,
+                'iva': f.iva,
+                'es_positivo': True,
+                'enlace': url_pdf
+            })
+
+    # 2. Añadimos el IVA pagado a proveedores (Resta a la deuda)
+    for p in facturas_proveedores:
+        if p.iva > 0:
+            movimientos.append({
+                'fecha': p.fecha_factura,
+                'tipo': 'PAGADO (Proveedor)',
+                'concepto': p.proveedor,
+                'iva': p.iva,
+                'es_positivo': False,
+                'enlace': p.archivo.url if p.archivo else '#'
+            })
+
+    # Ordenamos todo por fecha de la más antigua a la más nueva
+    movimientos.sort(key=lambda x: x['fecha'])
+
+    context = {
+        'deuda': deuda,
+        'movimientos': movimientos,
+        'trimestre': trimestre,
+        'year': year,
+    }
+    return render(request, 'taller/desglose_iva.html', context)    
