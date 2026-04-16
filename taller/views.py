@@ -38,9 +38,8 @@ from .models import (
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
     CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller, AmpliacionDeuda, 
     HistorialEstadoOrden, Cita, HistorialIA, ReporteEscaner,
-    Asistencia, AdelantoSueldo, FacturaProveedor # <--- ¡AQUÍ ESTÁ EL NUEVO! 📥
+    Asistencia, AdelantoSueldo, FacturaProveedor
 )
-
 
 def obtener_dias_laborables_mes(fecha):
     """Calcula cuántos días de Lunes a Viernes tiene el mes de la fecha dada"""
@@ -348,11 +347,10 @@ def eliminar_cierre_tarjeta(request, cierre_id):
 @bloquear_lectura 
 def ingresar_vehiculo(request):
     if not (request.user.is_superuser or request.user.has_perm('taller.add_ordendereparacion')):
-        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>No tienes permiso para ingresar vehículos.</p><br><a href='/' style='padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;'>← Volver al Inicio</a>")
+        return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2>")
 
     if request.method == 'POST':
         cliente_id = request.POST.get('cliente_existente')
-        
         nombre_cliente = request.POST.get('cliente_nombre', '').upper()
         telefono_cliente = request.POST.get('cliente_telefono', '')
         tipo_documento = request.POST.get('cliente_tipo_documento', 'DNI')
@@ -365,11 +363,11 @@ def ingresar_vehiculo(request):
         matricula_vehiculo = request.POST['vehiculo_matricula'].upper()
         marca_vehiculo = request.POST['vehiculo_marca'].upper()
         modelo_vehiculo = request.POST['vehiculo_modelo'].upper()
+        
         kilometraje_vehiculo_str = request.POST.get('vehiculo_kilometraje')
         kilometraje_vehiculo = int(kilometraje_vehiculo_str) if kilometraje_vehiculo_str else 0
         
         problema_reportado = request.POST['problema'].upper()
-        
         danos_previos = request.POST.get('danos_previos', '').upper()
 
         with transaction.atomic():
@@ -394,10 +392,16 @@ def ingresar_vehiculo(request):
                 cliente.ciudad_fiscal = ciudad_fiscal; cliente.provincia_fiscal = provincia_fiscal
                 cliente.save()
 
-            vehiculo, v_created = Vehiculo.objects.get_or_create(matricula=matricula_vehiculo, defaults={'marca': marca_vehiculo, 'modelo': modelo_vehiculo, 'kilometraje': kilometraje_vehiculo, 'cliente': cliente})
+            # 🟢 ACTUALIZA AMBOS: Guardamos el KM en la ficha del coche (Dato Vivo)
+            vehiculo, v_created = Vehiculo.objects.get_or_create(
+                matricula=matricula_vehiculo, 
+                defaults={'marca': marca_vehiculo, 'modelo': modelo_vehiculo, 'cliente': cliente, 'kilometraje': kilometraje_vehiculo}
+            )
             if not v_created:
-                if kilometraje_vehiculo > vehiculo.kilometraje: vehiculo.kilometraje = kilometraje_vehiculo
-                if vehiculo.cliente != cliente: vehiculo.cliente = cliente
+                if kilometraje_vehiculo > vehiculo.kilometraje: 
+                    vehiculo.kilometraje = kilometraje_vehiculo
+                if vehiculo.cliente != cliente: 
+                    vehiculo.cliente = cliente
                 vehiculo.save()
 
             presupuesto_id = request.POST.get('presupuesto_asociado')
@@ -411,10 +415,13 @@ def ingresar_vehiculo(request):
                          vehiculo.save()
                 except Presupuesto.DoesNotExist: pass
 
+            # 🟢 ACTUALIZA AMBOS: Guardamos el KM en la foto de la Orden
             nueva_orden = OrdenDeReparacion.objects.create(
                 cliente=cliente, vehiculo=vehiculo, problema=problema_reportado, 
-                presupuesto_origen=presupuesto, danos_previos=danos_previos
+                presupuesto_origen=presupuesto, danos_previos=danos_previos,
+                kilometraje_recepcion=kilometraje_vehiculo
             )
+            
             if presupuesto:
                 presupuesto.estado = 'Convertido'; presupuesto.save()
 
@@ -844,7 +851,6 @@ def lista_presupuestos(request):
     hoy = timezone.now().date()
     estado_filtro = request.GET.get('estado')
     
-    # 🟢 MEJORA: Filtro automático del mes actual si entramos por primera vez
     if 'mes' not in request.GET and 'ano' not in request.GET:
         ano_seleccionado = str(hoy.year)
         mes_seleccionado = str(hoy.month)
@@ -1076,7 +1082,7 @@ def detalle_orden(request, orden_id):
     factura = None; pendiente_pago = Decimal('0.00'); whatsapp_url = None 
     
     # ==============================================================
-    # --- NUEVO: ENLACE MÁGICO DEL ESTADO DEL COCHE PARA WHATSAPP ---
+    # --- ENLACE MÁGICO DEL ESTADO DEL COCHE PARA WHATSAPP ---
     # ==============================================================
     signer = Signer()
     signed_orden_id = signer.sign(orden.id)
@@ -1120,11 +1126,17 @@ def detalle_orden(request, orden_id):
                 orden.save()
             return redirect('detalle_orden', orden_id=orden.id)
 
+        # 🟢 CAMBIO: Si editan el kilometraje desde el panel, se guarda en AMBOS (Vehiculo y Orden)
         elif form_type == 'kilometraje':
             try:
                 nuevo_km_str = request.POST.get('nuevo_kilometraje')
                 if int(nuevo_km_str) >= 0:
-                    vehiculo = orden.vehiculo; vehiculo.kilometraje = int(nuevo_km_str); vehiculo.save()
+                    nuevo_km = int(nuevo_km_str)
+                    orden.vehiculo.kilometraje = nuevo_km
+                    orden.vehiculo.save()
+                    
+                    orden.kilometraje_recepcion = nuevo_km
+                    orden.save()
             except (ValueError, TypeError): pass
             return redirect('detalle_orden', orden_id=orden.id)
         
@@ -1149,7 +1161,6 @@ def detalle_orden(request, orden_id):
                 )
             return redirect('detalle_orden', orden_id=orden.id)
 
-        # --- AÑADIDO: BOTÓN MÁGICO PARA MOSTRAR LA NOTA AL CLIENTE ---
         elif form_type == 'toggle_visibilidad_nota':
             nota_id = request.POST.get('nota_id')
             try:
@@ -1164,20 +1175,20 @@ def detalle_orden(request, orden_id):
             importe = Decimal(request.POST.get('importe_pago', '0'))
             metodo = request.POST.get('metodo_pago')
             deuda_id = request.POST.get('deuda_id')
-            empleado_id = request.POST.get('empleado_id') # NUEVO CAMPO PARA NÓMINAS
+            empleado_id = request.POST.get('empleado_id')
             
             if importe > 0:
                 with transaction.atomic():
-                    # 1. Ingreso de la orden (queda pagada)
+                    # 1. Ingreso de la orden
                     Ingreso.objects.create(
                         fecha=timezone.now().date(), categoria='Taller', importe=importe,
                         descripcion=f"COBRO FACTURA {orden.vehiculo.matricula}", metodo_pago=metodo,
                         orden=orden, es_tpv=(metodo not in ['EFECTIVO', 'COMPENSACION'])
                     )
                     
-                    # 2. Lógica mágica de Compensación Doble
+                    # 2. Lógica de Compensación Doble
                     if metodo == 'COMPENSACION':
-                        if deuda_id: # Opción 1: Compensar deuda del taller
+                        if deuda_id:
                             try:
                                 deuda_taller = DeudaTaller.objects.get(id=deuda_id)
                                 Gasto.objects.create(
@@ -1187,15 +1198,13 @@ def detalle_orden(request, orden_id):
                                 )
                             except DeudaTaller.DoesNotExist: pass
                             
-                        elif empleado_id: # Opción 2: Descontar de nómina
+                        elif empleado_id:
                             try:
                                 empleado_comp = Empleado.objects.get(id=empleado_id)
-                                # Le inyectamos el adelanto
                                 AdelantoSueldo.objects.create(
                                     empleado=empleado_comp, importe=importe,
                                     motivo=f"REPARACIÓN PROPIA: {orden.vehiculo.matricula} (Ord. #{orden.id})"
                                 )
-                                # Compensamos el gasto en caja
                                 Gasto.objects.create(
                                     fecha=timezone.now().date(), categoria='Sueldos', importe=importe,
                                     descripcion=f"ADELANTO NÓMINA (REPARACIÓN {orden.vehiculo.matricula})",
@@ -1581,7 +1590,7 @@ def informe_rentabilidad(request):
 
     facturas = facturas_qs.order_by('-fecha_emision')
     ingresos_grua = ingresos_grua_qs.order_by('-fecha')
-    otras_ganancias = otras_ganancias_qs.order_by('-fecha')
+    otras_ganancias = millo.order_by('-fecha')
     
     total_ganancia_mo = Decimal('0.00')
     total_ganancia_piezas = Decimal('0.00')
@@ -3594,7 +3603,6 @@ def eliminar_factura_proveedor(request, pk):
     if not request.user.is_superuser:
         return redirect('home')
         
-    # ¡AQUÍ ESTABA EL ERROR! Ya está corregido 👇
     factura = get_object_or_404(FacturaProveedor, pk=pk) 
     
     factura.delete()
@@ -3667,4 +3675,20 @@ def desglose_iva_deuda(request, deuda_id):
         'trimestre': trimestre,
         'year': year,
     }
-    return render(request, 'taller/desglose_iva.html', context)    
+    return render(request, 'taller/desglose_iva.html', context)
+
+
+# ==============================================================
+# --- BOTÓN DE EMERGENCIA: VOLCADO DE KILOMETRAJES ---
+# ==============================================================
+@login_required
+def volcar_kilometros_emergencia(request):
+    if not request.user.is_superuser: return redirect('home')
+    ordenes = OrdenDeReparacion.objects.filter(kilometraje_recepcion=0)
+    contador = 0
+    for orden in ordenes:
+        if orden.vehiculo and orden.vehiculo.kilometraje > 0:
+            orden.kilometraje_recepcion = orden.vehiculo.kilometraje
+            orden.save()
+            contador += 1
+    return HttpResponse(f"✅ ¡Sincronización completada! Se han copiado {contador} kilometrajes a las órdenes antiguas. Las facturas viejas ya tienen datos. Ya puedes salir de esta página.")

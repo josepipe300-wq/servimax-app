@@ -291,7 +291,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="form_type" value="kilometraje">
                     <label style="color: #475569; font-weight: 600; font-size: 0.9em;">KM:</label>
-                    <input type="number" name="nuevo_kilometraje" class="modern-input" value="{{ orden.vehiculo.kilometraje }}" min="0" style="padding: 6px 10px; width: 120px;">
+                    <input type="number" name="nuevo_kilometraje" class="modern-input" value="{{ orden.kilometraje_recepcion }}" min="0" style="padding: 6px 10px; width: 120px;">
                     {% if not request.user.groups.all.0.name == 'Solo Ver' %}
                     <button type="submit" class="btn-modern" style="padding: 6px 12px; font-size: 0.85em;">Guardar KM</button>
                     {% endif %}

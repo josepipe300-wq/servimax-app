@@ -36,7 +36,7 @@ class Vehiculo(models.Model):
     matricula = models.CharField(max_length=20, unique=True)
     marca = models.CharField(max_length=50)
     modelo = models.CharField(max_length=50)
-    kilometraje = models.IntegerField(default=0)
+    kilometraje = models.IntegerField(default=0) # 🟢 MANTENEMOS EL DATO VIVO
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     
     def __str__(self):
@@ -100,6 +100,10 @@ class OrdenDeReparacion(models.Model):
     presupuesto_origen = models.ForeignKey('Presupuesto', null=True, blank=True, on_delete=models.SET_NULL)
     problema = models.TextField()
     danos_previos = models.TextField(blank=True, null=True, verbose_name="Daños Previos (Rayones, golpes...)")
+    
+    # 🟢 NUEVO: Añadimos la foto histórica para las facturas
+    kilometraje_recepcion = models.IntegerField(default=0, verbose_name="Kilómetros al entrar")
+    
     estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='Recibido')
     fecha_entrada = models.DateTimeField(default=timezone.now)
     trabajo_interno = models.BooleanField(default=False, verbose_name="Vehículo del Taller")
@@ -695,4 +699,4 @@ def trigger_iva_factura(sender, instance, **kwargs):
 @receiver(post_save, sender=FacturaProveedor)
 @receiver(pre_delete, sender=FacturaProveedor)
 def trigger_iva_proveedor(sender, instance, **kwargs):
-    actualizar_deuda_hacienda(instance.fecha_factura)                
+    actualizar_deuda_hacienda(instance.fecha_factura)
