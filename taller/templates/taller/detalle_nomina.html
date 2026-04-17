@@ -110,45 +110,96 @@
                     {% endif %}
                 </div>
 
+                {% if empleado.es_chapista %}
+                <div class="panel" style="flex-grow: 1; border: 2px solid #bbf7d0; background: #f0fdf4;">
+                    <h3 style="color: #166534; border-bottom-color: #dcfce7;">🛠️ Comisiones (Mes {{ mes_seleccionado }})</h3>
+                    <div class="scroll-area" style="max-height: 200px;">
+                        {% for ad in adelantos %}
+                            {% if ad.importe < 0 %}
+                                <div class="item-row">
+                                    <div>
+                                        <strong style="color: #064e3b;">{{ ad.fecha|date:"d/m/Y" }}</strong><br>
+                                        <span style="color:#166534; font-size: 0.9em;">{{ ad.motivo }}</span>
+                                        
+                                        {% if ad.orden_id_link %}
+                                            <br>
+                                            <a href="{% url 'detalle_orden' ad.orden_id_link %}" style="display: inline-flex; align-items: center; gap: 5px; font-size: 0.85em; color: #10b981; text-decoration: none; font-weight: 700; background: #dcfce7; padding: 4px 8px; border-radius: 6px; border: 1px solid #bbf7d0; margin-top: 6px; transition: 0.2s;" onmouseover="this.style.background='#bbf7d0'" onmouseout="this.style.background='#dcfce7'">
+                                                🔗 Ver Orden #{{ ad.orden_id_link }}
+                                            </a>
+                                        {% endif %}
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <strong style="color: #10b981; font-size: 1.1em;">+{{ ad.importe|stringformat:"f"|slice:"1:" }}€</strong><br>
+                                        {% if ad.liquidado %}
+                                            <span class="badge bg-gray">Liquidado</span>
+                                        {% else %}
+                                            <span class="badge" style="background:#dcfce7; color:#166534; border: 1px solid #bbf7d0;">A sumar</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 <div class="panel" style="flex-grow: 1;">
                     <h3>💸 Adelantos (Mes {{ mes_seleccionado }})</h3>
-                    <div class="scroll-area" style="max-height: 250px;">
+                    <div class="scroll-area" style="max-height: 200px;">
                         {% for ad in adelantos %}
-                            <div class="item-row">
-                                <div>
-                                    <strong>{{ ad.fecha|date:"d/m/Y" }}</strong><br>
-                                    <span style="color:#64748b; font-size: 0.9em;">{{ ad.motivo }}</span>
+                            {% if ad.importe > 0 %}
+                                <div class="item-row">
+                                    <div>
+                                        <strong>{{ ad.fecha|date:"d/m/Y" }}</strong><br>
+                                        <span style="color:#64748b; font-size: 0.9em;">{{ ad.motivo }}</span>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <strong style="color: #ef4444;">-{{ ad.importe }}€</strong><br>
+                                        {% if ad.liquidado %}
+                                            <span class="badge bg-gray">Liquidado</span>
+                                        {% else %}
+                                            <span class="badge bg-red">A descontar</span>
+                                        {% endif %}
+                                    </div>
                                 </div>
-                                <div style="text-align: right;">
-                                    <strong style="color: #ef4444;">{{ ad.importe }}€</strong><br>
-                                    {% if ad.liquidado %}
-                                        <span class="badge bg-green">Descontado</span>
-                                    {% else %}
-                                        <span class="badge bg-red">A descontar</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        {% empty %}
-                            <p style="color:#94a3b8; text-align: center; margin-top: 30px;">Cero adelantos.</p>
+                            {% endif %}
                         {% endfor %}
                     </div>
                 </div>
             </div>
 
-            <div class="panel">
-                <h3>💰 Pagos Nominales (Mes {{ mes_seleccionado }})</h3>
+            <div class="panel" style="background: #f8fafc; border: 2px solid #e2e8f0;">
+                <h3 style="border-bottom-color: #cbd5e1; color: #334155;">🧾 Historial de Cierres y Liquidaciones</h3>
                 <div class="scroll-area">
                     {% for pago in pagos %}
-                        <div class="item-row" style="flex-direction: column;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                                <strong style="font-size: 1.05em;">{{ pago.fecha|date:"d/m/Y" }}</strong>
-                                <strong style="color: #10b981; font-size: 1.1em;">+ {{ pago.importe }}€</strong>
+                        <div style="background: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <strong style="color: #0f172a; font-size: 1.1em;">🗓️ {{ pago.fecha|date:"d/m/Y" }}</strong>
+                                
+                                {% if "CIERRE CONTABLE" in pago.descripcion %}
+                                    <span style="background: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 6px; font-size: 0.75em; font-weight: 800; letter-spacing: 0.05em;">🔄 CIERRE SEMANAL</span>
+                                {% else %}
+                                    <span style="background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 6px; font-size: 0.75em; font-weight: 800; letter-spacing: 0.05em;">💸 PAGO REALIZADO</span>
+                                {% endif %}
                             </div>
-                            <span style="color:#64748b; font-size: 0.85em; margin-bottom: 8px;">{{ pago.descripcion }}</span>
-                            <span class="badge bg-gray" style="width: fit-content;">💳 {{ pago.get_metodo_pago_display }}</span>
+                            
+                            <p style="color: #475569; font-size: 0.9em; margin: 0 0 12px 0; line-height: 1.4;">
+                                {{ pago.descripcion }}
+                            </p>
+                            
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #e2e8f0; padding-top: 12px;">
+                                <span style="font-size: 0.8em; color: #64748b; font-weight: 600;">💳 {{ pago.get_metodo_pago_display }}</span>
+                                {% if "CIERRE CONTABLE" in pago.descripcion %}
+                                    <strong style="color: #94a3b8; font-size: 1.1em;">0.00€</strong>
+                                {% else %}
+                                    <strong style="color: #10b981; font-size: 1.3em;">+{{ pago.importe }}€</strong>
+                                {% endif %}
+                            </div>
                         </div>
                     {% empty %}
-                        <p style="color:#94a3b8; text-align: center; margin-top: 30px;">Aún no se ha pagado nada este mes.</p>
+                        <div style="text-align: center; padding: 30px 10px;">
+                            <p style="color:#94a3b8; font-style: italic; font-weight: 500;">No se han hecho cierres de cuentas en este mes.</p>
+                        </div>
                     {% endfor %}
                 </div>
             </div>

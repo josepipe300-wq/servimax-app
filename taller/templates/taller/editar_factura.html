@@ -86,11 +86,12 @@
                 <button type="button" id="add-consumible-btn" class="add-row-btn">+ Añadir consumible</button>
             </div>
             
-            <div class="section-box">
-                <h4>4. MANO DE OBRA</h4>
-                <div id="mano-de-obra-container"></div>
-                <button type="button" id="add-mano-obra" class="add-row-btn">+ Añadir línea de trabajo</button>
-            </div>
+            <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+                            <h4 style="margin: 0 0 15px 0; color: #0f172a; font-size: 1.1em;">4. MANO DE OBRA Y COMISIONES</h4>
+                            <div id="mano-obra-container">
+                                </div>
+                            <button type="button" class="add-row-btn" onclick="addManoObraRow('', '')">+ Añadir otra línea de trabajo</button>
+                        </div>
 
             <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
                 <h4 style="margin: 0 0 15px 0; color: #0f172a; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">
@@ -120,16 +121,26 @@
     <script>
         const lineasExistentes = JSON.parse('{{ lineas_existentes_json|escapejs }}');
 
-        function addManoDeObra(lineaData = null) {
-            const container = document.getElementById('mano-de-obra-container');
-            const newItem = document.createElement('div');
-            newItem.className = 'builder-row';
-            newItem.innerHTML = `
-                <input type="text" name="mano_obra_desc" class="modern-input" placeholder="Descripción del trabajo" value="${lineaData ? lineaData.descripcion : ''}" required>
-                <input type="number" step="0.01" name="mano_obra_importe" class="modern-input" placeholder="PVP (€)" value="${lineaData ? lineaData.precio_unitario : ''}" required>
-                <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:800; font-size:1.4em; padding: 0 5px;">×</button>
+        function addManoObraRow(desc = '', importe = '') {
+            const container = document.getElementById('mano-obra-container');
+            const row = document.createElement('div');
+            row.className = 'builder-row';
+            row.style.flexWrap = 'wrap';
+
+            row.innerHTML = `
+                <input type="text" class="modern-input" name="mano_obra_desc" value="${desc}" placeholder="Descripción del trabajo" required style="flex: 2; min-width: 200px;">
+                <input type="number" class="modern-input" step="0.01" min="0" name="mano_obra_importe" value="${importe}" placeholder="PVP Total (€)" required style="flex: 1; min-width: 100px;">
+                
+                <select name="mano_obra_mecanico" class="modern-select" style="flex: 2; min-width: 200px; border-color: #10b981; background-color: #f0fdf4;">
+                    <option value="">-- 100% Para el taller --</option>
+                    {% for emp in chapistas %}
+                        <option value="{{ emp.id }}">Dar 60% a: {{ emp.nombre }}</option>
+                    {% endfor %}
+                </select>
+
+                <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:800; font-size:1.4em; padding: 0 10px; transition: 0.2s;">×</button>
             `;
-            container.appendChild(newItem);
+            container.appendChild(row);
         }
 
         function addGrua(lineaData = null) {

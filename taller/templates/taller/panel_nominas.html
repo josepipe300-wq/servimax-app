@@ -19,6 +19,7 @@
         .alert { padding: 15px; border-radius: 10px; margin-bottom: 20px; font-weight: 500; }
         .alert-success { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
         .alert-warning { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+        .alert-info { background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th { background-color: #f8fafc; color: #64748b; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; padding: 15px; text-align: left; border-bottom: 2px solid #e2e8f0; }
@@ -34,7 +35,7 @@
         .total-neto { font-size: 1.4em; font-weight: 800; color: #0f172a; }
 
         .btn-pagar { background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(16,185,129,0.2); }
-        .btn-pagar:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(16,185,129,0.3); }
+        .btn-pagar:hover { filter: brightness(0.9); transform: translateY(-2px); }
         .btn-disabled { background: #e2e8f0; color: #94a3b8; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 600; cursor: not-allowed; }
         
         /* Botón de adelanto */
@@ -58,18 +59,18 @@
 
         <div class="section-panel">
             <p style="color: #64748b; margin-top: 0; margin-bottom: 25px; font-size: 1.1em;">
-                Control de sueldos acumulados. Al pulsar "Pagar", el sistema restará los adelantos y creará un <strong>Gasto Automático</strong> en la contabilidad.
+                Control de sueldos acumulados. Cierra la semana para pagar en efectivo o para arrastrar el saldo (positivo o negativo) al siguiente ciclo.
             </p>
 
             <table>
                 <thead>
                     <tr>
                         <th>Mecánico</th>
-                        <th>Días sin cobrar</th>
+                        <th>Días pendientes</th>
                         <th>Sueldo Acumulado</th>
-                        <th>Adelantos pendientes</th>
+                        <th>Adelantos / Comisiones</th>
                         <th>Total a Pagar Hoy</th>
-                        <th style="text-align: right;">Acción</th>
+                        <th style="text-align: right;">Acción de Cierre</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -82,7 +83,7 @@
                             {% if dato.empleado.es_sueldo_fijo %}
                                 <span class="mecanico-sueldo" style="color: #8b5cf6; font-weight: 600;">
                                     FIJO: {{ dato.empleado.sueldo_fijo_mensual|floatformat:0 }}€/mes<br>
-                                    <small style="color: #94a3b8; font-weight: normal;">({{ dato.valor_dia|floatformat:2 }}€/día este mes de {{ dato.dias_mes }} días laborables)</small>
+                                    <small style="color: #94a3b8; font-weight: normal;">({{ dato.valor_dia|floatformat:2 }}€/día este mes)</small>
                                 </span>
                             {% else %}
                                 <span class="mecanico-sueldo">{{ dato.empleado.sueldo_por_dia }}€ / día</span>
@@ -90,41 +91,48 @@
                         </td>
                         
                         <td>
-                            <strong>{{ dato.dias }}</strong> días
-                            {% if dato.dias > 0 %}
-                                <br>
-                                <small style="color: #64748b; font-size: 0.85em; font-weight: 500;">
-                                    ({{ dato.fechas_str }})
-                                </small>
-                            {% endif %}
+                            <strong style="font-size: 1.2em; color: #1e293b;">{{ dato.dias }}</strong> <span style="color: #64748b; font-size: 0.9em;">días</span>
                         </td>
+                        
                         <td class="text-success">{{ dato.bruto|floatformat:2 }} €</td>
                         
                         <td>
                             {% if dato.adelantos > 0 %}
                                 <span class="text-danger">- {{ dato.adelantos|floatformat:2 }} €</span>
+                            {% elif dato.adelantos < 0 %}
+                                <span class="text-success">+ {{ dato.adelantos|stringformat:"f"|slice:"1:" }} €</span>
                             {% else %}
                                 <span style="color: #94a3b8;">0.00 €</span>
                             {% endif %}
                         </td>
                         
-                        <td><span class="total-neto">{{ dato.neto|floatformat:2 }} €</span></td>
+                        <td>
+                            <span class="total-neto" {% if dato.neto < 0 %}style="color: #ef4444;"{% endif %}>{{ dato.neto|floatformat:2 }} €</span>
+                        </td>
                         
                         <td style="text-align: right; min-width: 250px;">
-                            {% if dato.neto > 0 %}
-                            <form method="POST" style="margin: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;" onsubmit="return confirm('¿Confirmas el pago de {{ dato.neto }}€ a {{ dato.empleado.nombre }}?');">
+                            {% if dato.dias > 0 or dato.adelantos != 0 %}
+                            <form method="POST" style="margin: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;" onsubmit="return confirm('¿Confirmas el cierre de ciclo para {{ dato.empleado.nombre }}?');">
                                 {% csrf_token %}
                                 <input type="hidden" name="empleado_id" value="{{ dato.empleado.id }}">
                                 
-                                <select name="metodo_pago" style="padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; font-family: 'Inter'; font-size: 0.9em; outline: none; width: 100%;">
-                                    <option value="EFECTIVO">🪙 Pagar en Efectivo (Caja)</option>
-                                    <option value="CUENTA_TALLER">🏦 Pagar por Banco</option>
+                                <div style="width: 100%; text-align: left; margin-bottom: 4px;">
+                                    <label style="font-size: 0.8em; color: #64748b; font-weight: 600;">Fecha del Cierre Semanal:</label>
+                                    <input type="date" name="fecha_cierre" value="{% now 'Y-m-d' %}" style="width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; font-family: 'Inter'; font-size: 0.9em; outline: none; box-sizing: border-box; margin-top: 4px;" required>
+                                </div>
+                                
+                                <select name="accion_cierre" style="padding: 8px; border-radius: 8px; border: 1px solid #10b981; background: #f0fdf4; color: #064e3b; font-weight: 600; font-family: 'Inter'; font-size: 0.9em; outline: none; width: 100%;">
+                                    {% if dato.neto > 0 %}
+                                        <option value="pagar_efectivo">🪙 Pagar {{ dato.neto|floatformat:2 }}€ (Caja)</option>
+                                        <option value="pagar_banco">🏦 Pagar {{ dato.neto|floatformat:2 }}€ (Banco)</option>
+                                    {% endif %}
+                                    <option value="arrastrar" {% if dato.neto <= 0 %}selected{% endif %}>🔄 Cerrar Semana y Arrastrar Saldo</option>
                                 </select>
                                 
-                                <button type="submit" class="btn-pagar" style="width: 100%;">💸 Liquidar {{ dato.neto|floatformat:2 }}€</button>
+                                <button type="submit" class="btn-pagar" style="width: 100%;">✅ Confirmar Cierre</button>
                             </form>
                             {% else %}
-                                <button class="btn-disabled" disabled style="width: 100%;">Al día</button>
+                                <button class="btn-disabled" disabled style="width: 100%;">Todo al día</button>
                             {% endif %}
 
                             <details style="margin-top: 15px; text-align: left;">

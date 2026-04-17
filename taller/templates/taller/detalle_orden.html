@@ -556,7 +556,7 @@
                 });
             });
         });
-    </script>
+        </script>
             <div style="margin: 50px 0 30px 0; text-align: center;">
                 <span style="background: #0f172a; color: white; padding: 8px 20px; border-radius: 9999px; font-weight: 700; font-size: 0.9em; letter-spacing: 0.1em; text-transform: uppercase;">Zona de Administración Financiera</span>
             </div>
@@ -575,7 +575,7 @@
                             {% endfor %}
                         </table>
                     {% else %}
-                        <p style="color: #94a3b8; font-style: italic; margin-top: 15px;">No hay gastos de repuestos directos.</p>
+                        <p style="color: #94a3b8; font-style: italic; margin: top: 15px;">No hay gastos de repuestos directos.</p>
                     {% endif %}
                 </div>
 
@@ -653,11 +653,18 @@
                         </div>
 
                         <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
-                            <h4 style="margin: 0 0 15px 0; color: #0f172a; font-size: 1.1em;">4. MANO DE OBRA</h4>
+                            <h4 style="margin: 0 0 15px 0; color: #0f172a; font-size: 1.1em;">4. MANO DE OBRA Y COMISIONES</h4>
                             <div id="mano-obra-container">
-                                <div class="builder-row">
-                                    <input type="text" class="modern-input" name="mano_obra_desc" placeholder="Ej: Sustitución de pastillas delanteras" required>
-                                    <input type="number" class="modern-input" step="0.01" min="0" name="mano_obra_importe" placeholder="PVP (€)" required>
+                                <div class="builder-row" style="flex-wrap: wrap;">
+                                    <input type="text" class="modern-input" name="mano_obra_desc" placeholder="Ej: Sustitución de aleta" required style="flex: 2; min-width: 200px;">
+                                    <input type="number" class="modern-input" step="0.01" min="0" name="mano_obra_importe" placeholder="PVP Total (€)" required style="flex: 1; min-width: 100px;">
+                                    
+                                    <select name="mano_obra_mecanico" class="modern-select" style="flex: 2; min-width: 200px; border-color: #10b981; background-color: #f0fdf4;">
+                                        <option value="">-- 100% Para el taller --</option>
+                                        {% for emp in chapistas %}
+                                            <option value="{{ emp.id }}">Dar 60% a: {{ emp.nombre }}</option>
+                                        {% endfor %}
+                                    </select>
                                 </div>
                             </div>
                             <button type="button" class="add-row-btn" onclick="addManoObraRow()">+ Añadir otra línea de trabajo</button>
@@ -770,9 +777,17 @@
             const container = document.getElementById('mano-obra-container');
             const row = document.createElement('div');
             row.className = 'builder-row';
+            row.style.flexWrap = 'wrap';
+            
+            // Clonamos las opciones de los empleados para no tener que escribirlas a mano en JS
+            const opcionesEmpleados = document.querySelector('select[name="mano_obra_mecanico"]').innerHTML;
+
             row.innerHTML = `
-                <input type="text" class="modern-input" name="mano_obra_desc" placeholder="Descripción del trabajo" required>
-                <input type="number" class="modern-input" step="0.01" min="0" name="mano_obra_importe" placeholder="PVP (€)" required>
+                <input type="text" class="modern-input" name="mano_obra_desc" placeholder="Descripción del trabajo" required style="flex: 2; min-width: 200px;">
+                <input type="number" class="modern-input" step="0.01" min="0" name="mano_obra_importe" placeholder="PVP Total (€)" required style="flex: 1; min-width: 100px;">
+                <select name="mano_obra_mecanico" class="modern-select" style="flex: 2; min-width: 200px; border-color: #10b981; background-color: #f0fdf4;">
+                    ${opcionesEmpleados}
+                </select>
                 <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:800; font-size:1.4em; padding: 0 10px; transition: 0.2s;">×</button>
             `;
             container.appendChild(row);

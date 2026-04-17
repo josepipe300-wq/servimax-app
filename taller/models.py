@@ -36,7 +36,7 @@ class Vehiculo(models.Model):
     matricula = models.CharField(max_length=20, unique=True)
     marca = models.CharField(max_length=50)
     modelo = models.CharField(max_length=50)
-    kilometraje = models.IntegerField(default=0) # 🟢 MANTENEMOS EL DATO VIVO
+    kilometraje = models.IntegerField(default=0)
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     
     def __str__(self):
@@ -80,7 +80,7 @@ class Presupuesto(models.Model):
 
 
 # =========================================================
-# --- MODULO DE ÓRDENES Y SEGUIMIENTO DE TIEMPOS (NUEVO) --
+# --- MODULO DE ÓRDENES Y SEGUIMIENTO DE TIEMPOS ---
 # =========================================================
 
 class OrdenDeReparacion(models.Model):
@@ -101,7 +101,6 @@ class OrdenDeReparacion(models.Model):
     problema = models.TextField()
     danos_previos = models.TextField(blank=True, null=True, verbose_name="Daños Previos (Rayones, golpes...)")
     
-    # 🟢 NUEVO: Añadimos la foto histórica para las facturas
     kilometraje_recepcion = models.IntegerField(default=0, verbose_name="Kilómetros al entrar")
     
     estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='Recibido')
@@ -117,36 +116,32 @@ class OrdenDeReparacion(models.Model):
     def __str__(self):
         return f"Orden #{self.id} - {self.vehiculo.matricula}"
 
-    # --- EL CRONÓMETRO AUTOMÁTICO ---
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         estado_cambiado = False
         
         if not is_new:
-            # Comprobamos si el estado está cambiando en este momento
             vieja_orden = OrdenDeReparacion.objects.get(pk=self.pk)
             if vieja_orden.estado != self.estado:
                 estado_cambiado = True
         else:
-            estado_cambiado = True # Si es un coche nuevo, registra el primer estado
+            estado_cambiado = True
             
         super(OrdenDeReparacion, self).save(*args, **kwargs)
         
-        # Si el estado cambió, paramos el cronómetro viejo y empezamos uno nuevo
         if estado_cambiado:
             ultimo_estado = self.historial_estados.filter(fecha_fin__isnull=True).first()
             if ultimo_estado:
                 ultimo_estado.fecha_fin = timezone.now()
                 ultimo_estado.save()
             
-            # --- NUEVO: Atrapamos al usuario que está guardando la orden ---
             usuario_actual = getattr(self, '_usuario_actual', None)
             
             HistorialEstadoOrden.objects.create(
                 orden=self, 
                 estado=self.estado, 
                 fecha_inicio=timezone.now(),
-                usuario=usuario_actual  # <-- Guardamos el usuario
+                usuario=usuario_actual
             )
 
 
@@ -155,11 +150,7 @@ class HistorialEstadoOrden(models.Model):
     estado = models.CharField(max_length=50)
     fecha_inicio = models.DateTimeField(default=timezone.now)
     fecha_fin = models.DateTimeField(null=True, blank=True)
-    
-    # --- Columna para guardar quién hizo el cambio ---
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-
-    # --- NUEVO: Campo para identificar pausas de jornada (Botón Rojo) ---
     es_pausa_jornada = models.BooleanField(default=False)
 
     @property
@@ -193,9 +184,16 @@ class HistorialEstadoOrden(models.Model):
 class Empleado(models.Model):
     nombre = models.CharField(max_length=100)
     telefono = models.CharField(max_length=20, blank=True, null=True)
+    
+    # Sueldos fijos o diarios normales
     sueldo_por_dia = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
     es_sueldo_fijo = models.BooleanField(default=False)
     sueldo_fijo_mensual = models.DecimalField(max_digits=8, decimal_places=2, default=1000.00)
+    
+    # --- NUEVO: PERFIL HÍBRIDO (CHAPISTA/COMISIÓN) ---
+    es_chapista = models.BooleanField(default=False, verbose_name="Trabaja a Comisión (Ej: Chapa y Pintura)")
+    porcentaje_comision = models.DecimalField(max_digits=5, decimal_places=2, default=60.00, verbose_name="Porcentaje de Comisión (%)")
+    valor_jornada_taller = models.DecimalField(max_digits=10, decimal_places=2, default=50.00, verbose_name="Valor Día (Trabajo Interno/Taller)")
     
     def __str__(self):
         return self.nombre
@@ -205,14 +203,22 @@ class Empleado(models.Model):
         super(Empleado, self).save(*args, **kwargs)
 
 class Asistencia(models.Model):
+    TIPO_JORNADA_CHOICES = [
+        ('Taller', 'Taller / Estructuras (Cobra el día)'),
+        ('Chapa', 'Chapa y Pintura (Solo cobra comisiones)'),
+    ]
+    
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='asistencias')
     fecha = models.DateField(default=timezone.now)
     hora_entrada = models.TimeField(auto_now_add=True)
     hora_salida = models.TimeField(null=True, blank=True)
     pagado = models.BooleanField(default=False)
+    
+    # --- NUEVO: IDENTIFICAR QUÉ HIZO ESE DÍA ---
+    tipo_jornada = models.CharField(max_length=20, choices=TIPO_JORNADA_CHOICES, default='Taller')
 
     def __str__(self):
-        return f"{self.empleado.nombre} - {self.fecha}"
+        return f"{self.empleado.nombre} - {self.fecha} ({self.tipo_jornada})"
 
 class AdelantoSueldo(models.Model):
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='adelantos')
@@ -232,12 +238,10 @@ class DeudaTaller(models.Model):
     importe_inicial = models.DecimalField(max_digits=10, decimal_places=2)
     fecha_creacion = models.DateField(default=timezone.now)
     
-    # --- NUEVO: EL INTERRUPTOR PARA EL CRÉDITO BANCARIO ---
     es_credito_bancario = models.BooleanField(
         default=False, 
         help_text="Si se marca, al pagar calculará automáticamente los intereses comparando con el saldo del banco."
     )
-    # ------------------------------------------------------
     
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True, help_text="Orden de trabajo asociada")
 
@@ -283,7 +287,7 @@ class Gasto(models.Model):
         ('TARJETA_1', 'Tarjeta 1 (Visa 2000€)'),
         ('TARJETA_2', 'Tarjeta 2 (Visa 1000€)'),
         ('COMPENSACION', '🤝 Compensación (Trueque / Sin dinero)'),
-        ('FIADO', '📝 Dejado a Deber / Fiado (Genera Deuda)'), # <-- NUESTRA NUEVA MAGIA
+        ('FIADO', '📝 Dejado a Deber / Fiado (Genera Deuda)'),
     ]
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='EFECTIVO')
     
@@ -303,20 +307,18 @@ class Gasto(models.Model):
         return f"{self.fecha} - {self.get_categoria_display()} - {display_importe}€"
 
     def save(self, *args, **kwargs):
-        es_nuevo = self.pk is None # Detectamos si es un gasto recién creado
-        
+        es_nuevo = self.pk is None
         if self.descripcion: self.descripcion = self.descripcion.upper()
         if self.metodo_pago in ['TARJETA_1', 'TARJETA_2']: self.pagado_con_tarjeta = True
         
         super(Gasto, self).save(*args, **kwargs)
 
-        # --- AUTOMATIZACIÓN DE DEUDAS (FIADO) ---
         if es_nuevo and self.metodo_pago == 'FIADO':
             DeudaTaller.objects.create(
                 acreedor=self.descripcion or "PROVEEDOR EXTERNO",
                 motivo=f"Trabajo externo/Pieza para la Orden #{self.orden.id}" if self.orden else "Gasto Fiado General",
                 importe_inicial=self.importe,
-                orden=self.orden # <-- AQUÍ QUEDA ENGANCHADA LA ORDEN DE POR VIDA
+                orden=self.orden
             )
 
 class Ingreso(models.Model):
@@ -325,7 +327,7 @@ class Ingreso(models.Model):
         ('Grua', 'Servicio de Grúa'),
         ('Otras Ganancias', 'Otras Ganancias'),
         ('ABONO_TARJETA', 'Abono/Pago a Tarjeta'),
-        ('PRESTAMO', '🤝 Préstamo / Adelanto a Devolver'), # <-- NUESTRA NUEVA OPCIÓN
+        ('PRESTAMO', '🤝 Préstamo / Adelanto a Devolver'),
         ('Otros', 'Otros Ingresos'),
     ]
     METODO_PAGO_CHOICES = Gasto.METODO_PAGO_CHOICES 
@@ -337,14 +339,7 @@ class Ingreso(models.Model):
     orden = models.ForeignKey(OrdenDeReparacion, on_delete=models.SET_NULL, null=True, blank=True)
     es_tpv = models.BooleanField(default=False)
 
-    # --- NUEVA CONEXIÓN PARA LOS PRÉSTAMOS ---
-    deuda_asociada = models.ForeignKey(
-        DeudaTaller, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
-        verbose_name="¿Es un préstamo? Añadir a Deuda Existente"
-    )
+    deuda_asociada = models.ForeignKey(DeudaTaller, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="¿Es un préstamo? Añadir a Deuda Existente")
 
     def __str__(self):
         return f"{self.fecha} - {self.get_categoria_display()} - {self.importe}€ [{self.get_metodo_pago_display()}]"
@@ -378,12 +373,15 @@ class LineaFactura(models.Model):
         ('Consumible', 'Consumible'),
         ('Externo', 'Trabajo Externo'),
         ('Mano de Obra', 'Mano de Obra'),
-        ('Grúa', 'Servicio de Grúa'), # Añadido por si se usaba en views
+        ('Grúa', 'Servicio de Grúa'),
     ]
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
     descripcion = models.CharField(max_length=255)
     cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=1)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # --- NUEVO: ASIGNACIÓN DE COMISIONES EN FACTURACIÓN ---
+    mecanico = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Mecánico Asignado (Comisión)")
     
     @property
     def total_linea(self): return (self.cantidad or 0) * (self.precio_unitario or 0)
@@ -578,9 +576,7 @@ class Cita(models.Model):
     vehiculo_info = models.CharField(max_length=150, blank=True, null=True, verbose_name="Vehículo / Matrícula")
     motivo = models.CharField(max_length=255, verbose_name="Motivo de la cita (Reparación)")
     
-    # --- NUEVO: Enganche automático con el presupuesto ---
     presupuesto = models.ForeignKey('Presupuesto', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Presupuesto Asociado")
-    
     fecha_hora = models.DateTimeField(verbose_name="Fecha y Hora de la cita")
     
     ESTADOS = [
@@ -603,20 +599,17 @@ class Cita(models.Model):
 
 
 class HistorialIA(models.Model):
-    # Guardamos quién dio la orden (por si tienes a varios mecánicos usando el sistema)
     from django.contrib.auth.models import User
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usuario")
-    
     peticion = models.TextField(verbose_name="Lo que pediste")
     respuesta = models.TextField(verbose_name="Lo que contestó J.A.R.V.I.S.")
     accion_ejecutada = models.CharField(max_length=100, blank=True, null=True, verbose_name="Acción interna")
-    
     fecha = models.DateTimeField(auto_now_add=True, verbose_name="Fecha y Hora")
 
     class Meta:
         verbose_name = "Historial de IA"
         verbose_name_plural = "Historiales de IA"
-        ordering = ['-fecha'] # Las más recientes primero
+        ordering = ['-fecha']
 
     def __str__(self):
         return f"{self.fecha.strftime('%d/%m %H:%M')} | {self.usuario} -> {self.accion_ejecutada}"
@@ -635,10 +628,7 @@ class FacturaProveedor(models.Model):
     archivo = models.FileField(upload_to='facturas_proveedores/')
     fecha_factura = models.DateField(verbose_name="Fecha de la Factura")
     proveedor = models.CharField(max_length=200, blank=True, null=True, verbose_name="Nombre del Proveedor")
-    
-    # --- NUEVA CASILLA PARA EL IVA DE LA COMPRA ---
     iva = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="IVA Pagado")
-    
     fecha_registro = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -648,7 +638,6 @@ class FacturaProveedor(models.Model):
 # --- AUTOMATIZACIÓN DE DEUDA DE IVA CON HACIENDA ---
 # =========================================================
 from django.db.models.signals import post_save
-
 import math
 
 def actualizar_deuda_hacienda(fecha_referencia):
@@ -656,24 +645,20 @@ def actualizar_deuda_hacienda(fecha_referencia):
     trimestre = math.ceil(fecha_referencia.month / 3)
     meses = [1,2,3] if trimestre==1 else [4,5,6] if trimestre==2 else [7,8,9] if trimestre==3 else [10,11,12]
     
-    # 1. Sumamos el IVA que HEMOS COBRADO (Facturas Legales a Clientes)
     iva_clientes = Factura.objects.filter(
         es_factura=True, 
         fecha_emision__year=year, 
         fecha_emision__month__in=meses
     ).aggregate(total=Sum('iva'))['total'] or Decimal('0.00')
     
-    # 2. Sumamos el IVA que HEMOS PAGADO (Buzón de Compras a Proveedores)
     iva_proveedores = FacturaProveedor.objects.filter(
         fecha_factura__year=year, 
         fecha_factura__month__in=meses
     ).aggregate(total=Sum('iva'))['total'] or Decimal('0.00')
     
-    # 3. Calculamos la diferencia exacta
     iva_neto = iva_clientes - iva_proveedores
     motivo_deuda = f"IVA T{trimestre} {year}"
     
-    # 4. Actualizamos o Creamos la Deuda Oficial
     if iva_neto > 0:
         deuda, created = DeudaTaller.objects.get_or_create(
             acreedor="HACIENDA",
@@ -684,18 +669,14 @@ def actualizar_deuda_hacienda(fecha_referencia):
             deuda.importe_inicial = iva_neto
             deuda.save()
     else:
-        # Si el IVA es negativo o cero, Hacienda no nos cobra (o nos debe). Ponemos la deuda a 0.
         DeudaTaller.objects.filter(acreedor="HACIENDA", motivo=motivo_deuda).update(importe_inicial=Decimal('0.00'))
 
-# --- Disparadores ---
-# Cada vez que se guarda o se borra una factura legal...
 @receiver(post_save, sender=Factura)
 @receiver(pre_delete, sender=Factura)
 def trigger_iva_factura(sender, instance, **kwargs):
     if instance.es_factura:
         actualizar_deuda_hacienda(instance.fecha_emision)
 
-# Cada vez que se guarda o se borra un ticket de compra...
 @receiver(post_save, sender=FacturaProveedor)
 @receiver(pre_delete, sender=FacturaProveedor)
 def trigger_iva_proveedor(sender, instance, **kwargs):

@@ -6,59 +6,89 @@
     <title>Fichador - ServiMax</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: white; text-align: center; padding: 20px; margin: 0; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; text-align: center; padding: 50px 20px; }
+        h1 { font-weight: 800; font-size: 2.5em; margin-bottom: 40px; color: #0f172a; }
         
-        /* NUEVO: Contenedor para el botón de volver */
-        .header-top { display: flex; justify-content: flex-start; max-width: 800px; margin: 0 auto 20px auto; padding-top: 10px;}
-        .btn-volver { background: #1e293b; color: #94a3b8; padding: 10px 20px; text-decoration: none; border-radius: 10px; font-weight: 600; border: 1px solid #334155; transition: 0.2s;}
-        .btn-volver:hover { background: #334155; color: white; }
-
-        h1 { font-size: 2.5em; margin-bottom: 10px; color: #3b82f6; margin-top: 0;}
-        .mensaje { background: #10b981; color: white; padding: 15px; border-radius: 10px; font-weight: bold; margin-bottom: 20px; display: inline-block;}
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; max-width: 800px; margin: 0 auto; }
-        .tarjeta { background: #1e293b; padding: 30px; border-radius: 15px; border: 2px solid #334155; }
-        .nombre { font-size: 2em; font-weight: 800; margin-bottom: 20px; }
-        .btn { width: 100%; padding: 20px; font-size: 1.5em; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; }
-        .btn-entrar { background: #10b981; color: white; }
-        .btn-entrar:hover { background: #059669; }
-        .btn-salir { background: #ef4444; color: white; }
-        .btn-salir:hover { background: #dc2626; }
-        .estado { margin-top: 15px; font-size: 1.1em; color: #94a3b8; }
+        .alert { background: #dcfce7; color: #166534; padding: 20px; border-radius: 12px; display: inline-block; font-size: 1.2em; font-weight: 600; margin-bottom: 30px; border: 2px solid #bbf7d0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        
+        .grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; max-width: 1000px; margin: 0 auto; }
+        
+        .card { background: white; padding: 30px 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); width: 300px; border: 1px solid #e2e8f0; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(0,0,0,0.1); }
+        
+        .card h2 { margin-top: 0; font-size: 1.5em; color: #334155; }
+        .status { margin-bottom: 20px; font-weight: 600; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .btn { border: none; padding: 15px 20px; border-radius: 10px; font-size: 1.1em; font-weight: 700; cursor: pointer; width: 100%; transition: 0.2s; font-family: 'Inter', sans-serif; margin-top: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        .btn-entrar { background-color: #10b981; color: white; }
+        .btn-entrar:hover { background-color: #059669; }
+        
+        .btn-chapa { background-color: #3b82f6; color: white; }
+        .btn-chapa:hover { background-color: #2563eb; }
+        
+        .btn-salir { background-color: #ef4444; color: white; }
+        .btn-salir:hover { background-color: #dc2626; }
+        
+        .btn-volver { display: inline-block; margin-top: 50px; text-decoration: none; background: #e2e8f0; color: #475569; padding: 12px 24px; border-radius: 10px; font-weight: 600; transition: 0.2s; }
+        .btn-volver:hover { background: #cbd5e1; color: #0f172a; }
     </style>
 </head>
 <body>
 
-    <div class="header-top">
-        <a href="{% url 'home' %}" class="btn-volver">⬅️ Volver a Inicio</a>
-    </div>
-
-    <h1>ServiMax - Control de Asistencia</h1>
-    <p>Toca tu nombre al entrar y al salir del taller</p>
+    <h1>⏱️ Control de Asistencia</h1>
 
     {% if mensaje %}
-        <div class="mensaje">{{ mensaje }}</div>
+        <div class="alert">{{ mensaje }}</div>
     {% endif %}
 
     <div class="grid">
         {% for emp in empleados %}
-        <div class="tarjeta">
-            <div class="nombre">{{ emp.nombre }}</div>
-            
-            <form method="POST">
-                {% csrf_token %}
-                <input type="hidden" name="empleado_id" value="{{ emp.id }}">
+            <div class="card">
+                <h2>👨‍🔧 {{ emp.nombre }}</h2>
                 
-                {% if not emp.trabajando_ahora %}
-                    <button type="submit" name="accion" value="entrar" class="btn btn-entrar">🟢 ENTRAR</button>
-                    <div class="estado">Actualmente: Fuera del taller</div>
+                {% if emp.trabajando_ahora %}
+                    <div class="status" style="color: #10b981;">🟢 En el taller</div>
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input type="hidden" name="empleado_id" value="{{ emp.id }}">
+                        <input type="hidden" name="accion" value="salir">
+                        <button type="submit" class="btn btn-salir">🚪 Registrar Salida</button>
+                    </form>
                 {% else %}
-                    <button type="submit" name="accion" value="salir" class="btn btn-salir">🔴 SALIR</button>
-                    <div class="estado" style="color: #10b981;">Actualmente: Trabajando</div>
+                    <div class="status" style="color: #94a3b8;">⚪ Fuera de turno</div>
+                    
+                    {% if emp.es_chapista %}
+                        <form method="POST" style="margin-bottom: 10px;">
+                            {% csrf_token %}
+                            <input type="hidden" name="empleado_id" value="{{ emp.id }}">
+                            <input type="hidden" name="accion" value="entrar">
+                            <input type="hidden" name="tipo_jornada" value="Chapa">
+                            <button type="submit" class="btn btn-chapa">🚗 Entrar: Modo Chapa</button>
+                        </form>
+                        
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="empleado_id" value="{{ emp.id }}">
+                            <input type="hidden" name="accion" value="entrar">
+                            <input type="hidden" name="tipo_jornada" value="Taller">
+                            <button type="submit" class="btn btn-entrar" style="background-color: #64748b;">🔧 Entrar: Modo Taller</button>
+                        </form>
+                    {% else %}
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="empleado_id" value="{{ emp.id }}">
+                            <input type="hidden" name="accion" value="entrar">
+                            <input type="hidden" name="tipo_jornada" value="Taller">
+                            <button type="submit" class="btn btn-entrar">✅ Registrar Entrada</button>
+                        </form>
+                    {% endif %}
                 {% endif %}
-            </form>
-        </div>
+            </div>
         {% endfor %}
     </div>
+
+    <a href="{% url 'home' %}" class="btn-volver">⬅️ Volver al Panel</a>
 
 </body>
 </html>

@@ -82,4 +82,5 @@ urlpatterns = [
     path('facturas-proveedores/eliminar/<int:pk>/', views.eliminar_factura_proveedor, name='eliminar_factura_proveedor'),
     path('deuda/<int:deuda_id>/desglose-iva/', views.desglose_iva_deuda, name='desglose_iva_deuda'),
     path('volcar-km/', views.volcar_kilometros_emergencia, name='volcar_km'),
+    path('revertir-nomina/<int:empleado_id>/', views.revertir_nomina_emergencia, name='revertir_nomina_emergencia'),
 ]

@@ -318,11 +318,57 @@ def registrar_pago_tarjeta(request):
         intereses = saldo_real_banco - deuda_app_despues
         
         with transaction.atomic():
-            Gasto.objects.create(fecha=timezone.now().date(), categoria='Otros', importe=importe_pago, descripcion=f"PAGO CUOTA MENSUAL {tarjeta}", metodo_pago='CUENTA_TALLER')
-            Ingreso.objects.create(fecha=timezone.now().date(), categoria='ABONO_TARJETA', importe=importe_pago, descripcion="ABONO RECIBIDO DESDE CUENTA TALLER", metodo_pago=tarjeta)
-            if intereses > 0:
-                Gasto.objects.create(fecha=timezone.now().date(), categoria='COMISIONES_INTERESES', importe=intereses, descripcion="AJUSTE AUTOMÁTICO DE INTERESES Y COMISIONES", metodo_pago=tarjeta)
-            CierreTarjeta.objects.create(tarjeta=tarjeta, pago_cuota=importe_pago, saldo_deuda_banco=saldo_real_banco, intereses_calculados=intereses if intereses > 0 else Decimal('0.00'))
+            # 1. PRIMERO marcamos todo lo viejo como cerrado
+            asistencias_pendientes.update(pagado=True)
+            adelantos_pendientes.update(liquidado=True)
+
+            # 2. DESPUÉS creamos los nuevos movimientos
+            if total_neto > 0:
+                Gasto.objects.create(
+                    fecha=fecha_cierre,
+                    categoria='Sueldos',
+                    importe=total_neto,
+                    descripcion=f"NÓMINA {empleado.nombre} (Cierre al {fecha_cierre.strftime('%d/%m/%Y')}). Bruto: {sueldo_bruto:.2f}€ - Adelantos: {total_adelantos:.2f}€.",
+                    metodo_pago=metodo_pago,
+                    empleado=empleado
+                )
+                messages.success(request, f"¡Liquidación de {empleado.nombre} completada!")
+            
+            elif total_neto < 0:
+                deuda_a_arrastrar = abs(total_neto)
+                fecha_arrastre = fecha_cierre + timedelta(days=1) 
+                
+                # A) Creamos la deuda para el día siguiente
+                AdelantoSueldo.objects.create(
+                    empleado=empleado,
+                    importe=deuda_a_arrastrar,
+                    motivo=f"ARRASTRE DEUDA CIERRE {fecha_cierre.strftime('%d/%m/%Y')}",
+                    fecha=fecha_arrastre, 
+                    liquidado=False
+                )
+                
+                # B) NUEVO: Creamos el "Ticket de Cierre a Cero" para la columna de Pagos Nominales
+                Gasto.objects.create(
+                    fecha=fecha_cierre,
+                    categoria='Sueldos',
+                    importe=Decimal('0.01'),
+                    descripcion=f"🧾 CIERRE CON DEUDA: Bruto {sueldo_bruto:.2f}€ - Adelantos {total_adelantos:.2f}€. Se arrastran -{deuda_a_arrastrar:.2f}€ al nuevo ciclo.",
+                    metodo_pago='COMPENSACION', # Compensación para que quede claro que no salió dinero físico
+                    empleado=empleado
+                )
+                
+                messages.info(request, f"Liquidación cerrada. Se han arrastrado {deuda_a_arrastrar:.2f}€ de deuda para el nuevo periodo.")
+            else:
+                # Cierre a 0 exacto
+                Gasto.objects.create(
+                    fecha=fecha_cierre,
+                    categoria='Sueldos',
+                    importe=Decimal('0.00'),
+                    descripcion=f"🧾 CIERRE A CERO: Las cuentas quedaron exactas entre sueldo y adelantos.",
+                    metodo_pago='COMPENSACION',
+                    empleado=empleado
+                )
+                messages.success(request, f"¡Liquidación de {empleado.nombre} cerrada a 0€ exactos!")
 
         return redirect('informe_tarjeta')
     return render(request, 'taller/registrar_pago_tarjeta.html')
@@ -1225,7 +1271,8 @@ def detalle_orden(request, orden_id):
         'whatsapp_estado_url': whatsapp_estado_url,
         'notas_internas': orden.notas_internas.all().order_by('-fecha_creacion'),
         'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes,
-        'empleados_taller': Empleado.objects.all()
+        'empleados_taller': Empleado.objects.all(),
+        'chapistas': Empleado.objects.filter(es_chapista=True)
     }
     return render(request, 'taller/detalle_orden.html', context)
     
@@ -1384,6 +1431,9 @@ def generar_factura(request, orden_id):
         notas = request.POST.get('notas_cliente', '')
 
         with transaction.atomic():
+            # 🟢 NUEVO: Borramos las comisiones viejas de esta orden para no duplicar si estamos editando
+            AdelantoSueldo.objects.filter(motivo__icontains=f"(Orden #{orden.id})").delete()
+            
             factura = Factura.objects.filter(orden=orden).first()
             
             if factura:
@@ -1440,14 +1490,39 @@ def generar_factura(request, orden_id):
                         UsoConsumible.objects.create(orden=orden, tipo=tipo, cantidad_usada=cantidad)
                     except: pass
             
-            descripciones_mo = request.POST.getlist('mano_obra_desc'); importes_mo = request.POST.getlist('mano_obra_importe')
-            for desc, importe_str in zip(descripciones_mo, importes_mo):
+            # --- MAGIA DEL 60/40 (MANO DE OBRA Y COMISIONES) ---
+            descripciones_mo = request.POST.getlist('mano_obra_desc')
+            importes_mo = request.POST.getlist('mano_obra_importe')
+            mecanicos_mo = request.POST.getlist('mano_obra_mecanico') # Capturamos a quién va el 60%
+
+            for desc, importe_str, mecanico_id in zip(descripciones_mo, importes_mo, mecanicos_mo):
                 if desc and importe_str:
                     try:
                         importe = Decimal(importe_str)
                         if importe <= 0: continue
-                        subtotal += importe; LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
-                    except: pass
+                        subtotal += importe
+                        
+                        # 1. Metemos el 100% del importe en la factura para el cliente
+                        LineaFactura.objects.create(factura=factura, tipo='Mano de Obra', descripcion=desc.upper(), cantidad=1, precio_unitario=importe)
+                        
+                        # 2. Si hay un mecánico asignado, calculamos su 60%
+                        if mecanico_id:
+                            try:
+                                emp_comision = Empleado.objects.get(id=mecanico_id)
+                                comision = (importe * Decimal('0.60')).quantize(Decimal('0.01'))
+                                
+                                # Truco contable: Guardamos la comisión como un Adelanto NEGATIVO. 
+                                AdelantoSueldo.objects.create(
+                                    empleado=emp_comision,
+                                    importe=-comision, 
+                                    motivo=f"🟢 COMISIÓN 60% (Orden #{orden.id}): {desc.upper()[:30]}",
+                                    fecha=timezone.now().date(),
+                                    liquidado=False
+                                )
+                            except Empleado.DoesNotExist:
+                                pass
+                    except Exception as e: 
+                        print(f"Error al procesar mano de obra: {e}")
 
             descripciones_grua = request.POST.getlist('grua_desc')
             importes_grua = request.POST.getlist('grua_importe')
@@ -1543,7 +1618,8 @@ def editar_factura(request, factura_id):
         'repuestos': repuestos_qs, 
         'gastos_otros': gastos_otros_qs, 
         'tipos_consumible': tipos_consumible, 
-        'lineas_existentes_json': json.dumps(lineas_existentes_list) 
+        'lineas_existentes_json': json.dumps(lineas_existentes_list),
+        'chapistas': Empleado.objects.filter(es_chapista=True) # <--- 🟢 AÑADIDO PARA LA PANTALLA DE EDICIÓN
     }
     return render(request, 'taller/editar_factura.html', context)
 
@@ -1590,7 +1666,7 @@ def informe_rentabilidad(request):
 
     facturas = facturas_qs.order_by('-fecha_emision')
     ingresos_grua = ingresos_grua_qs.order_by('-fecha')
-    otras_ganancias = millo.order_by('-fecha')
+    otras_ganancias = otras_ganancias_qs.order_by('-fecha')
     
     total_ganancia_mo = Decimal('0.00')
     total_ganancia_piezas = Decimal('0.00')
@@ -1634,9 +1710,17 @@ def informe_rentabilidad(request):
         
         coste_total_piezas = coste_repuestos + coste_externos + coste_consumibles_factura
         ganancia_piezas_orden = pvp_piezas - coste_total_piezas
-        ganancia_total_taller = pvp_mo + ganancia_piezas_orden
         
-        total_ganancia_mo += pvp_mo
+        # 🟢 MAGIA DE COMISIONES AQUÍ 🟢
+        # Sumamos las comisiones pagadas a los mecánicos (Como la comisión está en negativo -60€, al "sumarla" al PVP, hace una resta real)
+        comisiones_empleados = AdelantoSueldo.objects.filter(motivo__icontains=f"(Orden #{orden.id})").aggregate(total=Sum('importe'))['total'] or Decimal('0.00')
+        
+        # Ganancia limpia de mano de obra para el taller
+        ganancia_mo_real = pvp_mo + comisiones_empleados
+        
+        ganancia_total_taller = ganancia_mo_real + ganancia_piezas_orden
+        
+        total_ganancia_mo += ganancia_mo_real
         total_ganancia_piezas += ganancia_piezas_orden
         
         metodos = list(orden.ingreso_set.values_list('metodo_pago', flat=True))
@@ -1645,7 +1729,7 @@ def informe_rentabilidad(request):
         reporte.append({ 
             'orden': orden, 
             'factura': factura, 
-            'ganancia_mo': pvp_mo,
+            'ganancia_mo': ganancia_mo_real,
             'ganancia_piezas': ganancia_piezas_orden,
             'grua_facturada': grua_en_esta_factura,
             'ganancia_total_taller': ganancia_total_taller,
@@ -1748,7 +1832,19 @@ def detalle_ganancia_orden(request, orden_id):
 
             desglose_agrupado.setdefault(key, {'descripcion': f"{tipo_nombre} (No facturado): {gasto.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
             desglose_agrupado[key]['coste'] += gasto.importe or Decimal('0.00')
-             
+
+    # 🟢 MAGIA DE LAS COMISIONES: Añadimos lo pagado al chapista como un COSTE para el taller
+    comisiones = AdelantoSueldo.objects.filter(motivo__icontains=f"(Orden #{orden.id})")
+    for comision in comisiones:
+        coste_comision = abs(comision.importe) # Lo pasamos a positivo para que cuente como coste
+        key = ('Comision', comision.motivo)
+        desglose_agrupado.setdefault(key, {
+            'descripcion': f"👨‍🔧 Comisión pagada a {comision.empleado.nombre} ({comision.motivo})", 
+            'coste': Decimal('0.00'), 
+            'pvp': Decimal('0.00')
+        })
+        desglose_agrupado[key]['coste'] += coste_comision
+            
     desglose_final_list = []
     ganancia_total_calculada = Decimal('0.00')
     
@@ -3031,6 +3127,7 @@ def estado_vehiculo_publico(request, signed_id):
     }
     return render(request, 'taller/estado_cliente.html', context)
 
+@login_required
 def fichador_mecanicos(request):
     mensaje = ""
     # Usamos localtime() para asegurarnos de que coge el día exacto de España
@@ -3039,23 +3136,29 @@ def fichador_mecanicos(request):
     if request.method == 'POST':
         empleado_id = request.POST.get('empleado_id')
         accion = request.POST.get('accion')
+        tipo_jornada = request.POST.get('tipo_jornada', 'Taller') # Atrapamos el tipo (Chapa o Taller)
         empleado = Empleado.objects.get(id=empleado_id)
         
         if accion == 'entrar':
             # Evitamos que fichen entrada dos veces seguidas por error
             turno_abierto = Asistencia.objects.filter(empleado=empleado, fecha=hoy, hora_salida__isnull=True).exists()
             if not turno_abierto:
-                # FORZAMOS LA HORA LOCAL DE ESPAÑA AL ENTRAR
                 hora_exacta = timezone.localtime().time()
-                Asistencia.objects.create(empleado=empleado, fecha=hoy, hora_entrada=hora_exacta)
-                mensaje = f"¡Hola {empleado.nombre}! Entrada registrada a las {hora_exacta.strftime('%H:%M')}."
+                # Guardamos el tipo de jornada
+                Asistencia.objects.create(empleado=empleado, fecha=hoy, hora_entrada=hora_exacta, tipo_jornada=tipo_jornada)
+                
+                # Mensaje personalizado
+                if empleado.es_chapista:
+                    modo = "Taller (Día pagado)" if tipo_jornada == 'Taller' else "Chapa (A comisión)"
+                    mensaje = f"¡Hola {empleado.nombre}! Entrada a las {hora_exacta.strftime('%H:%M')} en modo: {modo}."
+                else:
+                    mensaje = f"¡Hola {empleado.nombre}! Entrada registrada a las {hora_exacta.strftime('%H:%M')}."
             else:
                 mensaje = f"¡Oye {empleado.nombre}, ya estabas trabajando!"
                 
         elif accion == 'salir':
             asistencia = Asistencia.objects.filter(empleado=empleado, fecha=hoy, hora_salida__isnull=True).first()
             if asistencia:
-                # FORZAMOS LA HORA LOCAL DE ESPAÑA AL SALIR
                 hora_exacta = timezone.localtime().time()
                 asistencia.hora_salida = hora_exacta
                 asistencia.save()
@@ -3068,7 +3171,8 @@ def fichador_mecanicos(request):
         empleados_data.append({
             'id': emp.id,
             'nombre': emp.nombre,
-            'trabajando_ahora': turno_abierto
+            'trabajando_ahora': turno_abierto,
+            'es_chapista': emp.es_chapista # Fundamental enviar esto al HTML
         })
         
     return render(request, 'taller/fichador.html', {
@@ -3079,71 +3183,117 @@ def fichador_mecanicos(request):
 
 @login_required
 def panel_nominas(request):
+    hoy = timezone.now().date()
+    
     if request.method == 'POST':
         empleado_id = request.POST.get('empleado_id')
-        metodo_pago = request.POST.get('metodo_pago', 'EFECTIVO') 
-        empleado = Empleado.objects.get(id=empleado_id)
+        accion_cierre = request.POST.get('accion_cierre', 'arrastrar')
+        fecha_cierre_str = request.POST.get('fecha_cierre') 
+        empleado = get_object_or_404(Empleado, id=empleado_id)
         
-        asistencias_pendientes = Asistencia.objects.filter(empleado=empleado, pagado=False, hora_salida__isnull=False)
-        dias_trabajados = asistencias_pendientes.values('fecha').distinct().count()
-        
-        # --- CÁLCULO INTELIGENTE FIJO VS DIARIO ---
-        if empleado.es_sueldo_fijo:
-            dias_mes = obtener_dias_laborables_mes(timezone.now().date())
-            valor_dia = empleado.sueldo_fijo_mensual / dias_mes
-            sueldo_bruto = Decimal(dias_trabajados) * valor_dia
-        else:
-            sueldo_bruto = dias_trabajados * empleado.sueldo_por_dia
-        
-        adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=empleado, liquidado=False)
-        total_adelantos = sum(a.importe for a in adelantos_pendientes)
-        
-        total_a_pagar = sueldo_bruto - total_adelantos
+        try:
+            fecha_cierre = datetime.strptime(fecha_cierre_str, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            fecha_cierre = hoy
 
-        if total_a_pagar > 0:
-            # Crea el gasto con el método que hayamos elegido (Banco o Efectivo)
-            Gasto.objects.create(
-                fecha=timezone.now().date(),
-                categoria='Sueldos',
-                importe=total_a_pagar,
-                descripcion=f"NÓMINA {empleado.nombre} ({dias_trabajados} días). Descontados {total_adelantos}€.",
-                metodo_pago=metodo_pago, 
-                empleado=empleado
-            )
-            asistencias_pendientes.update(pagado=True)
-            adelantos_pendientes.update(liquidado=True)
-            messages.success(request, f"¡Nómina de {empleado.nombre} liquidada correctamente mediante {metodo_pago}!")
-            
-        elif total_a_pagar <= 0 and sueldo_bruto > 0:
-            # Si lo que se le debe es exactamente 0 porque los adelantos cubren todo el mes
-            asistencias_pendientes.update(pagado=True)
-            adelantos_pendientes.update(liquidado=True)
-            messages.success(request, f"Nómina de {empleado.nombre} liquidada a cero (los adelantos cubrían todo el sueldo).")
+        asistencias_pendientes = Asistencia.objects.filter(
+            empleado=empleado, pagado=False, hora_salida__isnull=False, fecha__lte=fecha_cierre
+        )
+        adelantos_pendientes = AdelantoSueldo.objects.filter(
+            empleado=empleado, liquidado=False, fecha__lte=fecha_cierre
+        )
+
+        dias_trabajados_totales = asistencias_pendientes.values('fecha').distinct().count()
+        
+        if empleado.es_chapista:
+            dias_taller = asistencias_pendientes.filter(tipo_jornada='Taller').values('fecha').distinct().count()
+            sueldo_bruto = Decimal(dias_taller) * empleado.valor_jornada_taller
+        elif empleado.es_sueldo_fijo:
+            dias_mes = obtener_dias_laborables_mes(fecha_cierre)
+            valor_dia = (empleado.sueldo_fijo_mensual / dias_mes) if dias_mes else Decimal('0.00')
+            sueldo_bruto = Decimal(dias_trabajados_totales) * valor_dia
         else:
-            messages.warning(request, f"No hay saldo a favor para {empleado.nombre} o los adelantos superan lo que ha trabajado.")
+            sueldo_bruto = Decimal(dias_trabajados_totales) * empleado.sueldo_por_dia
+        
+        total_adelantos = sum(a.importe for a in adelantos_pendientes)
+        total_neto = sueldo_bruto - total_adelantos
+
+        with transaction.atomic():
+            # 1. PRIMERO marcamos todo lo viejo como cerrado
+            asistencias_pendientes.update(pagado=True)
+            adelantos_pendientes.update(liquidado=True)
             
+            # 2. Si decides PAGARLE el dinero físicamente
+            if accion_cierre in ['pagar_efectivo', 'pagar_banco'] and total_neto > 0:
+                metodo = 'EFECTIVO' if accion_cierre == 'pagar_efectivo' else 'CUENTA_TALLER'
+                Gasto.objects.create(
+                    fecha=fecha_cierre,
+                    categoria='Sueldos',
+                    importe=total_neto,
+                    descripcion=f"NÓMINA {empleado.nombre} (Cierre al {fecha_cierre.strftime('%d/%m/%Y')})",
+                    metodo_pago=metodo,
+                    empleado=empleado
+                )
+                messages.success(request, f"¡Liquidación de {empleado.nombre} pagada y cerrada!")
+            
+            # 3. Si decides CERRAR LA SEMANA Y ARRASTRAR EL SALDO
+            else: 
+                fecha_arrastre = fecha_cierre + timedelta(days=1)
+                
+                if total_neto != 0:
+                    if total_neto > 0:
+                        # Si le debes dinero, creamos un adelanto NEGATIVO para que empiece sumando
+                        AdelantoSueldo.objects.create(
+                            empleado=empleado, importe=-total_neto,
+                            motivo=f"SALDO A FAVOR ARRASTRADO (Cierre {fecha_cierre.strftime('%d/%m/%Y')})",
+                            fecha=fecha_arrastre, liquidado=False
+                        )
+                    else:
+                        # Si él te debe dinero, creamos un adelanto POSITIVO para que empiece restando
+                        AdelantoSueldo.objects.create(
+                            empleado=empleado, importe=abs(total_neto),
+                            motivo=f"DEUDA ARRASTRADA (Cierre {fecha_cierre.strftime('%d/%m/%Y')})",
+                            fecha=fecha_arrastre, liquidado=False
+                        )
+
+                # Creamos el ticket a CERO para el historial de la columna derecha
+                Gasto.objects.create(
+                    fecha=fecha_cierre,
+                    categoria='Sueldos',
+                    importe=Decimal('0.00'),
+                    descripcion=f"🧾 CIERRE CONTABLE SEMANAL: El saldo ({total_neto:.2f}€) se pasa al nuevo ciclo.",
+                    metodo_pago='COMPENSACION',
+                    empleado=empleado
+                )
+                messages.info(request, f"Semana cerrada correctamente. Saldo arrastrado al nuevo ciclo.")
+                
         return redirect('panel_nominas')
 
-    # --- LÓGICA DE MOSTRAR PANTALLA ---
+    # --- LÓGICA DEL GET ---
     empleados = Empleado.objects.all()
     datos_nominas = []
     
     for emp in empleados:
         asistencias_pendientes = Asistencia.objects.filter(empleado=emp, pagado=False, hora_salida__isnull=False)
-        dias_pendientes = asistencias_pendientes.values('fecha').distinct().count()
+        dias_pendientes_totales = asistencias_pendientes.values('fecha').distinct().count()
         
         fechas_exactas = asistencias_pendientes.values_list('fecha', flat=True).distinct()
         fechas_str = ", ".join([f.strftime('%d/%m') for f in fechas_exactas])
         
-        # --- CÁLCULO INTELIGENTE FIJO VS DIARIO ---
-        if emp.es_sueldo_fijo:
-            dias_mes = obtener_dias_laborables_mes(timezone.now().date())
-            valor_dia = emp.sueldo_fijo_mensual / dias_mes
-            sueldo_bruto = Decimal(dias_pendientes) * valor_dia
+        dias_mes = 0
+        valor_dia = Decimal('0.00')
+        
+        if emp.es_chapista:
+            dias_taller = asistencias_pendientes.filter(tipo_jornada='Taller').values('fecha').distinct().count()
+            sueldo_bruto = Decimal(dias_taller) * emp.valor_jornada_taller
+            valor_dia = emp.valor_jornada_taller
+        elif emp.es_sueldo_fijo:
+            dias_mes = obtener_dias_laborables_mes(hoy)
+            valor_dia = (emp.sueldo_fijo_mensual / dias_mes) if dias_mes else Decimal('0.00')
+            sueldo_bruto = Decimal(dias_pendientes_totales) * valor_dia
         else:
             valor_dia = emp.sueldo_por_dia
-            sueldo_bruto = dias_pendientes * valor_dia
-            dias_mes = 0 # No aplica para diarios
+            sueldo_bruto = Decimal(dias_pendientes_totales) * valor_dia
             
         adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=emp, liquidado=False)
         total_adelantos = sum(a.importe for a in adelantos_pendientes)
@@ -3151,7 +3301,7 @@ def panel_nominas(request):
         
         datos_nominas.append({
             'empleado': emp,
-            'dias': dias_pendientes,
+            'dias': dias_pendientes_totales,
             'fechas_str': fechas_str,
             'bruto': sueldo_bruto,
             'adelantos': total_adelantos,
@@ -3160,7 +3310,10 @@ def panel_nominas(request):
             'dias_mes': dias_mes
         })
 
-    return render(request, 'taller/panel_nominas.html', {'datos_nominas': datos_nominas})
+    return render(request, 'taller/panel_nominas.html', {
+        'datos_nominas': datos_nominas,
+        'hoy_fecha': hoy.strftime('%Y-%m-%d')
+    })
 
 # --- NUEVA FUNCIÓN MÁGICA PARA DAR ADELANTOS ---
 def dar_adelanto(request):
@@ -3221,6 +3374,13 @@ def detalle_nomina(request, empleado_id):
         fecha__year=ano_seleccionado,
         fecha__month=mes_seleccionado
     ).order_by('-fecha')
+
+    # 🟢 NUEVO: MAGIA PARA EL ENLACE AL EXPEDIENTE
+    import re
+    for ad in adelantos:
+        match = re.search(r'\(Orden #(\d+)\)', ad.motivo)
+        if match:
+            ad.orden_id_link = match.group(1) # Le pegamos el ID de la orden a la variable
     
     pagos = Gasto.objects.filter(
         empleado=empleado, 
@@ -3692,3 +3852,20 @@ def volcar_kilometros_emergencia(request):
             orden.save()
             contador += 1
     return HttpResponse(f"✅ ¡Sincronización completada! Se han copiado {contador} kilometrajes a las órdenes antiguas. Las facturas viejas ya tienen datos. Ya puedes salir de esta página.")
+
+
+@login_required
+def revertir_nomina_emergencia(request, empleado_id):
+    if not request.user.is_superuser: return redirect('home')
+    
+    empleado = get_object_or_404(Empleado, id=empleado_id)
+    
+    # 1. Borramos el "Arrastre" o el "Gasto" que se haya generado por error al cerrar
+    AdelantoSueldo.objects.filter(empleado=empleado, motivo__icontains="ARRASTRE DEUDA").delete()
+    Gasto.objects.filter(empleado=empleado, descripcion__icontains="NÓMINA").delete()
+    
+    # 2. Reabrimos TODOS los días y los adelantos viejos
+    Asistencia.objects.filter(empleado=empleado, pagado=True).update(pagado=False)
+    AdelantoSueldo.objects.filter(empleado=empleado, liquidado=True).update(liquidado=False)
+    
+    return HttpResponse(f"✅ ¡Magia hecha! El cierre de {empleado.nombre} ha sido deshecho. Todos sus días y adelantos vuelven a estar en la pantalla. Ya puedes volver al panel de nóminas.") 
