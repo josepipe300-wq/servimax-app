@@ -4,6 +4,9 @@ from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Sum
 from django.contrib.auth.models import User
+from django.db.models.signals import post_save, pre_delete
+from django.dispatch import receiver
+import math
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
@@ -190,7 +193,7 @@ class Empleado(models.Model):
     es_sueldo_fijo = models.BooleanField(default=False)
     sueldo_fijo_mensual = models.DecimalField(max_digits=8, decimal_places=2, default=1000.00)
     
-    # --- NUEVO: PERFIL HÍBRIDO (CHAPISTA/COMISIÓN) ---
+    # --- PERFIL HÍBRIDO (CHAPISTA/COMISIÓN) ---
     es_chapista = models.BooleanField(default=False, verbose_name="Trabaja a Comisión (Ej: Chapa y Pintura)")
     porcentaje_comision = models.DecimalField(max_digits=5, decimal_places=2, default=60.00, verbose_name="Porcentaje de Comisión (%)")
     valor_jornada_taller = models.DecimalField(max_digits=10, decimal_places=2, default=50.00, verbose_name="Valor Día (Trabajo Interno/Taller)")
@@ -214,7 +217,6 @@ class Asistencia(models.Model):
     hora_salida = models.TimeField(null=True, blank=True)
     pagado = models.BooleanField(default=False)
     
-    # --- NUEVO: IDENTIFICAR QUÉ HIZO ESE DÍA ---
     tipo_jornada = models.CharField(max_length=20, choices=TIPO_JORNADA_CHOICES, default='Taller')
 
     def __str__(self):
@@ -380,7 +382,7 @@ class LineaFactura(models.Model):
     cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=1)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     
-    # --- NUEVO: ASIGNACIÓN DE COMISIONES EN FACTURACIÓN ---
+    # ASIGNACIÓN DE COMISIONES EN FACTURACIÓN
     mecanico = models.ForeignKey(Empleado, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Mecánico Asignado (Comisión)")
     
     @property
@@ -559,18 +561,6 @@ class AmpliacionDeuda(models.Model):
     def __str__(self):
         return f"+{self.importe}€ a {self.deuda.acreedor}"
 
-# --- SEÑALES AUTOMÁTICAS PARA EL INVENTARIO ---
-from django.db.models.signals import pre_delete
-from django.dispatch import receiver
-
-@receiver(pre_delete, sender=CompraConsumible)
-def revertir_stock_al_borrar_compra(sender, instance, **kwargs):
-    pass 
-
-@receiver(pre_delete, sender=UsoConsumible)
-def revertir_stock_al_borrar_uso(sender, instance, **kwargs):
-    pass
-
 class Cita(models.Model):
     nombre_cliente = models.CharField(max_length=150, verbose_name="Nombre del Cliente")
     vehiculo_info = models.CharField(max_length=150, blank=True, null=True, verbose_name="Vehículo / Matrícula")
@@ -637,8 +627,6 @@ class FacturaProveedor(models.Model):
 # =========================================================
 # --- AUTOMATIZACIÓN DE DEUDA DE IVA CON HACIENDA ---
 # =========================================================
-from django.db.models.signals import post_save
-import math
 
 def actualizar_deuda_hacienda(fecha_referencia):
     year = fecha_referencia.year

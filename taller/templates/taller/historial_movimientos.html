@@ -46,16 +46,26 @@
         .btn-delete:hover { background-color: #fecaca; transform: scale(1.05); }
 
         .empty-state { text-align: center; padding: 60px 20px; background: #ffffff; border-radius: 16px; border: 1px dashed #cbd5e1; color: #64748b; font-weight: 500; margin-top: 20px;}
+        
+        /* Pestañas */
+        .tab-button { padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 1.05em; transition: 0.2s; border: 2px solid transparent; }
+        .tab-active-normal { background: #1e293b; color: white; border-color: #0f172a; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .tab-inactive-normal { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+        .tab-inactive-normal:hover { background: #e2e8f0; color: #1e293b; }
+        
+        .tab-active-comp { background: #f59e0b; color: white; border-color: #d97706; box-shadow: 0 4px 6px rgba(245,158,11,0.2); }
+        .tab-inactive-comp { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+        .tab-inactive-comp:hover { background: #fef3c7; color: #92400e; }
     </style>
 </head>
 <body>
     <div class="container">
         
-        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
+        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
             <div>
                 <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em; transition: color 0.2s;">← Volver al Inicio</a>
                 <h1 class="header-title">Historial de Movimientos</h1>
-                <p style="color: #64748b; font-weight: 500; margin: 5px 0 0 0;">Registro completo de ingresos y gastos del taller.</p>
+                <p style="color: #64748b; font-weight: 500; margin: 5px 0 0 0;">Registro de ingresos, gastos y movimientos contables.</p>
             </div>
             
             {% if request.user.is_superuser %}
@@ -65,12 +75,23 @@
             </div>
             {% endif %}
         </div>
+
+        <div style="display: flex; gap: 15px; margin-bottom: 25px;">
+            <a href="?modo=normal" class="tab-button {% if modo_vista == 'normal' or not modo_vista %}tab-active-normal{% else %}tab-inactive-normal{% endif %}">
+                💶 Dinero Real (Caja/Banco)
+            </a>
+            <a href="?modo=compensacion" class="tab-button {% if modo_vista == 'compensacion' %}tab-active-comp{% else %}tab-inactive-comp{% endif %}">
+                ⚖️ Compensaciones Internas
+            </a>
+        </div>
         
         <div class="section-panel" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; padding: 20px 24px;">
-            <span style="font-weight: 700; color: #0f172a; font-size: 1.05em;">🔍 Filtrar Movimientos:</span>
+            <span style="font-weight: 700; color: #0f172a; font-size: 1.05em;">🔍 Filtrar {% if modo_vista == 'compensacion' %}Compensaciones{% else %}Movimientos{% endif %}:</span>
             
             <form method="get" action="{% url 'historial_movimientos' %}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
                 
+                <input type="hidden" name="modo" value="{{ modo_vista|default:'normal' }}">
+
                 <input type="text" name="matricula" class="modern-select" placeholder="Buscar Matrícula..." value="{{ matricula_seleccionada }}" style="width: 160px; background: #ffffff;">
 
                 <select name="tipo" class="modern-select" onchange="this.form.submit();">
@@ -95,7 +116,7 @@
                 
                 <button type="submit" style="display: none;"></button>
                 
-                <a href="{% url 'historial_movimientos' %}" class="btn-modern" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; box-shadow: none;">Limpiar</a>
+                <a href="{% url 'historial_movimientos' %}?modo={{ modo_vista|default:'normal' }}" class="btn-modern" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; box-shadow: none;">Limpiar</a>
             </form>
         </div>
 
@@ -160,7 +181,7 @@
                                         </a>
                                     </div>
                                 {% endif %}
-                                </td>
+                            </td>
                             
                             <td style="text-align: right; font-weight: 800; font-size: 1.15em; {% if mov.tipo == 'gasto' %}color: #ef4444;{% else %}color: #10b981;{% endif %}">
                                 {% if mov.tipo == 'gasto' %}-{% else %}+{% endif %}{{ mov.importe|floatformat:2 }} €

@@ -33,6 +33,8 @@ urlpatterns = [
     path('orden/<int:orden_id>/', views.detalle_orden, name='detalle_orden'),
     path('historial-ordenes/', views.historial_ordenes, name='historial_ordenes'),
     path('sincronizar-escaner/', views.sincronizar_escaner, name='sincronizar_escaner'),
+    path('orden/estado-publico/<str:signed_id>/', views.estado_vehiculo_publico, name='estado_vehiculo_publico'),
+    path('taller/alternar-estado/', views.alternar_estado_taller, name='alternar_estado_taller'),
     
     # Facturas
     path('orden/<int:orden_id>/factura/generar/', views.generar_factura, name='generar_factura'),
@@ -70,17 +72,17 @@ urlpatterns = [
     # --- INTELIGENCIA ARTIFICIAL ---
     path('asistente/', views.asistente_ia, name='asistente_ia'),
 
+    # --- RRHH Y NÓMINAS ---
     path('fichar/', views.fichador_mecanicos, name='fichador'),
-
     path('nominas/', views.panel_nominas, name='panel_nominas'),
     path('nominas/detalle/<int:empleado_id>/', views.detalle_nomina, name='detalle_nomina'),
     path('nominas/adelanto/', views.dar_adelanto, name='dar_adelanto'),
+    
+    # --- GESTORÍA Y PROVEEDORES ---
     path('facturas-legales/', views.lista_facturas_legales, name='lista_facturas_legales'),
     path('facturas-legales/descargar-zip/', views.descargar_facturas_zip, name='descargar_facturas_zip'),
     path('facturas-legales/enviar-gestor/', views.enviar_zip_gestor, name='enviar_zip_gestor'),
     path('facturas-proveedores/', views.gestion_facturas_proveedores, name='gestion_facturas_proveedores'),
     path('facturas-proveedores/eliminar/<int:pk>/', views.eliminar_factura_proveedor, name='eliminar_factura_proveedor'),
     path('deuda/<int:deuda_id>/desglose-iva/', views.desglose_iva_deuda, name='desglose_iva_deuda'),
-    path('volcar-km/', views.volcar_kilometros_emergencia, name='volcar_km'),
-    path('revertir-nomina/<int:empleado_id>/', views.revertir_nomina_emergencia, name='revertir_nomina_emergencia'),
 ]
