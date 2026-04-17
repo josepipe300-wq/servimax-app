@@ -268,8 +268,9 @@ def home(request):
     anos_y_meses_data = get_anos_y_meses_con_datos()
     anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
 
-    ultimos_gastos = Gasto.objects.order_by('-id')[:5]
-    ultimos_ingresos = Ingreso.objects.order_by('-id')[:5]
+    # Excluimos las compensaciones internas para no ensuciar el dashboard principal
+    ultimos_gastos = Gasto.objects.exclude(metodo_pago='COMPENSACION').order_by('-id')[:5]
+    ultimos_ingresos = Ingreso.objects.exclude(metodo_pago='COMPENSACION').order_by('-id')[:5]
     movimientos_combinados = sorted(
         list(ultimos_gastos) + list(ultimos_ingresos),
         key=lambda mov: mov.fecha if hasattr(mov, 'fecha') else hoy_date,
