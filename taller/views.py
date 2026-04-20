@@ -947,6 +947,20 @@ def detalle_presupuesto(request, presupuesto_id):
 
     orden_generada = OrdenDeReparacion.objects.filter(presupuesto_origen=presupuesto).first()
     
+    # 🟢 NUEVO: MAGIA PARA EL ENLACE DE WHATSAPP PÚBLICO
+    whatsapp_url = None
+    if request.user.is_superuser and presupuesto.cliente.telefono:
+        signer = Signer()
+        signed_id = signer.sign(presupuesto.id)
+        public_url = request.build_absolute_uri(reverse('ver_presupuesto_publico', args=[signed_id]))
+        
+        telefono_limpio = "".join(filter(str.isdigit, presupuesto.cliente.telefono))
+        if not telefono_limpio.startswith('34') and len(telefono_limpio) == 9: 
+            telefono_limpio = '34' + telefono_limpio
+            
+        mensaje = f"Hola {presupuesto.cliente.nombre}, aquí tienes el enlace para ver y descargar tu presupuesto del taller:\n\n{public_url}\n\n¡Gracias por confiar en ServiMax!"
+        whatsapp_url = f"https://wa.me/{telefono_limpio}?text={quote(mensaje)}"
+    
     try:
         estados_posibles = Presupuesto.ESTADO_CHOICES
     except AttributeError:
@@ -956,7 +970,8 @@ def detalle_presupuesto(request, presupuesto_id):
         'presupuesto': presupuesto, 
         'lineas': presupuesto.lineas.all(), 
         'estados_posibles': estados_posibles, 
-        'orden_generada': orden_generada 
+        'orden_generada': orden_generada,
+        'whatsapp_url': whatsapp_url  # Pasamos el enlace al HTML
     }
     return render(request, 'taller/detalle_presupuesto.html', context)
 
@@ -2494,20 +2509,45 @@ def ver_presupuesto_publico(request, signed_id):
     signer = Signer()
     try:
         presupuesto_id = signer.unsign(signed_id)
-        presupuesto = get_object_or_404(Presupuesto, id=presupuesto_id)
+        presupuesto = get_object_or_404(Presupuesto.objects.select_related('cliente', 'vehiculo').prefetch_related('lineas'), id=presupuesto_id)
     except BadSignature:
         return HttpResponseForbidden("El enlace de este presupuesto es inválido o ha caducado.")
 
-    template_path = 'taller/presupuesto_pdf.html' 
-    context = {'presupuesto': presupuesto}
-    response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="Presupuesto_{presupuesto.id}.pdf"'
+    lineas = presupuesto.lineas.all()
+    context = { 
+        'presupuesto': presupuesto, 
+        'lineas': lineas, 
+        'STATIC_URL': settings.STATIC_URL, 
+        'logo_path': os.path.join(settings.BASE_DIR, 'taller', 'static', 'taller', 'images', 'logo.jpg') 
+    }
     
+    template_path = 'taller/plantilla_presupuesto.html' 
     template = get_template(template_path)
     html = template.render(context)
-    pisa_status = pisa.CreatePDF(html, dest=response)
     
-    if pisa_status.err:
+    response = HttpResponse(content_type='application/pdf')
+    matricula_filename = presupuesto.vehiculo.matricula if presupuesto.vehiculo else presupuesto.matricula_nueva if presupuesto.matricula_nueva else 'SIN_VEHICULO'
+    cliente_filename = "".join(c if c.isalnum() else "_" for c in presupuesto.cliente.nombre)
+    nombre_archivo = f"presupuesto_{presupuesto.id}_{cliente_filename}_{matricula_filename}.pdf"
+    response['Content-Disposition'] = f'inline; filename="{nombre_archivo}"'
+    
+    def link_callback(uri, rel):
+        logo_uri_abs = context.get('logo_path')
+        if logo_uri_abs: logo_uri_abs = logo_uri_abs.replace("\\", "/")
+        if uri == logo_uri_abs: return logo_uri_abs
+        if uri.startswith(settings.STATIC_URL):
+            path = uri.replace(settings.STATIC_URL, "", 1)
+            for static_dir in settings.STATICFILES_DIRS:
+                file_path = os.path.join(static_dir, path)
+                if os.path.exists(file_path): return file_path
+            if hasattr(settings, 'STATIC_ROOT') and settings.STATIC_ROOT:
+                 file_path = os.path.join(settings.STATIC_ROOT, path)
+                 if os.path.exists(file_path): return file_path
+        if uri.startswith("http://") or uri.startswith("https://"): return uri
+        return None
+        
+    pisa_status = pisa.CreatePDF(html, dest=response, link_callback=link_callback)
+    if pisa_status.err: 
         return HttpResponse('Tuvimos algunos errores al crear el PDF <pre>' + html + '</pre>')
     return response
 

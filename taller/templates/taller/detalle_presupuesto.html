@@ -100,9 +100,11 @@
             </div>
             
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button onclick="enviarWhatsApp()" class="btn-wsp" title="Enviar presupuesto al cliente">
+                {% if whatsapp_url %}
+                <a href="{{ whatsapp_url }}" target="_blank" class="btn-wsp" title="Enviar presupuesto al cliente">
                     <span style="font-size: 1.2em;">💬</span> Enviar por WhatsApp
-                </button>
+                </a>
+                {% endif %}
 
                 {% if request.user.is_superuser %}
                     {% if presupuesto.estado != 'Convertido' %}
@@ -223,37 +225,6 @@
         <span class="ia-text">Hablar con IA</span>
     </a>
 
-    <script>
-        function enviarWhatsApp() {
-            // 1. Obtenemos los datos de la página
-            const telefonoBruto = document.getElementById('cliente-telefono').innerText.replace('📞', '').trim();
-            const clienteNombre = "{{ presupuesto.cliente.nombre|title }}";
-            const vehiculoInfo = document.getElementById('vehiculo-info').innerText.replace('(Nuevo)', '').trim();
-            const idPresupuesto = "{{ presupuesto.id }}";
-            const total = "{{ presupuesto.total_estimado|floatformat:2 }}";
-            
-            // 2. Limpiamos y preparamos el teléfono
-            let telefono = telefonoBruto.replace(/\D/g,'');
-            if (telefono.length === 0) {
-                alert("El cliente no tiene un número de teléfono válido registrado.");
-                return;
-            }
-            // Le añadimos el prefijo de España (+34) si no lo tiene
-            if (!telefono.startsWith('34') && telefono.length === 9) {
-                telefono = '34' + telefono;
-            }
-
-            // 3. Generamos el enlace al PDF (url completa)
-            const urlPDF = window.location.origin + "{% url 'ver_presupuesto_pdf' presupuesto.id %}";
-
-            // 4. Redactamos el mensaje profesional
-            const mensaje = `Hola ${clienteNombre}, somos del taller ServiMax 👨‍🔧.\n\nTe adjuntamos el *Presupuesto #${idPresupuesto}* para tu ${vehiculoInfo}.\n\n💰 *Total estimado: ${total} €*\n\nPuedes ver y descargar el documento detallado directamente en este enlace:\n📄 ${urlPDF}\n\nQuedamos a tu disposición para cualquier duda o para confirmar la reparación. ¡Un saludo!`;
-
-            // 5. Creamos el enlace mágico de WhatsApp y lo abrimos
-            const urlWhatsApp = `https://wa.me/${telefono}?text=${encodeURIComponent(mensaje)}`;
-            window.open(urlWhatsApp, '_blank');
-        }
-    </script> 
     {% include 'taller/widget_ia.html' %}
 </body>
 </html>
