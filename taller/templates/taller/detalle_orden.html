@@ -123,6 +123,12 @@
         .builder-row input[type="number"] { width: 120px; }
         .add-row-btn { background: none; border: none; color: #3b82f6; cursor: pointer; font-weight: 600; margin-top: 8px; padding: 5px 0; transition: color 0.2s;}
         .add-row-btn:hover { color: #2563eb; }
+
+        /* Estilo para el slider de la pintura */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: #4f46e5; cursor: pointer; margin-top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);}
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: #c7d2fe; border-radius: 4px; }
+        input[type=range]:focus { outline: none; }
     </style>
 </head>
 <body>
@@ -575,7 +581,7 @@
                             {% endfor %}
                         </table>
                     {% else %}
-                        <p style="color: #94a3b8; font-style: italic; margin: top: 15px;">No hay gastos de repuestos directos.</p>
+                        <p style="color: #94a3b8; font-style: italic; margin-top: 15px;">No hay gastos de repuestos directos.</p>
                     {% endif %}
                 </div>
 
@@ -595,6 +601,134 @@
                         <p style="color: #94a3b8; font-style: italic; margin-top: 15px;">No hay trabajos externos registrados.</p>
                     {% endif %}
                 </div>
+            </div>
+
+            <div class="section-panel" style="border-top: 4px solid #4f46e5;">
+                <h3 class="section-title" style="color: #3730a3; border: none;">🎨 Asignación de Pintura y Material</h3>
+                
+                {% if usos_chapa %}
+                    <table class="table-items" style="margin-bottom: 20px;">
+                        <tr style="background: #f8fafc;">
+                            <th>Material</th>
+                            <th class="text-right">Coste Asignado</th>
+                            <th></th>
+                        </tr>
+                        {% for uso in usos_chapa %}
+                        <tr>
+                            <td><strong>{{ uso.lote.descripcion }}</strong><br><small>{{ uso.notas }}</small></td>
+                            <td class="text-right" style="color: #4f46e5; font-weight: 700;">{{ uso.importe_usado }} €</td>
+                            <td class="text-right">
+                                <form method="POST" style="display:inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="form_type" value="eliminar_uso_chapa">
+                                    <input type="hidden" name="uso_id" value="{{ uso.id }}">
+                                    <button type="submit" style="background:none; border:none; cursor:pointer;" title="Eliminar">🗑️</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                {% endif %}
+
+                <div style="background: #e0e7ff; padding: 20px; border-radius: 12px; border: 1px dashed #818cf8;">
+                    {% if factura %}
+                        <div style="background: #fffbeb; padding: 10px; border-radius: 8px; border: 1px solid #fcd34d; margin-bottom: 15px; color: #92400e; font-size: 0.85em; font-weight: 600;">
+                            ⚠️ NOTA: Si añades o quitas material ahora, recuerda ir a "Editar Documento" y guardarlo para que se actualice la comisión del chapista.
+                        </div>
+                    {% endif %}
+                    
+                    <form method="POST" id="form-uso-chapa">
+                        {% csrf_token %}
+                        <input type="hidden" name="form_type" value="usar_stock_chapa">
+                        
+                        <label style="font-weight: 700; color: #3730a3; display: block; margin-bottom: 10px;">1. Selecciona el bote de material:</label>
+                        <select name="lote_id" id="lote-select" class="modern-select" style="width: 100%; margin-bottom: 20px;" required>
+                            <option value="" data-total="0">-- Elegir material --</option>
+                            
+                            {% if lotes_especificos %}
+                                <optgroup label="COMPRADO PARA ESTE COCHE">
+                                    {% for lote in lotes_especificos %}
+                                        <option value="{{ lote.id }}" data-total="{{ lote.importe_total|stringformat:'.2f' }}">
+                                            ⭐ {{ lote.descripcion }} (Costó: {{ lote.importe_total }}€ - Quedan: {{ lote.saldo_real|floatformat:2 }}€)
+                                        </option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endif %}
+
+                            <optgroup label="STOCK GENERAL / OTROS">
+                                {% for lote in lotes_generales %}
+                                    <option value="{{ lote.id }}" data-total="{{ lote.importe_total|stringformat:'.2f' }}">
+                                        📦 {{ lote.descripcion }} (Quedan: {{ lote.saldo_real|floatformat:2 }}€)
+                                    </option>
+                                {% endfor %}
+                            </optgroup>
+                        </select>
+
+                        <div id="control-porcentaje" style="display: none;">
+                            <label style="font-weight: 700; color: #3730a3; display: block; margin-bottom: 5px;">2. ¿Qué porcentaje has usado en este trabajo?</label>
+                            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+                                <input type="range" name="porcentaje_usar" id="range-uso" min="1" max="100" value="60" style="flex-grow: 1;">
+                                <span id="label-porcentaje" style="font-weight: 800; font-size: 1.2em; color: #4f46e5; min-width: 50px;">60%</span>
+                            </div>
+                            <div style="background: white; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #bfdbfe;">
+                                <span style="color: #64748b; font-size: 0.9em;">Se restarán:</span>
+                                <strong id="calc-euros" style="font-size: 1.2em; color: #1e40af;">0.00 €</strong>
+                            </div>
+                            <button type="submit" class="btn-modern" style="width: 100%; margin-top: 15px; background: #4f46e5;">💾 Guardar Gasto de Chapa</button>
+                        </div>
+                    </form>
+                </div>
+
+                <script>
+                    const loteSelect = document.getElementById('lote-select');
+                    const controlPorcentaje = document.getElementById('control-porcentaje');
+                    const rangeUso = document.getElementById('range-uso');
+                    const labelPct = document.getElementById('label-porcentaje');
+                    const calcEuros = document.getElementById('calc-euros');
+
+                    if(loteSelect){
+                        loteSelect.addEventListener('change', function() {
+                            if(this.value) {
+                                // 1. Calcular el límite máximo según lo que quede en el bote
+                                const selectedOption = this.options[this.selectedIndex];
+                                const totalBote = parseFloat(selectedOption.getAttribute('data-total')) || 0;
+                                const textoOpcion = selectedOption.innerText;
+                                const saldoMatch = textoOpcion.match(/Quedan:\s*([\d.]+)/);
+                                
+                                let maxPct = 100;
+                                if (saldoMatch && totalBote > 0) {
+                                    const saldoReal = parseFloat(saldoMatch[1]);
+                                    maxPct = Math.floor((saldoReal / totalBote) * 100);
+                                }
+
+                                // 2. Topar el slider
+                                rangeUso.max = maxPct;
+                                if (parseInt(rangeUso.value) > maxPct) {
+                                    rangeUso.value = maxPct;
+                                }
+
+                                controlPorcentaje.style.display = 'block';
+                                actualizarCalculo();
+                            } else {
+                                controlPorcentaje.style.display = 'none';
+                            }
+                        });
+                    }
+
+                    if(rangeUso){
+                        rangeUso.addEventListener('input', actualizarCalculo);
+                    }
+
+                    function actualizarCalculo() {
+                        const pct = rangeUso.value;
+                        const selectedOption = loteSelect.options[loteSelect.selectedIndex];
+                        const totalBote = parseFloat(selectedOption.getAttribute('data-total')) || 0;
+                        const euros = (totalBote * (pct / 100)).toFixed(2);
+                        
+                        labelPct.innerText = pct + '%';
+                        calcEuros.innerText = euros + ' €';
+                    }
+                </script>
             </div>
 
             {% if not factura %}

@@ -281,6 +281,7 @@ class Gasto(models.Model):
         ('COMISIONES_INTERESES', 'Comisiones e Intereses Bancarios'),
         ('Pago de Deuda', 'Pago de Deuda (Taller)'),
         ('PAGO_TARJETA', '💳 Pago de Tarjeta de Crédito'),
+        ('MATERIAL_CHAPA', '🎨 Material Chapa y Pintura'), # 🟢 NUEVA CATEGORÍ
     ]
     
     METODO_PAGO_CHOICES = [
@@ -669,3 +670,47 @@ def trigger_iva_factura(sender, instance, **kwargs):
 @receiver(pre_delete, sender=FacturaProveedor)
 def trigger_iva_proveedor(sender, instance, **kwargs):
     actualizar_deuda_hacienda(instance.fecha_factura)
+
+
+# =========================================================
+# --- MODULO DE STOCK Y TRAZABILIDAD DE CHAPA ---
+# =========================================================
+
+class StockMaterialChapa(models.Model):
+    gasto_original = models.OneToOneField(Gasto, on_delete=models.CASCADE, related_name='lote_chapa')
+    descripcion = models.CharField(max_length=255, help_text="Ej: Pintura Blanca UHS, Barniz, Masilla...")
+    importe_total = models.DecimalField(max_digits=10, decimal_places=2, help_text="Lo que costó el bote o lote completo")
+    fecha_registro = models.DateField(default=timezone.now)
+
+    @property
+    def importe_usado(self):
+        # Suma todos los "consumos" que se le han hecho a este bote
+        total = self.usos.aggregate(total=Sum('importe_usado'))['total']
+        return total or Decimal('0.00')
+
+    @property
+    def importe_disponible(self):
+        # Dinero que queda en el bote
+        return self.importe_total - self.importe_usado
+
+    @property
+    def agotado(self):
+        # Si el bote se ha gastado al 100%
+        return self.importe_disponible <= 0
+
+    def __str__(self):
+        return f"{self.descripcion} - Restan: {self.importe_disponible}€"
+
+class UsoMaterialChapa(models.Model):
+    lote = models.ForeignKey(StockMaterialChapa, related_name='usos', on_delete=models.CASCADE)
+    orden = models.ForeignKey(OrdenDeReparacion, related_name='materiales_chapa_usados', on_delete=models.CASCADE)
+    importe_usado = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha_uso = models.DateField(default=timezone.now)
+    notas = models.CharField(max_length=255, blank=True, null=True, help_text="Ej: Pintado de aleta y capó")
+
+    def __str__(self):
+        return f"{self.importe_usado}€ de {self.lote.descripcion} en Orden #{self.orden.id}"
+        
+    def save(self, *args, **kwargs):
+        if self.notas: self.notas = self.notas.upper()
+        super(UsoMaterialChapa, self).save(*args, **kwargs)    

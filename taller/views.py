@@ -29,6 +29,7 @@ from django.db.models import Sum, F, Q
 from django.db import transaction
 from django.core.signing import Signer, BadSignature
 from django.core.mail import EmailMessage
+from .models import StockMaterialChapa, UsoMaterialChapa
 
 # --- ARCHIVOS LOCALES DE LA APP ---
 from . import ai_tools
@@ -512,6 +513,11 @@ def ingresar_vehiculo(request):
 
 @login_required
 def anadir_gasto(request):
+    from django.db import transaction
+    from decimal import Decimal
+    from datetime import datetime
+    from django.utils import timezone
+
     if request.user.groups.filter(name='Solo Ver').exists():
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'.</p><br><a href='/'>← Volver</a>")
 
@@ -565,7 +571,7 @@ def anadir_gasto(request):
             
             orden = None
             vehiculo = None
-            if (categoria in ['Repuestos', 'Otros', 'Pago de Deuda']) and orden_id:
+            if orden_id:
                 try:
                     orden = OrdenDeReparacion.objects.get(id=orden_id)
                     vehiculo = orden.vehiculo
@@ -579,6 +585,22 @@ def anadir_gasto(request):
                 except Empleado.DoesNotExist:
                     pass
             
+            # 🟢 LÓGICA DE MONEDERO DE CHAPA (El 100% va al Monedero pero guardamos el vehículo)
+            if categoria == 'MATERIAL_CHAPA':
+                with transaction.atomic():
+                    gasto = Gasto.objects.create(
+                        metodo_pago=metodo_pago, fecha=fecha_gasto, categoria=categoria,
+                        importe=importe_decimal, descripcion=descripcion,
+                        empleado=empleado, orden=orden, vehiculo=vehiculo  # Guardamos orden y vehículo para el historial
+                    )
+                    StockMaterialChapa.objects.create(
+                        gasto_original=gasto,
+                        descripcion=descripcion,
+                        importe_total=importe_decimal,
+                        fecha_registro=fecha_gasto
+                    )
+                return redirect('home')
+
             if categoria == 'PAGO_TARJETA':
                 tarjeta_destino = request.POST.get('tarjeta_destino')
                 saldo_real_str = request.POST.get('saldo_real_banco')
@@ -1175,7 +1197,6 @@ def detalle_orden(request, orden_id):
                 orden.save()
             return redirect('detalle_orden', orden_id=orden.id)
 
-        # 🟢 CAMBIO: Si editan el kilometraje desde el panel, se guarda en AMBOS (Vehiculo y Orden)
         elif form_type == 'kilometraje':
             try:
                 nuevo_km_str = request.POST.get('nuevo_kilometraje')
@@ -1228,14 +1249,12 @@ def detalle_orden(request, orden_id):
             
             if importe > 0:
                 with transaction.atomic():
-                    # 1. Ingreso de la orden
                     Ingreso.objects.create(
                         fecha=timezone.now().date(), categoria='Taller', importe=importe,
                         descripcion=f"COBRO FACTURA {orden.vehiculo.matricula}", metodo_pago=metodo,
                         orden=orden, es_tpv=(metodo not in ['EFECTIVO', 'COMPENSACION'])
                     )
                     
-                    # 2. Lógica de Compensación Doble
                     if metodo == 'COMPENSACION':
                         if deuda_id:
                             try:
@@ -1263,8 +1282,61 @@ def detalle_orden(request, orden_id):
 
             return redirect('detalle_orden', orden_id=orden.id)
 
+        # 🟢 NUEVO: LÓGICA PARA USAR STOCK DE CHAPA (PORCENTAJE)
+        elif form_type == 'usar_stock_chapa':
+            lote_id = request.POST.get('lote_id')
+            porcentaje_str = request.POST.get('porcentaje_usar', '0')
+            if lote_id and porcentaje_str:
+                try:
+                    lote = StockMaterialChapa.objects.get(id=lote_id)
+                    porcentaje = Decimal(porcentaje_str.replace(',', '.'))
+                    if porcentaje > 0:
+                        # Hacemos la matemática de los euros
+                        importe_usar = (lote.importe_total * (porcentaje / Decimal('100'))).quantize(Decimal('0.01'))
+                        if importe_usar <= lote.importe_disponible:
+                            UsoMaterialChapa.objects.create(
+                                lote=lote,
+                                orden=orden,
+                                importe_usado=importe_usar,
+                                fecha_uso=timezone.now().date(),
+                                notas=f"Uso del {porcentaje}% ({request.user.username})"
+                            )
+                            messages.success(request, f"Se han asignado {importe_usar}€ de pintura al vehículo.")
+                        else:
+                            messages.error(request, "El importe supera el saldo disponible del bote.")
+                except (ValueError, TypeError, Decimal.InvalidOperation, StockMaterialChapa.DoesNotExist):
+                    pass
+            return redirect('detalle_orden', orden_id=orden.id)
+
+        # 🟢 NUEVO: LÓGICA PARA BORRAR UN USO DE CHAPA
+        elif form_type == 'eliminar_uso_chapa':
+            uso_id = request.POST.get('uso_id')
+            try:
+                uso = UsoMaterialChapa.objects.get(id=uso_id, orden=orden)
+                uso.delete()
+            except UsoMaterialChapa.DoesNotExist:
+                pass
+            return redirect('detalle_orden', orden_id=orden.id)
+
     metodos_pago = Ingreso.METODO_PAGO_CHOICES
+    
+    # 🟢 EL FIX DE LAS DEUDAS (Esto es lo que te daba el pantallazo amarillo)
     deudas_pendientes = [d for d in DeudaTaller.objects.all() if d.estado == 'Pendiente']
+
+    # 🟢 SEPARAMOS EL MONEDERO EN "COMPRADO PARA ESTE COCHE" Y "RESTO DEL TALLER"
+    lotes_chapa_db = StockMaterialChapa.objects.all().order_by('fecha_registro')
+    lotes_con_saldo = []
+    lotes_especificos = []
+    lotes_generales = []
+    
+    for l in lotes_chapa_db:
+        if l.importe_disponible > 0:
+            l.saldo_real = l.importe_disponible
+            lotes_con_saldo.append(l)
+            if l.gasto_original and l.gasto_original.orden == orden:
+                lotes_especificos.append(l)
+            else:
+                lotes_generales.append(l)
 
     context = {
         'orden': orden, 'repuestos': repuestos, 'gastos_otros': gastos_otros, 'factura': factura,
@@ -1273,9 +1345,15 @@ def detalle_orden(request, orden_id):
         'whatsapp_url': whatsapp_url,
         'whatsapp_estado_url': whatsapp_estado_url,
         'notas_internas': orden.notas_internas.all().order_by('-fecha_creacion'),
-        'metodos_pago': metodos_pago, 'deudas_pendientes': deudas_pendientes,
+        'metodos_pago': metodos_pago, 
+        'deudas_pendientes': deudas_pendientes,
         'empleados_taller': Empleado.objects.all(),
-        'chapistas': Empleado.objects.filter(es_chapista=True)
+        'chapistas': Empleado.objects.filter(es_chapista=True),
+        # Variables de Pintura
+        'lotes_con_saldo': lotes_con_saldo,
+        'lotes_especificos': lotes_especificos,
+        'lotes_generales': lotes_generales,
+        'usos_chapa': orden.materiales_chapa_usados.all().order_by('-fecha_uso')
     }
     return render(request, 'taller/detalle_orden.html', context)
 
@@ -1293,25 +1371,20 @@ def generar_factura(request, orden_id):
         notas = request.POST.get('notas_cliente', '')
 
         with transaction.atomic():
-            # 🟢 NUEVO: Borramos las comisiones viejas de esta orden para no duplicar si estamos editando
             AdelantoSueldo.objects.filter(motivo__icontains=f"(Orden #{orden.id})").delete()
             
             factura = Factura.objects.filter(orden=orden).first()
             
             if factura:
-                # ¡AQUÍ ESTÁ LA MAGIA! En vez de borrarla, la actualizamos.
                 factura.es_factura = es_factura
                 factura.notas_cliente = notas
-                # Si antes era un recibo sin IVA y ahora es factura oficial, le damos número:
                 if es_factura and not factura.numero_factura:
                     ultima_factura = Factura.objects.select_for_update().filter(numero_factura__isnull=False).order_by('-numero_factura').first()
                     factura.numero_factura = (ultima_factura.numero_factura + 1) if (ultima_factura and ultima_factura.numero_factura) else 1
                 
-                # Borramos solo las líneas y los consumibles usados para volver a crearlos limpios
                 factura.lineas.all().delete()
                 UsoConsumible.objects.filter(orden=orden).delete()
             else:
-                # Si no existe, creamos una nueva desde cero
                 nuevo_numero_factura = None
                 if es_factura:
                     ultima_factura = Factura.objects.select_for_update().filter(numero_factura__isnull=False).order_by('-numero_factura').first()
@@ -1352,10 +1425,14 @@ def generar_factura(request, orden_id):
                         UsoConsumible.objects.create(orden=orden, tipo=tipo, cantidad_usada=cantidad)
                     except: pass
             
-            # --- MAGIA DEL 60/40 (MANO DE OBRA Y COMISIONES) ---
+            # --- MAGIA DEL 60/40 CON INVENTARIO DE CHAPA ---
             descripciones_mo = request.POST.getlist('mano_obra_desc')
             importes_mo = request.POST.getlist('mano_obra_importe')
-            mecanicos_mo = request.POST.getlist('mano_obra_mecanico') # Capturamos a quién va el 60%
+            mecanicos_mo = request.POST.getlist('mano_obra_mecanico')
+
+            # 🟢 NUEVO: Obtenemos el total de pintura usada en este coche del monedero
+            total_chapa = orden.materiales_chapa_usados.aggregate(total=Sum('importe_usado'))['total'] or Decimal('0.00')
+            material_restante_por_descontar = total_chapa
 
             for desc, importe_str, mecanico_id in zip(descripciones_mo, importes_mo, mecanicos_mo):
                 if desc and importe_str:
@@ -1371,16 +1448,27 @@ def generar_factura(request, orden_id):
                         if mecanico_id:
                             try:
                                 emp_comision = Empleado.objects.get(id=mecanico_id)
-                                comision = (importe * Decimal('0.60')).quantize(Decimal('0.01'))
+                                base_comision = importe
+                                notas_adicionales = ""
+
+                                # 🟢 NUEVO: Si es chapista y hay material por descontar, se lo restamos a SU base
+                                if emp_comision.es_chapista and material_restante_por_descontar > 0:
+                                    descuento_aplicado = min(base_comision, material_restante_por_descontar)
+                                    base_comision -= descuento_aplicado
+                                    material_restante_por_descontar -= descuento_aplicado
+                                    notas_adicionales = f" (-{descuento_aplicado}€ de Material)"
                                 
-                                # Truco contable: Guardamos la comisión como un Adelanto NEGATIVO. 
-                                AdelantoSueldo.objects.create(
-                                    empleado=emp_comision,
-                                    importe=-comision, 
-                                    motivo=f"🟢 COMISIÓN 60% (Orden #{orden.id}): {desc.upper()[:30]}",
-                                    fecha=timezone.now().date(),
-                                    liquidado=False
-                                )
+                                # Si la base queda en 0 o menos, no hay comisión
+                                if base_comision > 0:
+                                    comision = (base_comision * Decimal('0.60')).quantize(Decimal('0.01'))
+                                    
+                                    AdelantoSueldo.objects.create(
+                                        empleado=emp_comision,
+                                        importe=-comision, 
+                                        motivo=f"🟢 COMISIÓN 60% (Orden #{orden.id}): {desc.upper()[:20]}{notas_adicionales}",
+                                        fecha=timezone.now().date(),
+                                        liquidado=False
+                                    )
                             except Empleado.DoesNotExist:
                                 pass
                     except Exception as e: 
@@ -1401,7 +1489,6 @@ def generar_factura(request, orden_id):
             if es_factura: iva_calculado = (subtotal_positivo * Decimal('0.21')).quantize(Decimal('0.01'))
             total_final = subtotal_positivo + iva_calculado
             
-            # Guardamos los nuevos totales en la factura original
             factura.subtotal = subtotal; factura.iva = iva_calculado; factura.total_final = total_final
             factura.save() 
             
@@ -1627,6 +1714,9 @@ def detalle_ganancia_orden(request, orden_id):
     if not request.user.is_superuser:
         return redirect('home')
 
+    from decimal import Decimal
+    from django.db.models import Sum
+
     orden = get_object_or_404(OrdenDeReparacion.objects.select_related('vehiculo', 'cliente'), id=orden_id)
     try: 
         factura = Factura.objects.prefetch_related('lineas', 'orden__ingreso_set').get(orden=orden)
@@ -1646,8 +1736,11 @@ def detalle_ganancia_orden(request, orden_id):
             
     tipos_consumible_dict = {tipo.nombre.upper(): tipo for tipo in TipoConsumible.objects.all()}
     
+    total_mo_facturada = Decimal('0.00')
+
+    # 1. Cargamos las líneas de la factura
     for linea in factura.lineas.all():
-        pvp_linea = linea.total_linea
+        pvp_linea = linea.cantidad * linea.precio_unitario
         coste_linea = Decimal('0.00')
         descripcion_limpia = linea.descripcion.strip().upper()
         key = (linea.tipo, descripcion_limpia)
@@ -1659,6 +1752,9 @@ def detalle_ganancia_orden(request, orden_id):
             
         if linea.tipo == 'Grúa':
             tipo_nombre = '🚛 Servicio de Grúa'
+
+        if linea.tipo == 'Mano de Obra':
+            total_mo_facturada += pvp_linea
 
         desglose_agrupado.setdefault(key, {'descripcion': f"{tipo_nombre}: {linea.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
         desglose_agrupado[key]['pvp'] += pvp_linea
@@ -1682,6 +1778,7 @@ def detalle_ganancia_orden(request, orden_id):
                 
         desglose_agrupado[key]['coste'] += coste_linea
         
+    # 2. Cargamos gastos extra no facturados
     for gasto in gastos_asociados:
         if gasto.id not in gastos_usados_ids:
             descripcion_limpia = gasto.descripcion.strip().upper()
@@ -1695,18 +1792,42 @@ def detalle_ganancia_orden(request, orden_id):
             desglose_agrupado.setdefault(key, {'descripcion': f"{tipo_nombre} (No facturado): {gasto.descripcion}", 'coste': Decimal('0.00'), 'pvp': Decimal('0.00')})
             desglose_agrupado[key]['coste'] += gasto.importe or Decimal('0.00')
 
-    # 🟢 MAGIA DE LAS COMISIONES: Añadimos lo pagado al chapista como un COSTE para el taller
-    comisiones = AdelantoSueldo.objects.filter(motivo__icontains=f"(Orden #{orden.id})")
-    for comision in comisiones:
-        coste_comision = abs(comision.importe) # Lo pasamos a positivo para que cuente como coste
-        key = ('Comision', comision.motivo)
-        desglose_agrupado.setdefault(key, {
-            'descripcion': f"👨‍🔧 Comisión pagada a {comision.empleado.nombre} ({comision.motivo})", 
-            'coste': Decimal('0.00'), 
-            'pvp': Decimal('0.00')
+    # 3. Preparación de variables de Pintura y Comisiones
+    total_chapa = orden.materiales_chapa_usados.aggregate(total=Sum('importe_usado'))['total'] or Decimal('0.00')
+    usos_chapa = orden.materiales_chapa_usados.all()
+
+    resumen_comisiones = []
+    total_comisiones = Decimal('0.00')
+    comisiones_db = AdelantoSueldo.objects.filter(motivo__icontains=f"(Orden #{orden.id})")
+    
+    for com in comisiones_db:
+        coste_comision = abs(com.importe)
+        total_comisiones += coste_comision
+        base_calculada = (coste_comision / Decimal('0.60')).quantize(Decimal('0.01'))
+        resumen_comisiones.append({
+            'mecanico': com.empleado.nombre,
+            'comision': coste_comision,
+            'base': base_calculada,
         })
-        desglose_agrupado[key]['coste'] += coste_comision
+        
+    # 🟢 LA MAGIA DE LA LIMPIEZA VISUAL 🟢
+    # Juntamos la pintura y la comisión y se la inyectamos a la Mano de Obra
+    coste_operativo_total = total_chapa + total_comisiones
+    if coste_operativo_total > 0:
+        mo_keys = [k for k in desglose_agrupado.keys() if k[0] == 'Mano de Obra']
+        if mo_keys:
+            main_mo_key = mo_keys[0]
+            desglose_agrupado[main_mo_key]['coste'] += coste_operativo_total
+            desglose_agrupado[main_mo_key]['descripcion'] += " (Inc. Material y Comisión)"
+        else:
+            # Si por algún motivo no se facturó mano de obra, creamos una línea de coste
+            desglose_agrupado[('Mano de Obra', 'COSTES OPERATIVOS')] = {
+                'descripcion': "Costes de Personal y Pintura (Sin facturar)", 
+                'coste': coste_operativo_total, 
+                'pvp': Decimal('0.00')
+            }
             
+    # 4. Cálculo Final
     desglose_final_list = []
     ganancia_total_calculada = Decimal('0.00')
     
@@ -1717,9 +1838,9 @@ def detalle_ganancia_orden(request, orden_id):
         ganancia_total_calculada += ganancia
         
     desglose_final_list.sort(key=lambda x: x['descripcion'])
-    
+    ganancia_neta_chapa = total_mo_facturada - total_chapa - total_comisiones
+
     abonos = sum(ing.importe for ing in factura.orden.ingreso_set.all()) if hasattr(factura.orden, 'ingreso_set') else Decimal('0.00')
-    
     saldo_cliente = abonos - factura.total_final
     saldo_cliente_abs = abs(saldo_cliente)
     
@@ -1730,7 +1851,12 @@ def detalle_ganancia_orden(request, orden_id):
         'ganancia_total': ganancia_total_calculada, 
         'abonos_totales': abonos, 
         'saldo_cliente': saldo_cliente, 
-        'saldo_cliente_abs': saldo_cliente_abs 
+        'saldo_cliente_abs': saldo_cliente_abs,
+        'resumen_comisiones': resumen_comisiones,
+        'total_chapa': total_chapa,
+        'usos_chapa': usos_chapa, 
+        'total_mo_facturada': total_mo_facturada,
+        'ganancia_neta_chapa': ganancia_neta_chapa
     }
     return render(request, 'taller/detalle_ganancia_orden.html', context)
 
@@ -3867,3 +3993,59 @@ def eliminar_movimiento(request, tipo, movimiento_id):
             movimiento.delete()
             
     return redirect('historial_movimientos')
+
+
+@login_required
+def ver_stock_chapa(request):
+    from decimal import Decimal
+    from django.db.models import Sum
+    from django.utils import timezone
+
+    hoy = timezone.now().date()
+
+    # --- 1. LÓGICA DE FILTROS ---
+    anos_y_meses_data = get_anos_y_meses_con_datos()
+    anos_disponibles = sorted(anos_y_meses_data.keys(), reverse=True)
+    if hoy.year not in anos_disponibles:
+        anos_disponibles.insert(0, hoy.year)
+        anos_disponibles.sort(reverse=True)
+
+    ano_seleccionado = request.GET.get('ano')
+    mes_seleccionado = request.GET.get('mes')
+
+    ano_sel_int = int(ano_seleccionado) if ano_seleccionado and ano_seleccionado.isdigit() else hoy.year
+    mes_sel_int = int(mes_seleccionado) if mes_seleccionado and mes_seleccionado.isdigit() else hoy.month
+
+    # --- 2. EXTRACCIÓN DE DATOS ---
+    todos_los_lotes = StockMaterialChapa.objects.all().prefetch_related('usos__orden__vehiculo').order_by('-fecha_registro')
+    
+    lotes_activos = []
+    lotes_agotados = []
+    total_dinero_disponible = Decimal('0.00')
+
+    for lote in todos_los_lotes:
+        disponible = lote.importe_disponible
+        
+        lote.saldo_real = disponible 
+        lote.porcentaje_restante = (disponible / lote.importe_total) * 100 if lote.importe_total > 0 else 0
+        
+        if disponible > 0:
+            # Los activos SIEMPRE se muestran (Es el stock físico)
+            lotes_activos.append(lote)
+            total_dinero_disponible += disponible
+        else:
+            # 🟢 Los agotados se FILTRAN por el mes y año seleccionados
+            ultimo_uso = lote.usos.order_by('fecha_uso').last()
+            if ultimo_uso and ultimo_uso.fecha_uso.month == mes_sel_int and ultimo_uso.fecha_uso.year == ano_sel_int:
+                lotes_agotados.append(lote)
+
+    context = {
+        'lotes_activos': lotes_activos,
+        'lotes_agotados': lotes_agotados,
+        'total_dinero_disponible': total_dinero_disponible,
+        'ano_seleccionado': ano_sel_int,
+        'mes_seleccionado': mes_sel_int,
+        'anos_disponibles': anos_disponibles,
+        'meses_del_ano': range(1, 13)
+    }
+    return render(request, 'taller/stock_chapa.html', context)    

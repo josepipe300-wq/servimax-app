@@ -85,4 +85,5 @@ urlpatterns = [
     path('facturas-proveedores/', views.gestion_facturas_proveedores, name='gestion_facturas_proveedores'),
     path('facturas-proveedores/eliminar/<int:pk>/', views.eliminar_factura_proveedor, name='eliminar_factura_proveedor'),
     path('deuda/<int:deuda_id>/desglose-iva/', views.desglose_iva_deuda, name='desglose_iva_deuda'),
+    path('stock-chapa/', views.ver_stock_chapa, name='ver_stock_chapa'),
 ]

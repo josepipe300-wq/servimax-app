@@ -133,6 +133,7 @@
                                 <option value="{{ orden.id }}">{{ orden.vehiculo.matricula }} ({{ orden.cliente.nombre }})</option>
                             {% endfor %}
                         </select>
+                        <p id="texto-ayuda-orden" style="font-size: 0.75em; color: #1e40af; margin: 5px 0 0 0; text-transform: none; display: none;">* Opcional: Elige para qué coche estás comprando esto (se guardará en el Monedero para descontarlo después).</p>
                     </div>
 
                     <div class="form-group">
@@ -171,7 +172,8 @@
             const campoBancoInteligente = document.getElementById('campo-banco-inteligente');
             const campoTarjetaDestino = document.getElementById('campo-tarjeta-destino');
             const selectTarjetaDestino = document.getElementById('tarjeta-select');
-            
+            const textoAyudaOrden = document.getElementById('texto-ayuda-orden');
+
             const inputImporte = document.getElementById('importe-input');
             const inputDesc = document.getElementById('descripcion-input');
             const inputSaldoBanco = document.getElementById('saldo-banco-input');
@@ -189,6 +191,7 @@
                 campoOrden.style.display = 'none';
                 campoBancoInteligente.style.display = 'none';
                 campoTarjetaDestino.style.display = 'none';
+                textoAyudaOrden.style.display = 'none';
                 
                 // 2. Quitar requireds
                 inputImporte.required = false;
@@ -210,12 +213,14 @@
                         campoOrden.style.display = 'block';
                     } else if (cat === 'Sueldos') {
                         campoEmpleado.style.display = 'block';
+                    } else if (cat === 'MATERIAL_CHAPA') {
+                        campoOrden.style.display = 'block';
+                        textoAyudaOrden.style.display = 'block'; // Mostramos el texto aclaratorio
                     } else if (cat === 'Pago de Deuda') {
                         campoDeuda.style.display = 'block';
                         campoOrden.style.display = 'block'; 
                         comprobarSiEsBanco(); 
                     } else if (cat === 'PAGO_TARJETA') {
-                        // LA MAGIA DE LA TARJETA
                         campoTarjetaDestino.style.display = 'block';
                         selectTarjetaDestino.required = true;
                         
@@ -223,7 +228,6 @@
                         inputSaldoBanco.required = true;
                         labelSaldoBanco.innerText = 'Deuda Restante de la Tarjeta en la App (€):';
                         
-                        // Ayudita: Auto-seleccionar Cuenta Taller y poner texto
                         selectMetodoPago.value = 'CUENTA_TALLER';
                         if (inputDesc.value === '') {
                             inputDesc.value = 'PAGO CUOTA MENSUAL TARJETA';

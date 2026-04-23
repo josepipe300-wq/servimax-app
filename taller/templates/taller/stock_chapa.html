@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock de Chapa y Pintura - ServiMax</title>
+    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 1000px !important; margin: 0 auto; padding: 40px 20px; }
+        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        .section-panel { background: #ffffff; padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; margin-bottom: 24px; }
+        
+        .wallet-card { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4); display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .wallet-amount { font-size: 3.5em; font-weight: 900; line-height: 1; margin: 0; }
+
+        .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .table-modern th, .table-modern td { padding: 16px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+        .table-modern th { background-color: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.85em; text-transform: uppercase; }
+        
+        .btn-trace { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; font-size: 0.8em; font-weight: 700; cursor: pointer; transition: 0.2s; }
+        .btn-trace:hover { background: #e2e8f0; color: #0f172a; }
+
+        .trace-row { background-color: #fcfdff; display: none; }
+        .trace-container { padding: 15px 40px; border-left: 4px solid #4f46e5; margin: 10px 0; }
+        .trace-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #e2e8f0; font-size: 0.9em; align-items: center; }
+        .trace-item:last-child { border-bottom: none; }
+        
+        .link-orden { color: #4f46e5; text-decoration: none; font-weight: 700; padding: 2px 6px; border-radius: 4px; transition: 0.2s; background: #e0e7ff; }
+        .link-orden:hover { background: #c7d2fe; text-decoration: underline; }
+        .link-orden-agotado { color: #ef4444; text-decoration: none; font-weight: 700; padding: 2px 6px; border-radius: 4px; transition: 0.2s; background: #fee2e2; }
+        .link-orden-agotado:hover { background: #fecaca; text-decoration: underline; }
+
+        /* Estilos del Filtro */
+        .filter-bar { background: white; padding: 15px 24px; border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .modern-select { padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-family: 'Inter', sans-serif; font-weight: 600; outline: none; cursor: pointer; color: #334155; }
+        .modern-select:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+        .btn-filter { background: #0f172a; color: white; padding: 8px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-filter:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end;">
+            <div>
+                <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver al Inicio</a>
+                <h1 class="header-title">🎨 Monedero de Pintura</h1>
+                <p style="color: #64748b; font-weight: 500; margin: 0;">Historial de uso y trazabilidad de materiales.</p>
+            </div>
+            <a href="{% url 'anadir_gasto' %}" style="background: #0f172a; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">+ Comprar Material</a>
+        </div>
+
+        <div class="wallet-card">
+            <div>
+                <div style="color: #c7d2fe; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Saldo Disponible en Estantería</div>
+                <h2 class="wallet-amount">{{ total_dinero_disponible|floatformat:2 }} €</h2>
+            </div>
+            <div style="font-size: 4em; opacity: 0.5;">🛢️</div>
+        </div>
+
+        <div class="filter-bar">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.5em;">📅</span>
+                <div style="display: flex; flex-direction: column;">
+                    <strong style="color: #0f172a;">Filtrar Historial</strong>
+                    <span style="font-size: 0.8em; color: #64748b;">(Afecta a los botes agotados)</span>
+                </div>
+            </div>
+            <form method="GET" style="display: flex; gap: 10px; align-items: center; margin: 0;">
+                <select name="mes" class="modern-select">
+                    {% for m in meses_del_ano %}
+                        <option value="{{ m }}" {% if m == mes_seleccionado %}selected{% endif %}>Mes {{ m }}</option>
+                    {% endfor %}
+                </select>
+                <select name="ano" class="modern-select">
+                    {% for a in anos_disponibles %}
+                        <option value="{{ a }}" {% if a == ano_seleccionado %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn-filter">Buscar Agotados</button>
+            </form>
+        </div>
+
+        <div class="section-panel">
+            <table class="table-modern">
+                <thead>
+                    <tr>
+                        <th>Fecha / Material</th>
+                        <th>Origen</th>
+                        <th>Estado</th>
+                        <th style="text-align: right;">Disponible</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lote in lotes_activos|dictsortreversed:"fecha_registro" %}
+                    <tr>
+                        <td>
+                            <strong style="color: #0f172a;">{{ lote.descripcion }}</strong><br>
+                            <span style="font-size: 0.8em; color: #94a3b8;">Comprado el {{ lote.fecha_registro|date:"d/m/Y" }}</span>
+                        </td>
+                        <td>
+                            {% if lote.gasto_original.orden %}
+                                <a href="{% url 'detalle_orden' lote.gasto_original.orden.id %}" style="text-decoration: none;">
+                                    <span style="font-size: 0.85em; background: #eff6ff; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-weight: 600; transition: 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+                                        🚗 {{ lote.gasto_original.vehiculo.matricula }}
+                                    </span>
+                                </a>
+                            {% else %}
+                                <span style="font-size: 0.85em; color: #94a3b8;">Stock General</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="width: 80px; height: 6px; background: #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 4px;">
+                                <div style="width: {{ lote.porcentaje_restante }}%; height: 100%; background: #4f46e5;"></div>
+                            </div>
+                            <span style="font-size: 0.75em; font-weight: 700; color: #64748b;">{{ lote.porcentaje_restante|floatformat:0 }}% libre</span>
+                        </td>
+                        <td style="text-align: right; font-weight: 800; color: #0f172a;">
+                            {{ lote.saldo_real|floatformat:2 }} €
+                        </td>
+                        <td style="text-align: right;">
+                            <button class="btn-trace" onclick="toggleTrace('trace-{{ lote.id }}')">Ver rastro 👇</button>
+                        </td>
+                    </tr>
+                    <tr id="trace-{{ lote.id }}" class="trace-row">
+                        <td colspan="5">
+                            <div class="trace-container">
+                                <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #4f46e5;">Historial de consumo de este bote:</h4>
+                                <div class="trace-item" style="font-weight: 700; color: #94a3b8;">
+                                    <span>Compra Inicial</span>
+                                    <span>+ {{ lote.importe_total }} €</span>
+                                </div>
+                                {% for uso in lote.usos.all %}
+                                <div class="trace-item">
+                                    <span>
+                                        📅 {{ uso.fecha_uso|date:"d/m/y" }} - 
+                                        <a href="{% url 'detalle_orden' uso.orden.id %}" class="link-orden">Orden #{{ uso.orden.id }} ({{ uso.orden.vehiculo.matricula }})</a>
+                                    </span>
+                                    <span style="color: #ef4444; font-weight: 700;">- {{ uso.importe_usado }} €</span>
+                                </div>
+                                {% empty %}
+                                <p style="font-size: 0.85em; color: #94a3b8; font-style: italic;">Aún no se ha usado en ningún coche.</p>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                    {% if lotes_agotados %}
+                        <tr><td colspan="5"><div style="height: 20px;"></div></td></tr>
+                        <tr>
+                            <td colspan="5" style="padding-bottom: 5px;">
+                                <h3 style="margin: 0; color: #94a3b8; font-size: 1em; text-transform: uppercase;">
+                                    🗑️ Botes Agotados (Mes {{ mes_seleccionado }} / {{ ano_seleccionado }})
+                                </h3>
+                            </td>
+                        </tr>
+                    {% endif %}
+
+                    {% for lote in lotes_agotados %}
+                    <tr style="opacity: 0.6; background: #f8fafc;">
+                        <td>
+                            <span style="text-decoration: line-through;">{{ lote.descripcion }}</span><br>
+                            <span style="font-size: 0.8em;">Agotado el {{ lote.usos.last.fecha_uso|date:"d/m/Y" }}</span>
+                        </td>
+                        <td>
+                            {% if lote.gasto_original.orden %}
+                                <a href="{% url 'detalle_orden' lote.gasto_original.orden.id %}" style="text-decoration: none; color: #94a3b8; font-size: 0.85em;">🚗 {{ lote.gasto_original.vehiculo.matricula }}</a>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td><span style="color: #ef4444; font-weight: 700; font-size: 0.8em;">AGOTADO</span></td>
+                        <td style="text-align: right;">0.00 €</td>
+                        <td style="text-align: right;">
+                            <button class="btn-trace" onclick="toggleTrace('trace-{{ lote.id }}')">Ver rastro 👇</button>
+                        </td>
+                    </tr>
+                    <tr id="trace-{{ lote.id }}" class="trace-row">
+                        <td colspan="5">
+                            <div class="trace-container" style="border-color: #ef4444;">
+                                <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #ef4444;">Este bote se usó al 100% en:</h4>
+                                {% for uso in lote.usos.all %}
+                                <div class="trace-item">
+                                    <span>
+                                        📅 {{ uso.fecha_uso|date:"d/m/y" }} - 
+                                        <a href="{% url 'detalle_orden' uso.orden.id %}" class="link-orden-agotado">Orden #{{ uso.orden.id }} ({{ uso.orden.vehiculo.matricula }})</a>
+                                    </span>
+                                    <span style="font-weight: 700;">- {{ uso.importe_usado }} €</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function toggleTrace(id) {
+            const row = document.getElementById(id);
+            row.style.display = (row.style.display === 'table-row') ? 'none' : 'table-row';
+        }
+    </script>
+</body>
+</html>

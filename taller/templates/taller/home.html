@@ -111,10 +111,8 @@
         .btn-presupuestos { background-color: #f97316; color: white; }
         .btn-ordenes { background-color: #0f172a; color: white; }
         .btn-fichar { background-color: #8b5cf6; color: white; }
-        /* NUEVO COLOR PARA LA AGENDA */
         .btn-agenda { background-color: #10b981; color: white; } 
 
-        /* Estilo para las filas de citas en el aviso */
         .cita-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(30, 64, 175, 0.1); }
         .cita-row:last-child { border-bottom: none; }
 
@@ -183,6 +181,7 @@
                             <a href="{% url 'historial_ordenes' %}" class="nav-btn" style="background: #64748b;">🗂️ Historial Trabajos</a>
                             {% if not is_read_only_user %}
                             <a href="{% url 'inventario' %}" class="nav-btn" style="background: #14b8a6;">📦 Inventario y Stock</a>
+                            <a href="{% url 'ver_stock_chapa' %}" class="nav-btn" style="background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);">🎨 Monedero de Pintura</a>
                             {% endif %}
                         </div>
 

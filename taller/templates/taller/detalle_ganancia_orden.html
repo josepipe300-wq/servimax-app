@@ -4,208 +4,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Desglose Ganancia Orden #{{ orden.id }} - ServiMax</title>
+    <title>Rentabilidad Orden #{{ orden.id }}</title>
     <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
-    <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        /* ========================================= */
-        /* ESTILO MINIMALISTA Y LIMPIO               */
-        /* ========================================= */
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
-        .container { max-width: 1000px !important; margin: 0 auto; padding: 40px 20px; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; margin-bottom: 25px; }
+        .title { margin: 0; color: #0f172a; font-weight: 800; font-size: 1.8em; }
+        .badge { background: #e0e7ff; color: #4338ca; padding: 6px 12px; border-radius: 8px; font-weight: 600; font-size: 0.9em; }
         
-        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        .grid-totales { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card-total { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; text-align: center; }
+        .card-ganancia { background: #ecfdf5; border: 1px solid #a7f3d0; }
+        .card-perdida { background: #fef2f2; border: 1px solid #fecaca; }
+        .label { font-size: 0.85em; color: #64748b; font-weight: 600; text-transform: uppercase; }
+        .value { font-size: 2em; font-weight: 800; margin-top: 5px; color: #0f172a; }
         
-        /* Paneles y Tarjetas */
-        .section-panel { background: #ffffff; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px; }
-        .section-title { font-size: 1.4em; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 20px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+        th { background-color: #f8fafc; color: #64748b; font-size: 0.85em; text-transform: uppercase; }
+        .text-right { text-align: right; }
+        .text-success { color: #10b981; font-weight: 600; }
+        .text-danger { color: #ef4444; font-weight: 600; }
         
-        /* Botones */
-        .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #0f172a; color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 600; font-size: 0.95em; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-decoration: none; }
-        .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); filter: brightness(1.1); }
-        .btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; box-shadow: none; }
-        .btn-secondary:hover { background: #e2e8f0; transform: translateY(0); box-shadow: none;}
-
-        /* Grid de Info */
-        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0;}
-        .info-item p { margin: 5px 0; color: #64748b; font-size: 0.9em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;}
-        .info-item strong { color: #0f172a; font-size: 1.2em; font-weight: 700; }
-        
-        /* Tabla Elegante */
-        .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; background: white; }
-        .table-modern th, .table-modern td { padding: 16px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-        .table-modern th { background-color: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0;}
-        .table-modern tr:last-child td { border-bottom: none; }
-        .table-modern tbody tr:hover { background-color: #f8fafc; }
-        
-        .money-col { text-align: right; font-weight: 600; color: #475569; }
-        .money-success { color: #10b981 !important; font-weight: 800; font-size: 1.1em;}
-        .desc-col { font-weight: 600; color: #0f172a; }
-
-        /* Resumen Final */
-        .totals-wrapper { margin-top: 40px; display: flex; justify-content: flex-end; }
-        .totals-box { width: 100%; max-width: 400px; }
-        .total-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #475569; font-weight: 500; font-size: 1.05em;}
-        .total-row:last-child { border-bottom: none; }
-        
-        .ganancia-row { background: #ecfdf5; padding: 15px 20px; border-radius: 10px; border: 1px solid #a7f3d0; margin-bottom: 15px; align-items: center;}
-        .ganancia-row span:first-child { color: #065f46; font-weight: 800; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.05em;}
-        .ganancia-row span:last-child { color: #10b981; font-weight: 900; font-size: 1.6em; }
-
-        .deuda-row { color: #ef4444; font-weight: 800; background: #fef2f2; padding: 10px 15px; border-radius: 8px; border: 1px solid #fecaca; margin-top: 10px;}
-        .pagado-row { color: #10b981; font-weight: 800; }
+        .ticket-mecanico { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 16px; padding: 25px; }
+        .ticket-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 1.05em; color: #334155; }
+        .ticket-total { display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 2px dashed #94a3b8; font-size: 1.4em; font-weight: 800; color: #0f172a; }
     </style>
 </head>
 <body>
+
     <div class="container">
+        <a href="{% url 'detalle_orden' orden.id %}" style="text-decoration: none; color: #3b82f6; font-weight: 600; display: inline-block; margin-bottom: 15px;">← Volver a la Orden</a>
         
-        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
-            <div>
-                <h1 class="header-title" style="margin: 0;">Desglose de Ganancia</h1>
-                <p style="color: #64748b; font-weight: 500; margin: 5px 0 0 0;">Análisis financiero de la Orden #{{ orden.id }}</p>
+        <div class="header">
+            <h1 class="title">Rentabilidad de la Orden #{{ orden.id }}</h1>
+            <span class="badge">{{ orden.vehiculo.matricula }}</span>
+        </div>
+
+        <div class="grid-totales">
+            <div class="card-total">
+                <div class="label">PVP Facturado (Sin IVA)</div>
+                <div class="value">{{ factura.subtotal|floatformat:2 }} €</div>
             </div>
-            <div>
-                <a href="{% url 'informe_rentabilidad' %}" class="btn-modern btn-secondary">📊 Ver Informe Global</a>
+            <div class="card-total">
+                <div class="label">Costes Internos (Taller)</div>
+                <div class="value text-danger">- {{ factura.subtotal|add:"-"|add:ganancia_total|floatformat:2 }} €</div>
+            </div>
+            <div class="card-total {% if ganancia_total > 0 %}card-ganancia{% else %}card-perdida{% endif %}">
+                <div class="label">Ganancia Neta General</div>
+                <div class="value {% if ganancia_total > 0 %}text-success{% else %}text-danger{% endif %}">
+                    {{ ganancia_total|floatformat:2 }} €
+                </div>
             </div>
         </div>
 
-        <div class="section-panel">
+        {% if resumen_comisiones %}
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 30px;">
             
-            <div class="info-grid">
-                <div class="info-item">
-                    <p>Documento</p>
-                    <strong>{% if factura.es_factura %}Factura Nº {{ factura.numero_factura }}{% else %}Recibo Interno{% endif %}</strong>
-                </div>
-                <div class="info-item">
-                    <p>Fecha Emisión</p>
-                    <strong>{{ factura.fecha_emision|date:"d/m/Y" }}</strong>
-                </div>
-                <div class="info-item">
-                    <p>Cliente</p>
-                    <strong>{{ orden.cliente.nombre|title }}</strong>
-                </div>
-                <div class="info-item">
-                    <p>Vehículo</p>
-                    <strong><span style="background: #e2e8f0; padding: 2px 8px; border-radius: 6px; font-size: 0.9em;">{{ orden.vehiculo.matricula }}</span> {{ orden.vehiculo.marca }}</strong>
-                </div>
-            </div>
-
-            <h2 class="section-title">Detalle Operativo</h2>
-            <div style="overflow-x: auto;">
-                <table class="table-modern">
-                    <thead>
-                        <tr>
-                            <th>Concepto / Descripción</th>
-                            <th class="money-col">Coste (Taller)</th>
-                            <th class="money-col">Precio Venta (PVP)</th>
-                            <th class="money-col">Ganancia Limpia</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in desglose %}
-                        <tr>
-                            <td class="desc-col">{{ item.descripcion }}</td>
-                            <td class="money-col">{{ item.coste|floatformat:2 }} €</td>
-                            <td class="money-col">{{ item.pvp|floatformat:2 }} €</td>
-                            <td class="money-col money-success">+ {{ item.ganancia|floatformat:2 }} €</td>
-                        </tr>
+            <div class="ticket-mecanico" style="flex: 1; min-width: 320px; border-top: 5px solid #8b5cf6; margin-top: 0;">
+                <h3 style="margin: 0 0 15px 0; color: #6d28d9; font-weight: 800; font-size: 1.3em;">👨‍🔧 Liquidación del Chapista</h3>
+                
+                {% for info in resumen_comisiones %}
+                <div style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 15px;">
+                    <h4 style="margin: 0 0 15px 0; color: #0f172a; font-size: 1.1em;">👤 {{ info.mecanico }}</h4>
+                    
+                    <div class="ticket-row">
+                        <span>Mano de Obra (Facturado):</span>
+                        <span style="font-weight: 600; color: #10b981;">+ {{ total_mo_facturada|floatformat:2 }} €</span>
+                    </div>
+                    
+                    <div style="margin: 10px 0; font-size: 0.9em; color: #475569;">Materiales descontados (Restan de la base):</div>
+                    <div style="background: #f8fafc; padding: 10px; border-radius: 8px; margin-bottom: 10px; border: 1px dashed #cbd5e1;">
+                        {% for uso in usos_chapa %}
+                        <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 4px; color: #ef4444;">
+                            <span>🎨 {{ uso.lote.descripcion }}</span>
+                            <span style="font-weight: 600;">- {{ uso.importe_usado|floatformat:2 }} €</span>
+                        </div>
                         {% empty %}
-                        <tr>
-                            <td colspan="4" style="text-align:center; padding: 30px; color:#94a3b8; font-style: italic;">No hay líneas en este documento.</td>
-                        </tr>
+                        <div style="font-size: 0.9em; color: #94a3b8; font-style: italic;">No se descontó pintura.</div>
                         {% endfor %}
-                    </tbody>
-                </table>
+                    </div>
+
+                    <div class="ticket-row" style="color: #0f172a; font-weight: 700; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+                        <span>Base final a repartir:</span>
+                        <span>= {{ info.base|floatformat:2 }} €</span>
+                    </div>
+
+                    <div class="ticket-total">
+                        <span style="color: #4f46e5;">Tu Comisión (60%):</span>
+                        <span style="color: #4f46e5;">{{ info.comision|floatformat:2 }} €</span>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
 
-            <div class="totals-wrapper">
-                <div class="totals-box">
+            <div class="ticket-mecanico" style="flex: 1; min-width: 320px; border-top: 5px solid #10b981; margin-top: 0; background: #ecfdf5;">
+                <h3 style="margin: 0 0 15px 0; color: #047857; font-weight: 800; font-size: 1.3em;">🏢 Margen Real del Taller</h3>
+                
+                <div style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #a7f3d0;">
+                    <h4 style="margin: 0 0 15px 0; color: #064e3b; font-size: 1.1em;">Resumen de Mano de Obra</h4>
                     
-                    <div class="total-row ganancia-row">
-                        <span>Beneficio Total (Trabajo)</span>
-                        <span>{{ ganancia_total|floatformat:2 }} €</span>
-                    </div>
-
-                    <div class="total-row">
-                        <span>Base Cobrada al Cliente:</span>
-                        <strong style="color: #0f172a;">{% if factura.es_factura %}{{ factura.subtotal|floatformat:2 }}{% else %}{{ factura.total_final|floatformat:2 }}{% endif %} €</strong>
+                    <div class="ticket-row">
+                        <span>Cobrado al Cliente:</span>
+                        <span style="font-weight: 600; color: #10b981;">+ {{ total_mo_facturada|floatformat:2 }} €</span>
                     </div>
                     
-                    {% if factura.es_factura %}
-                    <div class="total-row" style="font-size: 0.9em;">
-                        <span>IVA (21%):</span>
-                        <span>{{ factura.iva|floatformat:2 }} €</span>
-                    </div>
-                    {% endif %}
-
-                    <div class="total-row" style="border-top: 2px solid #e2e8f0; padding-top: 15px; margin-top: 5px;">
-                        <span style="font-weight: 800; color: #0f172a;">Total Documento:</span>
-                        <strong style="color: #0f172a; font-size: 1.2em;">{{ factura.total_final|floatformat:2 }} €</strong>
+                    <div class="ticket-row" style="color: #ef4444;">
+                        <span>Inversión en Pintura:</span>
+                        <span style="font-weight: 600;">- {{ total_chapa|floatformat:2 }} €</span>
                     </div>
 
-                    <div class="total-row">
-                        <span>Pagado por el cliente (Abonos):</span>
-                        <strong style="color: #3b82f6;">{{ abonos_totales|floatformat:2 }} €</strong>
+                    {% for info in resumen_comisiones %}
+                    <div class="ticket-row" style="color: #ef4444;">
+                        <span>Comisión de {{ info.mecanico }}:</span>
+                        <span style="font-weight: 600;">- {{ info.comision|floatformat:2 }} €</span>
                     </div>
+                    {% endfor %}
 
-                    {% if saldo_cliente < 0 %}
-                        <div class="total-row deuda-row">
-                            <span>PENDIENTE DE COBRO:</span>
-                            <span>{{ saldo_cliente_abs|floatformat:2 }} €</span>
-                        </div>
-                    {% elif saldo_cliente == 0 %}
-                        <div class="total-row pagado-row" style="padding-top: 15px;">
-                            <span>✅ ESTADO DE LA CUENTA:</span>
-                            <span>TOTALMENTE PAGADO</span>
-                        </div>
-                    {% else %}
-                        <div class="total-row" style="color: #f59e0b; font-weight: 800; padding-top: 15px;">
-                            <span>⚠️ SALDO A FAVOR DEL CLIENTE:</span>
-                            <span>{{ saldo_cliente_abs|floatformat:2 }} €</span>
-                        </div>
-                    {% endif %}
-
+                    <div class="ticket-total" style="border-top-color: #34d399;">
+                        <span style="color: #047857;">Ganancia Limpia (40%):</span>
+                        <span style="color: #047857;">+ {{ ganancia_neta_chapa|floatformat:2 }} €</span>
+                    </div>
                 </div>
             </div>
 
         </div>
-    </div> 
-    
-    <a href="{% url 'detalle_orden' orden.id %}" class="enlace-magico-flotante">
-        <span style="font-size: 1.3em;">🏎️</span> 
-        <span>Volver a la Orden <strong>#{{ orden.id }}</strong></span>
-    </a>
+        {% endif %}
 
-    <style>
-        .enlace-magico-flotante {
-            position: fixed;
-            bottom: 30px;
-            left: 30px;
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            color: #ffffff !important;
-            padding: 14px 28px;
-            border-radius: 9999px;
-            font-family: 'Inter', sans-serif;
-            font-weight: 500;
-            font-size: 0.95em;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(255, 255, 255, 0.5);
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            z-index: 9999;
-            border: 1px solid #334155;
-        }
-        .enlace-magico-flotante:hover {
-            transform: translateY(-6px) scale(1.03);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(59, 130, 246, 0.6);
-            background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%);
-            border-color: #3b82f6;
-            color: white;
-        }
-    </style>
+        <h3 style="margin-top: 40px; color: #0f172a;">📊 Desglose Analítico Global</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Concepto</th>
+                    <th class="text-right">Coste Interno</th>
+                    <th class="text-right">Venta (PVP)</th>
+                    <th class="text-right">Margen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for linea in desglose %}
+                <tr>
+                    <td style="font-weight: 500;">{{ linea.descripcion }}</td>
+                    <td class="text-right text-danger">{% if linea.coste > 0 %}- {{ linea.coste|floatformat:2 }} €{% else %}-{% endif %}</td>
+                    <td class="text-right" style="color: #0f172a;">{% if linea.pvp > 0 %}+ {{ linea.pvp|floatformat:2 }} €{% else %}-{% endif %}</td>
+                    <td class="text-right {% if linea.ganancia > 0 %}text-success{% elif linea.ganancia < 0 %}text-danger{% endif %}">
+                        {{ linea.ganancia|floatformat:2 }} €
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+    </div>
 
     {% include 'taller/widget_ia.html' %}
 </body>
