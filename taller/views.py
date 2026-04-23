@@ -517,6 +517,7 @@ def anadir_gasto(request):
     from decimal import Decimal
     from datetime import datetime
     from django.utils import timezone
+    from django.contrib import messages # 🟢 Importamos messages para las alertas
 
     if request.user.groups.filter(name='Solo Ver').exists():
         return HttpResponseForbidden("<h2>🔒 ACCESO DENEGADO</h2><p>Tu cuenta está en 'Modo Lectura'.</p><br><a href='/'>← Volver</a>")
@@ -555,6 +556,45 @@ def anadir_gasto(request):
             
             return redirect('home') 
 
+        # 🟢 NUEVO: LÓGICA DE TRANSFERENCIA ENTRE CUENTAS
+        elif categoria == 'Transferencia':
+            cuenta_origen = request.POST.get('cuenta_origen')
+            cuenta_destino = request.POST.get('cuenta_destino')
+            importe_trans_str = request.POST.get('importe_transferencia')
+            fecha_str = request.POST.get('fecha_transferencia')
+            
+            if cuenta_origen and cuenta_destino and importe_trans_str and cuenta_origen != cuenta_destino:
+                try:
+                    importe_trans = Decimal(importe_trans_str.replace(',', '.'))
+                    fecha_trans = datetime.strptime(fecha_str, '%Y-%m-%d').date() if fecha_str else timezone.now().date()
+                    
+                    if importe_trans > 0:
+                        with transaction.atomic():
+                            # 1. Sacamos el dinero de la cuenta origen (Gasto)
+                            Gasto.objects.create(
+                                fecha=fecha_trans,
+                                categoria='Otros', 
+                                importe=importe_trans,
+                                descripcion=f"🔄 TRASPASO ENVIADO A {cuenta_destino.replace('_', ' ')}",
+                                metodo_pago=cuenta_origen
+                            )
+                            # 2. Metemos el dinero en la cuenta destino (Ingreso)
+                            Ingreso.objects.create(
+                                fecha=fecha_trans,
+                                categoria='Otras Ganancias',
+                                importe=importe_trans,
+                                descripcion=f"🔄 TRASPASO RECIBIDO DESDE {cuenta_origen.replace('_', ' ')}",
+                                metodo_pago=cuenta_destino,
+                                es_tpv=(cuenta_destino != 'EFECTIVO')
+                            )
+                        messages.success(request, f"¡Traspaso de {importe_trans}€ completado con éxito!")
+                        return redirect('home')
+                except (ValueError, TypeError, Decimal.InvalidOperation):
+                    messages.error(request, "Error al procesar el importe numérico de la transferencia.")
+            else:
+                messages.error(request, "Revisa los datos: Las cuentas de origen y destino deben ser distintas.")
+            return redirect('anadir_gasto')
+
         else:
             fecha_str = request.POST.get('fecha_gasto')
             importe = request.POST.get('importe')
@@ -585,7 +625,6 @@ def anadir_gasto(request):
                 except Empleado.DoesNotExist:
                     pass
             
-            # 🟢 LÓGICA DE MONEDERO DE CHAPA (El 100% va al Monedero pero guardamos el vehículo)
             if categoria == 'MATERIAL_CHAPA':
                 with transaction.atomic():
                     gasto = Gasto.objects.create(

@@ -5,180 +5,296 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nóminas - ServiMax</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        /* ========================================= */
+        /* ESTILO LISTA FINANCIERA (TIPO STRIPE)     */
+        /* ========================================= */
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 0; }
+        .container { max-width: 1150px; margin: 0 auto; padding: 40px 20px; }
         
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .btn-volver { background: #e2e8f0; color: #475569; padding: 10px 20px; text-decoration: none; border-radius: 10px; font-weight: 600; transition: 0.2s; }
-        .btn-volver:hover { background: #cbd5e1; color: #0f172a; }
-
-        .section-panel { background: #ffffff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; }
+        /* CABECERA */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px; }
+        .header-title { margin: 0; font-weight: 900; color: #0f172a; font-size: 2.2em; letter-spacing: -0.03em; }
+        .header-subtitle { color: #64748b; font-weight: 500; font-size: 1.05em; margin: 5px 0 0 0; }
         
-        .alert { padding: 15px; border-radius: 10px; margin-bottom: 20px; font-weight: 500; }
-        .alert-success { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .alert-warning { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-        .alert-info { background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+        .btn-volver { 
+            background: #ffffff; color: #475569; padding: 10px 18px; text-decoration: none; 
+            border-radius: 10px; font-weight: 600; transition: all 0.2s; 
+            border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            display: inline-flex; align-items: center; gap: 8px; font-size: 0.9em;
+        }
+        .btn-volver:hover { background: #f1f5f9; color: #0f172a; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
 
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { background-color: #f8fafc; color: #64748b; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; padding: 15px; text-align: left; border-bottom: 2px solid #e2e8f0; }
-        td { padding: 20px 15px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 1.05em; }
-        tr:hover { background-color: #f8fafc; }
+        /* ALERTAS */
+        .toast-msg { padding: 16px 20px; border-radius: 12px; font-weight: 600; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .toast-error { background-color: #fef2f2; color: #b91c1c; border-left: 4px solid #ef4444; }
+        .toast-success { background-color: #f0fdf4; color: #047857; border-left: 4px solid #10b981; }
+        .toast-info { background-color: #eff6ff; color: #1d4ed8; border-left: 4px solid #3b82f6; }
 
-        .mecanico-nombre { font-weight: 700; color: #0f172a; font-size: 1.1em; transition: 0.2s; }
-        .mecanico-nombre:hover { color: #1d4ed8 !important; }
-        .mecanico-sueldo { font-size: 0.85em; color: #64748b; display: block; margin-top: 4px; }
+        /* LISTA DE NÓMINAS */
+        .nomina-list { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
         
-        .text-success { color: #10b981; font-weight: 600; }
-        .text-danger { color: #ef4444; font-weight: 600; }
-        .total-neto { font-size: 1.4em; font-weight: 800; color: #0f172a; }
+        .nomina-card {
+            background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); overflow: hidden;
+            transition: all 0.2s ease;
+        }
+        .nomina-card:hover { border-color: #cbd5e1; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); transform: translateY(-2px); }
 
-        .btn-pagar { background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(16,185,129,0.2); }
-        .btn-pagar:hover { filter: brightness(0.9); transform: translateY(-2px); }
-        .btn-disabled { background: #e2e8f0; color: #94a3b8; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 600; cursor: not-allowed; }
+        /* 🟢 SOLUCIÓN DE COLUMNAS: Anchos fijos para que nada baile */
+        .nomina-main {
+            display: grid; 
+            grid-template-columns: minmax(200px, 2.5fr) 90px minmax(320px, 3fr) 180px; 
+            gap: 20px;
+            padding: 20px 25px; align-items: center;
+        }
+
+        /* COLUMNA 1: INFO EMPLEADO */
+        .emp-info { display: flex; flex-direction: column; gap: 6px; align-items: flex-start;}
+        .emp-name { font-weight: 800; font-size: 1.15em; color: #0f172a; text-decoration: none; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px;}
+        .emp-name:hover { color: #3b82f6; }
+        .emp-badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 0.75em; font-weight: 700; border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; }
+
+        /* COLUMNA 2: DÍAS (Inamovible) */
+        .emp-days { text-align: center; border-right: 1px solid #f1f5f9; border-left: 1px solid #f1f5f9; width: 100%;}
+        .days-num { font-size: 1.6em; font-weight: 900; color: #1e293b; line-height: 1; }
+        .days-lbl { font-size: 0.75em; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* COLUMNA 3: FINANZAS */
+        .emp-finance { display: flex; justify-content: space-between; align-items: center; padding-right: 10px; width: 100%;}
+        .fin-block { display: flex; flex-direction: column; align-items: flex-end; }
+        .fin-lbl { font-size: 0.75em; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .fin-val { font-size: 1.15em; font-weight: 700; color: #334155; }
         
-        /* Botón de adelanto */
-        .btn-adelanto { background: #f8fafc; color: #3b82f6; border: 1px solid #bfdbfe; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9em; transition: 0.2s; }
-        .btn-adelanto:hover { background: #eff6ff; border-color: #93c5fd; }
+        .fin-neto { display: flex; flex-direction: column; align-items: flex-end; background: #f8fafc; padding: 10px 15px; border-radius: 10px; border: 1px dashed #cbd5e1; }
+        .fin-neto .fin-lbl { color: #0f172a; }
+        .fin-neto .fin-val { font-size: 1.4em; font-weight: 900; color: #059669; }
+        .fin-neto.negativo .fin-val { color: #e11d48; }
+
+        /* COLUMNA 4: BOTONES ACCIÓN (Inamovible) */
+        .emp-actions { display: flex; flex-direction: column; gap: 8px; width: 100%;}
+        .btn-action { 
+            width: 100%; padding: 10px; border-radius: 8px; font-weight: 700; font-size: 0.9em; 
+            cursor: pointer; transition: 0.2s; text-align: center; border: none;
+        }
+        .btn-liquidar { background: #10b981; color: white; box-shadow: 0 2px 4px rgba(16,185,129,0.2); }
+        .btn-liquidar:hover { background: #059669; }
+        .btn-adelanto { background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe; }
+        .btn-adelanto:hover { background: #dbeafe; }
+        .btn-disabled { background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; cursor: not-allowed; }
+
+        /* FORMULARIOS DESPLEGABLES (CAJONES) */
+        .drawer { display: none; background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 25px; animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .drawer-title { font-size: 1em; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .btn-close-drawer { background: none; border: none; color: #94a3b8; font-size: 1.2em; cursor: pointer; }
+        .btn-close-drawer:hover { color: #ef4444; }
+
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-label { font-size: 0.85em; font-weight: 700; color: #475569; }
+        
+        .modern-input, .modern-select { 
+            padding: 10px 12px; border-radius: 8px; border: 1px solid #cbd5e1; 
+            font-family: 'Inter', sans-serif; font-size: 0.95em; outline: none; background: white;
+            transition: 0.2s; color: #1e293b; width: 100%; box-sizing: border-box;
+        }
+        .modern-input:focus, .modern-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .btn-submit { background: #0f172a; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s; width: 100%; }
+        .btn-submit:hover { background: #1e293b; transform: translateY(-1px); }
+
+        /* RESPONSIVE */
+        @media (max-width: 950px) {
+            .nomina-main { grid-template-columns: 1fr 90px; gap: 15px; }
+            .emp-finance { grid-column: 1 / -1; justify-content: flex-start; gap: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
+            .emp-actions { grid-column: 1 / -1; flex-direction: row; }
+            .emp-days { border: none; text-align: right; }
+        }
     </style>
 </head>
 <body>
 
     <div class="container">
+        
         <div class="header">
-            <h1 style="margin: 0; font-weight: 800; color: #0f172a; font-size: 2.2em;">💰 Panel de Nóminas</h1>
-            <a href="{% url 'home' %}" class="btn-volver">⬅️ Volver a Inicio</a>
+            <div>
+                <a href="{% url 'home' %}" class="btn-volver" style="margin-bottom: 15px;">⬅️ Volver a Inicio</a>
+                <h1 class="header-title">💰 Panel de Nóminas</h1>
+                <p class="header-subtitle">Liquida sueldos o arrastra los saldos pendientes de forma rápida.</p>
+            </div>
         </div>
 
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+                <div class="toast-msg {% if message.tags == 'error' %}toast-error{% elif message.tags == 'success' %}toast-success{% else %}toast-info{% endif %}">
+                    {{ message }}
+                </div>
             {% endfor %}
         {% endif %}
 
-        <div class="section-panel">
-            <p style="color: #64748b; margin-top: 0; margin-bottom: 25px; font-size: 1.1em;">
-                Control de sueldos acumulados. Cierra la semana para pagar en efectivo o para arrastrar el saldo (positivo o negativo) al siguiente ciclo.
-            </p>
+        <div class="nomina-list">
+            {% for dato in datos_nominas %}
+            <div class="nomina-card">
+                
+                <div class="nomina-main">
+                    
+                    <div class="emp-info">
+                        <a href="{% url 'detalle_nomina' dato.empleado.id %}" class="emp-name">
+                            <span>👤 {{ dato.empleado.nombre }}</span>
+                            <span style="font-size: 0.8em; color: #94a3b8;">🔍</span>
+                        </a>
+                        {% if dato.empleado.es_sueldo_fijo %}
+                            <span class="emp-badge" style="color: #9f1239; background: #fff1f2; border-color: #fecdd3;">Mes Fijo ({{ dato.valor_dia|floatformat:2 }}€/día)</span>
+                        {% else %}
+                            <span class="emp-badge">A Destajo ({{ dato.empleado.sueldo_por_dia }}€/día)</span>
+                        {% endif %}
+                    </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>Mecánico</th>
-                        <th>Días pendientes</th>
-                        <th>Sueldo Acumulado</th>
-                        <th>Adelantos / Comisiones</th>
-                        <th>Total a Pagar Hoy</th>
-                        <th style="text-align: right;">Acción de Cierre</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for dato in datos_nominas %}
-                    <tr>
-                        <td>
-                            <a href="{% url 'detalle_nomina' dato.empleado.id %}" style="text-decoration: none;">
-                                <span class="mecanico-nombre" style="color: #3b82f6; text-decoration: underline;">{{ dato.empleado.nombre }} 🔍</span>
-                            </a>
-                            {% if dato.empleado.es_sueldo_fijo %}
-                                <span class="mecanico-sueldo" style="color: #8b5cf6; font-weight: 600;">
-                                    FIJO: {{ dato.empleado.sueldo_fijo_mensual|floatformat:0 }}€/mes<br>
-                                    <small style="color: #94a3b8; font-weight: normal;">({{ dato.valor_dia|floatformat:2 }}€/día este mes)</small>
-                                </span>
-                            {% else %}
-                                <span class="mecanico-sueldo">{{ dato.empleado.sueldo_por_dia }}€ / día</span>
-                            {% endif %}
-                        </td>
+                    <div class="emp-days">
+                        <div class="days-num">{{ dato.dias }}</div>
+                        <div class="days-lbl">Días</div>
+                    </div>
+
+                    <div class="emp-finance">
+                        <div class="fin-block">
+                            <span class="fin-lbl">Bruto</span>
+                            <span class="fin-val text-success">+{{ dato.bruto|floatformat:2 }}€</span>
+                        </div>
+                        <div class="fin-block" style="padding: 0 10px;">
+                            <span class="fin-lbl" style="font-size: 1.2em; color: #cbd5e1; margin:0;">-</span>
+                        </div>
+                        <div class="fin-block">
+                            <span class="fin-lbl">Adelantos</span>
+                            <span class="fin-val text-danger">
+                                {% if dato.adelantos > 0 %}{{ dato.adelantos|floatformat:2 }}€
+                                {% elif dato.adelantos < 0 %}+{{ dato.adelantos|stringformat:".2f"|slice:"1:" }}€
+                                {% else %}0.00€{% endif %}
+                            </span>
+                        </div>
+                        <div class="fin-block" style="padding: 0 10px;">
+                            <span class="fin-lbl" style="font-size: 1.2em; color: #cbd5e1; margin:0;">=</span>
+                        </div>
+                        <div class="fin-neto {% if dato.neto < 0 %}negativo{% endif %}">
+                            <span class="fin-lbl">Total Neto</span>
+                            <span class="fin-val">{{ dato.neto|floatformat:2 }}€</span>
+                        </div>
+                    </div>
+
+                    <div class="emp-actions">
+                        {% if dato.dias > 0 or dato.adelantos != 0 %}
+                            <button type="button" class="btn-action btn-liquidar" onclick="toggleDrawer('drawer-liquidar-{{ dato.empleado.id }}', 'drawer-adelanto-{{ dato.empleado.id }}')">
+                                ✅ Cierre y Liquidación
+                            </button>
+                        {% else %}
+                            <button type="button" class="btn-action btn-disabled" disabled>🎉 Todo al día</button>
+                        {% endif %}
+                        <button type="button" class="btn-action btn-adelanto" onclick="toggleDrawer('drawer-adelanto-{{ dato.empleado.id }}', 'drawer-liquidar-{{ dato.empleado.id }}')">
+                            🪙 Dar Adelanto
+                        </button>
+                    </div>
+
+                </div>
+
+                <div class="drawer" id="drawer-liquidar-{{ dato.empleado.id }}">
+                    <div class="drawer-title">
+                        <span>🧾 Cierre de Nómina - {{ dato.empleado.nombre }}</span>
+                        <button type="button" class="btn-close-drawer" onclick="toggleDrawer('drawer-liquidar-{{ dato.empleado.id }}', null)">×</button>
+                    </div>
+                    
+                    <form method="POST" onsubmit="return confirm('¿Confirmas el cierre contable para {{ dato.empleado.nombre }}?');" style="margin: 0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="empleado_id" value="{{ dato.empleado.id }}">
                         
-                        <td>
-                            <strong style="font-size: 1.2em; color: #1e293b;">{{ dato.dias }}</strong> <span style="color: #64748b; font-size: 0.9em;">días</span>
-                        </td>
-                        
-                        <td class="text-success">{{ dato.bruto|floatformat:2 }} €</td>
-                        
-                        <td>
-                            {% if dato.adelantos > 0 %}
-                                <span class="text-danger">- {{ dato.adelantos|floatformat:2 }} €</span>
-                            {% elif dato.adelantos < 0 %}
-                                <span class="text-success">+ {{ dato.adelantos|stringformat:"f"|slice:"1:" }} €</span>
-                            {% else %}
-                                <span style="color: #94a3b8;">0.00 €</span>
-                            {% endif %}
-                        </td>
-                        
-                        <td>
-                            <span class="total-neto" {% if dato.neto < 0 %}style="color: #ef4444;"{% endif %}>{{ dato.neto|floatformat:2 }} €</span>
-                        </td>
-                        
-                        <td style="text-align: right; min-width: 250px;">
-                            {% if dato.dias > 0 or dato.adelantos != 0 %}
-                            <form method="POST" style="margin: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;" onsubmit="return confirm('¿Confirmas el cierre de ciclo para {{ dato.empleado.nombre }}?');">
-                                {% csrf_token %}
-                                <input type="hidden" name="empleado_id" value="{{ dato.empleado.id }}">
-                                
-                                <div style="width: 100%; text-align: left; margin-bottom: 4px;">
-                                    <label style="font-size: 0.8em; color: #64748b; font-weight: 600;">Fecha del Cierre Semanal:</label>
-                                    <input type="date" name="fecha_cierre" value="{% now 'Y-m-d' %}" style="width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; font-family: 'Inter'; font-size: 0.9em; outline: none; box-sizing: border-box; margin-top: 4px;" required>
-                                </div>
-                                
-                                <select name="accion_cierre" style="padding: 8px; border-radius: 8px; border: 1px solid #10b981; background: #f0fdf4; color: #064e3b; font-weight: 600; font-family: 'Inter'; font-size: 0.9em; outline: none; width: 100%;">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Fecha de Cierre Contable:</label>
+                                <input type="date" name="fecha_cierre" value="{% now 'Y-m-d' %}" class="modern-input" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">¿Qué deseas hacer con el Neto ({{ dato.neto|floatformat:2 }}€)?</label>
+                                <select name="accion_cierre" class="modern-select" style="{% if dato.neto > 0 %}border-color: #10b981; color: #047857; background: #f0fdf4;{% endif %}">
                                     {% if dato.neto > 0 %}
-                                        <option value="pagar_efectivo">🪙 Pagar {{ dato.neto|floatformat:2 }}€ (Caja)</option>
-                                        <option value="pagar_banco">🏦 Pagar {{ dato.neto|floatformat:2 }}€ (Banco)</option>
+                                        <option value="pagar_efectivo">🪙 Pagar en Caja ({{ dato.neto|floatformat:2 }}€)</option>
+                                        <option value="pagar_banco">🏦 Pagar por Banco ({{ dato.neto|floatformat:2 }}€)</option>
                                     {% endif %}
-                                    <option value="arrastrar" {% if dato.neto <= 0 %}selected{% endif %}>🔄 Cerrar Semana y Arrastrar Saldo</option>
+                                    <option value="arrastrar" {% if dato.neto <= 0 %}selected{% endif %}>🔄 Cerrar semana y arrastrar saldo</option>
                                 </select>
-                                
-                                <button type="submit" class="btn-pagar" style="width: 100%;">✅ Confirmar Cierre</button>
-                            </form>
-                            {% else %}
-                                <button class="btn-disabled" disabled style="width: 100%;">Todo al día</button>
-                            {% endif %}
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-submit" style="background: #10b981;">Confirmar Cierre de Ciclo</button>
+                    </form>
+                </div>
 
-                            <details style="margin-top: 15px; text-align: left;">
-                                <summary class="btn-adelanto" style="list-style: none; text-align: center; user-select: none;">
-                                    🪙 Dar un Adelanto ▼
-                                </summary>
-                                <div style="padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-top: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                                    <form method="POST" action="{% url 'dar_adelanto' %}">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="empleado_id" value="{{ dato.empleado.id }}">
-                                        
-                                        <label style="font-size: 0.8em; color: #64748b; font-weight: bold;">Fecha del adelanto:</label>
-                                        <input type="date" name="fecha_adelanto" value="{% now 'Y-m-d' %}" required style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                <div class="drawer" id="drawer-adelanto-{{ dato.empleado.id }}">
+                    <div class="drawer-title">
+                        <span>🪙 Registrar Adelanto - {{ dato.empleado.nombre }}</span>
+                        <button type="button" class="btn-close-drawer" onclick="toggleDrawer('drawer-adelanto-{{ dato.empleado.id }}', null)">×</button>
+                    </div>
+                    
+                    <form method="POST" action="{% url 'dar_adelanto' %}" style="margin: 0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="empleado_id" value="{{ dato.empleado.id }}">
+                        
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Fecha del adelanto:</label>
+                                <input type="date" name="fecha_adelanto" value="{% now 'Y-m-d' %}" class="modern-input" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Importe (€):</label>
+                                <input type="number" name="importe" step="0.01" placeholder="Ej: 50.00" class="modern-input" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Origen del dinero:</label>
+                                <select name="metodo_pago" class="modern-select">
+                                    <option value="EFECTIVO">🪙 Caja (Efectivo)</option>
+                                    <option value="CUENTA_TALLER">🏦 Cuenta Taller (Banco)</option>
+                                    <option value="COMPENSACION">🤝 Compensación (Descuento Reparación)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Motivo (Opcional):</label>
+                                <input type="text" name="motivo" placeholder="Ej: Avance comida" class="modern-input">
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn-submit" style="background: #3b82f6;">Guardar Adelanto</button>
+                    </form>
+                </div>
 
-                                        <label style="font-size: 0.8em; color: #64748b; font-weight: bold;">Importe (€):</label>
-                                        <input type="number" name="importe" step="0.01" placeholder="Ej: 50.00" required style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                                        
-                                        <label style="font-size: 0.8em; color: #64748b; font-weight: bold;">Motivo (Opcional):</label>
-                                        <input type="text" name="motivo" placeholder="Ej: Para gasolina" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                                        
-                                        <label style="font-size: 0.8em; color: #64748b; font-weight: bold;">El dinero sale de:</label>
-                                        <select name="metodo_pago" style="width: 100%; padding: 8px; margin-bottom: 15px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                                            <option value="EFECTIVO">🪙 Caja (Efectivo)</option>
-                                            <option value="CUENTA_TALLER">🏦 Banco</option>
-                                            <option value="COMPENSACION">🤝 Compensación (Descuento por Reparación)</option>
-                                        </select>
-                                        
-                                        <button type="submit" style="width: 100%; background: #3b82f6; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s;">
-                                            Registrar Adelanto
-                                        </button>
-                                    </form>
-                                </div>
-                            </details>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="6" style="text-align: center; color: #94a3b8; padding: 40px;">
-                            No hay mecánicos registrados en el sistema. Créalos desde el panel de Administrador.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            </div>
+            {% empty %}
+            <div style="text-align: center; background: #ffffff; padding: 60px 20px; border-radius: 16px; border: 2px dashed #cbd5e1;">
+                <span style="font-size: 4em; opacity: 0.5;">👨‍🔧</span>
+                <h3 style="color: #475569; margin-top: 20px;">No hay mecánicos registrados</h3>
+                <p style="color: #94a3b8;">Créalos desde el panel de Administración para empezar a gestionar sus nóminas.</p>
+            </div>
+            {% endfor %}
         </div>
+
     </div>
 
+    <script>
+        function toggleDrawer(idToShow, idToHide) {
+            const drawerToShow = document.getElementById(idToShow);
+            
+            if (drawerToShow.style.display === 'block') {
+                drawerToShow.style.display = 'none';
+                return;
+            }
+            
+            if (idToHide) {
+                const drawerToHide = document.getElementById(idToHide);
+                if (drawerToHide) drawerToHide.style.display = 'none';
+            }
+            
+            drawerToShow.style.display = 'block';
+        }
+    </script>
 </body>
 </html>

@@ -9,34 +9,141 @@
     <link rel="stylesheet" href="{% static 'taller/css/responsive.css' %}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; }
-        .container { max-width: 800px !important; margin: 0 auto; padding: 40px 20px; }
-        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin-bottom: 5px; }
+        /* BASE Y ESTRUCTURA */
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; color: #1e293b; margin: 0; padding: 0; }
+        .container { max-width: 750px !important; margin: 0 auto; padding: 40px 20px; }
         
-        .section-panel { background: #ffffff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; margin-bottom: 24px; }
+        .header-title { font-size: 2.2em; font-weight: 800; letter-spacing: -0.03em; color: #0f172a; margin: 5px 0; }
+        .header-subtitle { color: #64748b; font-weight: 500; font-size: 1.05em; margin: 0; }
         
-        .form-group { display: flex; flex-direction: column; margin-bottom: 20px; }
-        .form-group label { font-size: 0.85em; font-weight: 700; color: #64748b; margin-bottom: 8px; text-transform: uppercase; }
-        .form-control { padding: 12px 15px; border-radius: 8px; border: 1px solid #cbd5e1; font-family: 'Inter'; outline: none; transition: border 0.2s; font-size: 1em; background-color: white;}
-        .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        /* TARJETA PRINCIPAL */
+        .section-panel { 
+            background: #ffffff; 
+            padding: 35px 30px; 
+            border-radius: 20px; 
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01); 
+            border: 1px solid #e2e8f0; 
+            border-top: 5px solid #ef4444; /* Color por defecto */
+            margin-bottom: 24px; 
+            transition: border-color 0.3s ease;
+        }
         
-        .btn-modern { display: inline-flex; align-items: center; justify-content: center; background-color: #ef4444; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; font-size: 1.1em; width: 100%; margin-top: 10px;}
-        .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(239,68,68,0.2); filter: brightness(1.1); }
+        /* FORMULARIOS */
+        .form-group { display: flex; flex-direction: column; margin-bottom: 22px; }
+        .form-group label { font-size: 0.9em; font-weight: 600; color: #475569; margin-bottom: 8px; }
+        
+        .form-control { 
+            padding: 14px 16px; 
+            border-radius: 10px; 
+            border: 1px solid #cbd5e1; 
+            font-family: 'Inter', sans-serif; 
+            font-size: 1.05em; 
+            color: #1e293b;
+            background-color: #f8fafc; 
+            width: 100%; 
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+        }
+        .form-control:focus { 
+            background-color: #ffffff;
+            border-color: #3b82f6; 
+            box-shadow: 0 0 0 4px rgba(59,130,246,0.1); 
+            outline: none;
+        }
+        .form-control option:disabled { color: #94a3b8; font-style: italic; }
+        
+        /* BLOQUES DINÁMICOS Y ANIMACIONES */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .dynamic-block {
+            display: none; 
+            padding: 25px; 
+            border-radius: 16px; 
+            margin-bottom: 25px;
+            animation: fadeIn 0.3s ease-out;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* ESTILOS ESPECÍFICOS DE BLOQUES */
+        .block-transfer { background-color: #eef2ff; border: 1px solid #c7d2fe; }
+        .block-consumible { background-color: #f0f9ff; border: 1px solid #a7f3d0; }
+        .alert-subblock { padding: 15px 20px; border-radius: 12px; margin-bottom: 15px; font-size: 0.95em; }
+
+        /* BOTÓN PRINCIPAL */
+        .btn-modern { 
+            display: inline-flex; align-items: center; justify-content: center; 
+            background-color: #ef4444; color: white; 
+            border: none; padding: 16px 20px; border-radius: 12px; 
+            font-weight: 700; font-size: 1.15em; letter-spacing: 0.02em;
+            cursor: pointer; transition: all 0.2s ease; width: 100%; margin-top: 15px;
+            box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);
+        }
+        .btn-modern:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.3); 
+            filter: brightness(1.05); 
+        }
+
+        /* NOTIFICACIONES */
+        .toast-msg { padding: 16px 20px; border-radius: 12px; font-weight: 600; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .toast-error { background-color: #fef2f2; color: #b91c1c; border-left: 5px solid #ef4444; }
+        .toast-success { background-color: #f0fdf4; color: #047857; border-left: 5px solid #10b981; }
     </style>
 </head>
 <body>
     <div class="container">
+        
+        {% if messages %}
+            {% for message in messages %}
+                <div class="toast-msg {% if message.tags == 'error' %}toast-error{% elif message.tags == 'success' %}toast-success{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
         <div style="margin-bottom: 30px;">
-            <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600;">← Volver al Inicio</a>
-            <h1 class="header-title">➖ Añadir Nuevo Gasto</h1>
-            <p style="color: #64748b; font-weight: 500; margin: 0;">Registra una salida de dinero de caja o banco.</p>
+            <a href="{% url 'home' %}" style="text-decoration: none; color: #64748b; font-weight: 600; font-size: 0.9em;">← Volver al Panel Principal</a>
+            <h1 class="header-title">Registro Financiero</h1>
+            <p class="header-subtitle">Añade un nuevo gasto, compra de material o traspaso de fondos.</p>
         </div>
 
-        <div class="section-panel" style="border-top: 4px solid #ef4444;">
+        <div class="section-panel" id="main-panel">
             <form method="POST">
                 {% csrf_token %}
                 
                 <div class="form-group">
+                    <label>Categoría de la Operación:</label>
+                    <select name="categoria" id="categoria-select" class="form-control" required style="font-weight: 600; color: #0f172a;">
+                        <option value="">-- Elige qué estás pagando o haciendo --</option>
+                        <option value="Transferencia" style="font-weight: 800; color: #4f46e5;">🔄 Traspaso entre Cuentas (Caja/Banco)</option>
+                        
+                        <optgroup label="🚗 Taller y Vehículos">
+                            <option value="Repuestos">⚙️ Repuestos para Vehículo</option>
+                            <option value="MATERIAL_CHAPA">🎨 Material Chapa y Pintura</option>
+                            <option value="Compra de Consumibles">📦 Compra Consumibles (Stock General)</option>
+                            <option value="Herramientas">🛠️ Herramientas de Taller</option>
+                            <option value="Gasolina/Diesel">⛽ Combustible (Gasolina/Diésel)</option>
+                        </optgroup>
+                        
+                        <optgroup label="🏢 Personal y Operativa">
+                            <option value="Sueldos">👨‍🔧 Sueldos, Nóminas o Adelantos</option>
+                            <option value="Suministros">💧 Suministros (Luz, Agua, Internet...)</option>
+                            <option value="Otros">📝 Otros Gastos (Limpieza, Gestoría...)</option>
+                        </optgroup>
+                        
+                        <optgroup label="🏦 Finanzas y Bancos">
+                            <option value="PAGO_TARJETA">💳 Pago de Tarjeta de Crédito</option>
+                            <option value="Pago de Deuda">🏦 Pago de Préstamo o Deuda</option>
+                            <option value="Comisiones e Intereses Bancarios">📉 Comisiones / Intereses de Banco</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="form-group" id="grupo-metodo-pago">
                     <label>¿De dónde sale el dinero?</label>
                     <select name="metodo_pago" id="metodo-pago-select" class="form-control" required>
                         {% for value, label in metodos_pago %}
@@ -45,114 +152,139 @@
                     </select>
                 </div>
 
-                <div class="form-group">
-                    <label>Categoría del Gasto:</label>
-                    <select name="categoria" id="categoria-select" class="form-control" required>
-                        <option value="">-- Selecciona una categoría --</option>
-                        {% for value, label in categorias_gasto %}
-                            <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
+                <div id="bloque-transferencia" class="dynamic-block block-transfer">
+                    <h4 style="margin: 0 0 20px 0; color: #3730a3; font-size: 1.2em;">🔄 Detalles del Traspaso</h4>
+                    
+                    <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="color: #4f46e5; display: block; margin-bottom: 8px;">Origen (De dónde sale):</label>
+                            <select name="cuenta_origen" id="cuenta_origen" class="form-control" style="border-color: #c7d2fe; font-weight: 600;">
+                                <option value="">-- Selecciona Origen --</option>
+                                {% for value, label in metodos_pago %}
+                                    {% if value != 'COMPENSACION' %}<option value="{{ value }}">{{ label }}</option>{% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="color: #4f46e5; display: block; margin-bottom: 8px;">Destino (A dónde va):</label>
+                            <select name="cuenta_destino" id="cuenta_destino" class="form-control" style="border-color: #c7d2fe; font-weight: 600;">
+                                <option value="">-- Selecciona Destino --</option>
+                                {% for value, label in metodos_pago %}
+                                    {% if value != 'COMPENSACION' %}<option value="{{ value }}">{{ label }}</option>{% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 15px;">
+                        <label style="color: #3730a3;">Cantidad a transferir (€):</label>
+                        <input type="number" step="0.01" min="0.01" name="importe_transferencia" id="importe_transferencia" class="form-control" placeholder="Ej: 500.00" style="font-size: 1.2em; font-weight: 700;">
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="color: #3730a3;">Fecha del Traspaso:</label>
+                        <input type="date" name="fecha_transferencia" id="fecha_transferencia" class="form-control">
+                    </div>
                 </div>
 
-                <div id="bloque-consumibles" style="display: none; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px dashed #cbd5e1; margin-bottom: 20px;">
-                    <h4 style="margin-top: 0; color: #3b82f6; margin-bottom: 15px;">📦 Detalles del Consumible</h4>
+                <div id="bloque-consumibles" class="dynamic-block block-consumible">
+                    <h4 style="margin: 0 0 20px 0; color: #047857; font-size: 1.2em;">📦 Detalles del Consumible</h4>
                     
                     <div class="form-group">
                         <label>¿Qué consumible estás comprando?</label>
-                        <select name="tipo_consumible" class="form-control">
+                        <select name="tipo_consumible" class="form-control" style="border-color: #6ee7b7;">
                             <option value="">-- Elige un artículo --</option>
                             {% for tipo in tipos_consumible %}
-                                <option value="{{ tipo.id }}">{{ tipo.nombre }} ({{ tipo.unidad_medida }})</option>
+                                <option value="{{ tipo.id }}">{{ tipo.nombre }} (Se mide en {{ tipo.unidad_medida }})</option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <div class="form-group">
-                        <label>Cantidad adquirida:</label>
-                        <input type="number" step="0.01" name="cantidad" class="form-control" placeholder="Ej: 200">
+                    <div style="display: flex; gap: 15px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label>Cantidad que entra:</label>
+                            <input type="number" step="0.01" name="cantidad" class="form-control" placeholder="Ej: 200" style="border-color: #6ee7b7;">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>Coste Total (€):</label>
+                            <input type="number" step="0.01" name="coste_total" class="form-control" placeholder="Ej: 70.00" style="border-color: #6ee7b7;">
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>Coste Total de la compra (€):</label>
-                        <input type="number" step="0.01" name="coste_total" class="form-control" placeholder="Ej: 700.00">
-                    </div>
-
-                    <div class="form-group">
+                    <div class="form-group" style="margin-bottom: 0;">
                         <label>Fecha de la Compra:</label>
-                        <input type="date" name="fecha_compra" class="form-control">
+                        <input type="date" name="fecha_compra" class="form-control" style="border-color: #6ee7b7;">
                     </div>
                 </div>
 
-                <div id="bloque-normal" style="display: none;">
+                <div id="bloque-normal" class="dynamic-block">
                     
-                    <div id="campo-deuda" class="form-group" style="display: none; background: #fff5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #ef4444;">
-                        <label style="color: #ef4444;">🚨 Pagar deuda a:</label>
+                    <div id="campo-deuda" class="alert-subblock" style="display: none; background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444;">
+                        <label style="color: #b91c1c; display: block; margin-bottom: 8px;">🚨 Selecciona qué Deuda/Préstamo estás pagando:</label>
                         <select name="deuda" id="deuda-select" class="form-control" style="border-color: #fca5a5;">
                             <option value="">-- Selecciona la Deuda --</option>
                             {% for deuda in deudas_pendientes %}
-                                <option value="{{ deuda.id }}" data-es-banco="{% if deuda.es_credito_bancario %}true{% else %}false{% endif %}">
-                                    {{ deuda.acreedor }} - Resta: {{ deuda.importe_pendiente }}€
-                                </option>
+                                <option value="{{ deuda.id }}" data-es-banco="{% if deuda.es_credito_bancario %}true{% else %}false{% endif %}">{{ deuda.acreedor }} - Quedan: {{ deuda.importe_pendiente }}€</option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <div id="campo-tarjeta-destino" class="form-group" style="display: none; background: #fffbeb; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
-                        <label style="color: #d97706;">💳 Selecciona la Tarjeta a pagar:</label>
+                    <div id="campo-tarjeta-destino" class="alert-subblock" style="display: none; background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b;">
+                        <label style="color: #b45309; display: block; margin-bottom: 8px;">💳 Selecciona la Tarjeta a pagar:</label>
                         <select name="tarjeta_destino" id="tarjeta-select" class="form-control" style="border-color: #fcd34d;">
                             <option value="">-- Elige una tarjeta --</option>
                             <option value="TARJETA_1">Tarjeta 1 (Visa 2000€)</option>
                             <option value="TARJETA_2">Tarjeta 2 (Visa 1000€)</option>
                         </select>
-                        <p style="font-size: 0.75em; color: #b45309; margin: 5px 0 0 0; text-transform: none;">* Asegúrate de que arriba en "¿De dónde sale el dinero?" esté puesto <b>Cuenta Taller</b>.</p>
+                        <p style="font-size: 0.85em; color: #d97706; margin: 8px 0 0 0;">* Asegúrate de que arriba en "¿De dónde sale el dinero?" esté puesto <b>Cuenta Taller</b>.</p>
                     </div>
 
-                    <div id="campo-banco-inteligente" class="form-group" style="display: none; background: #f0fdf4; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981; margin-top: -10px;">
-                        <h4 style="margin: 0 0 10px 0; color: #047857; font-size: 0.95em;">🏦 Cálculo Inteligente de Banco/Tarjeta</h4>
-                        <label style="color: #059669;" id="label-saldo-banco">Deuda Restante según el Banco/App (€):</label>
-                        <input type="number" step="0.01" name="saldo_real_banco" id="saldo-banco-input" class="form-control" style="border-color: #6ee7b7;" placeholder="Ej: 24500.00 o 350.00">
-                        <p style="font-size: 0.75em; color: #059669; margin: 5px 0 0 0; text-transform: none;">El sistema restará el pago de arriba y añadirá la diferencia como intereses o comisiones automáticamente.</p>
+                    <div id="campo-banco-inteligente" class="alert-subblock" style="display: none; background: #f0fdf4; border: 1px solid #a7f3d0; border-left: 4px solid #10b981;">
+                        <h4 style="margin: 0 0 10px 0; color: #047857; font-size: 1.05em;">🏦 Cálculo Inteligente de Banco/Tarjeta</h4>
+                        <label style="color: #059669; display: block; margin-bottom: 8px;" id="label-saldo-banco">Deuda Restante según el Banco/App (€):</label>
+                        <input type="number" step="0.01" name="saldo_real_banco" id="saldo-banco-input" class="form-control" style="border-color: #6ee7b7;" placeholder="Ej: 350.00">
+                        <p style="font-size: 0.85em; color: #059669; margin: 8px 0 0 0;">El sistema restará el pago y añadirá la diferencia como comisiones automáticamente.</p>
                     </div>
 
                     <div id="campo-empleado" class="form-group" style="display: none;">
-                        <label>Empleado:</label>
+                        <label>Selecciona el Empleado:</label>
                         <select name="empleado" class="form-control">
-                            <option value="">-- Selecciona Empleado --</option>
+                            <option value="">-- Elegir Empleado --</option>
                             {% for emp in empleados %}
                                 <option value="{{ emp.id }}">{{ emp.nombre }}</option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <div id="campo-orden" class="form-group" style="display: none; background: #eff6ff; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
-                        <label style="color: #1e40af;">🚗 Asociar a Orden (Vehículo en taller):</label>
+                    <div id="campo-orden" class="alert-subblock" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6;">
+                        <label style="color: #1d4ed8; display: block; margin-bottom: 8px;">🚗 Asociar a Orden (Vehículo en taller):</label>
                         <select name="orden" class="form-control" style="border-color: #93c5fd;">
                             <option value="">-- Ninguna / Opcional --</option>
                             {% for orden in ordenes_activas %}
                                 <option value="{{ orden.id }}">{{ orden.vehiculo.matricula }} ({{ orden.cliente.nombre }})</option>
                             {% endfor %}
                         </select>
-                        <p id="texto-ayuda-orden" style="font-size: 0.75em; color: #1e40af; margin: 5px 0 0 0; text-transform: none; display: none;">* Opcional: Elige para qué coche estás comprando esto (se guardará en el Monedero para descontarlo después).</p>
+                        <p id="texto-ayuda-orden" style="font-size: 0.85em; color: #3b82f6; margin: 8px 0 0 0; display: none;">Si es Pintura, asócialo al coche ahora o se guardará en el Monedero general.</p>
                     </div>
 
                     <div class="form-group">
                         <label>Importe Pagado (€):</label>
-                        <input type="number" step="0.01" name="importe" id="importe-input" class="form-control" placeholder="Ej: 470.00">
+                        <input type="number" step="0.01" name="importe" id="importe-input" class="form-control" placeholder="Ej: 150.00" style="font-size: 1.2em; font-weight: 700;">
                     </div>
 
                     <div class="form-group">
-                        <label>Fecha del Gasto:</label>
+                        <label>Fecha del Gasto (Por defecto, hoy):</label>
                         <input type="date" name="fecha_gasto" class="form-control">
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" style="margin-bottom: 0;">
                         <label>Descripción / Concepto:</label>
-                        <input type="text" name="descripcion" id="descripcion-input" class="form-control" placeholder="Ej: Cuota mensual, Factura luz, Repuesto filtro...">
+                        <input type="text" name="descripcion" id="descripcion-input" class="form-control" placeholder="Ej: Factura luz, Repuesto filtro de aire...">
                     </div>
                 </div>
 
-                <button type="submit" class="btn-modern">Guardar Gasto</button>
+                <button type="submit" class="btn-modern" id="btn-submit">Registrar Operación</button>
             </form>
         </div>
     </div>
@@ -162,10 +294,16 @@
             const selectCat = document.getElementById('categoria-select');
             const selectDeuda = document.getElementById('deuda-select');
             const selectMetodoPago = document.getElementById('metodo-pago-select');
+            const grupoMetodoPago = document.getElementById('grupo-metodo-pago');
+            const mainPanel = document.getElementById('main-panel');
             
+            const bloqueTransferencia = document.getElementById('bloque-transferencia');
             const bloqueConsumibles = document.getElementById('bloque-consumibles');
             const bloqueNormal = document.getElementById('bloque-normal');
             
+            const cuentaOrigen = document.getElementById('cuenta_origen');
+            const cuentaDestino = document.getElementById('cuenta_destino');
+
             const campoDeuda = document.getElementById('campo-deuda');
             const campoEmpleado = document.getElementById('campo-empleado');
             const campoOrden = document.getElementById('campo-orden');
@@ -178,12 +316,35 @@
             const inputDesc = document.getElementById('descripcion-input');
             const inputSaldoBanco = document.getElementById('saldo-banco-input');
             const labelSaldoBanco = document.getElementById('label-saldo-banco');
+            const btnSubmit = document.getElementById('btn-submit');
 
-            // --- Lógica General de Categorías ---
+            // Bloqueo de Origen/Destino para Traspasos
+            function validarTransferencia() {
+                Array.from(cuentaDestino.options).forEach(opt => opt.disabled = false);
+                Array.from(cuentaOrigen.options).forEach(opt => opt.disabled = false);
+
+                if (cuentaOrigen.value) {
+                    const optDestino = cuentaDestino.querySelector(`option[value="${cuentaOrigen.value}"]`);
+                    if(optDestino) optDestino.disabled = true;
+                }
+                if (cuentaDestino.value) {
+                    const optOrigen = cuentaOrigen.querySelector(`option[value="${cuentaDestino.value}"]`);
+                    if(optOrigen) optOrigen.disabled = true;
+                }
+            }
+
+            cuentaOrigen.addEventListener('change', validarTransferencia);
+            cuentaDestino.addEventListener('change', validarTransferencia);
+
+            // Lógica Principal de Categorías
             function actualizarCampos() {
                 const cat = selectCat.value;
                 
-                // 1. Ocultar todo por defecto
+                // 1. Resetear
+                grupoMetodoPago.style.display = 'flex';
+                selectMetodoPago.required = true;
+                
+                bloqueTransferencia.style.display = 'none';
                 bloqueConsumibles.style.display = 'none';
                 bloqueNormal.style.display = 'none';
                 campoDeuda.style.display = 'none';
@@ -193,21 +354,48 @@
                 campoTarjetaDestino.style.display = 'none';
                 textoAyudaOrden.style.display = 'none';
                 
-                // 2. Quitar requireds
                 inputImporte.required = false;
                 inputDesc.required = false;
                 inputSaldoBanco.required = false;
                 selectTarjetaDestino.required = false;
+                cuentaOrigen.required = false;
+                cuentaDestino.required = false;
+                document.getElementById('importe_transferencia').required = false;
+
+                mainPanel.style.borderTopColor = "#ef4444"; // Default Red
 
                 if (!cat) return;
 
-                // 3. Mostrar según categoría
-                if (cat === 'Compra de Consumibles') {
+                // 2. Mostrar según categoría
+                if (cat === 'Transferencia') {
+                    grupoMetodoPago.style.display = 'none';
+                    selectMetodoPago.required = false;
+                    
+                    bloqueTransferencia.style.display = 'block';
+                    cuentaOrigen.required = true;
+                    cuentaDestino.required = true;
+                    document.getElementById('importe_transferencia').required = true;
+                    
+                    mainPanel.style.borderTopColor = "#4f46e5"; // Indigo
+                    btnSubmit.innerText = "Realizar Traspaso Seguro";
+                    btnSubmit.style.backgroundColor = "#4f46e5";
+                    btnSubmit.style.boxShadow = "0 4px 6px -1px rgba(79, 70, 229, 0.2)";
+                } 
+                else if (cat === 'Compra de Consumibles') {
                     bloqueConsumibles.style.display = 'block';
-                } else {
+                    mainPanel.style.borderTopColor = "#059669"; // Emerald
+                    btnSubmit.innerText = "Guardar Compra de Stock";
+                    btnSubmit.style.backgroundColor = "#059669";
+                    btnSubmit.style.boxShadow = "0 4px 6px -1px rgba(5, 150, 105, 0.2)";
+                } 
+                else {
                     bloqueNormal.style.display = 'block';
                     inputImporte.required = true;
                     inputDesc.required = true;
+                    
+                    btnSubmit.innerText = "Registrar Gasto";
+                    btnSubmit.style.backgroundColor = "#ef4444";
+                    btnSubmit.style.boxShadow = "0 4px 6px -1px rgba(239, 68, 68, 0.2)";
                     
                     if (cat === 'Repuestos' || cat === 'Otros') {
                         campoOrden.style.display = 'block';
@@ -215,7 +403,7 @@
                         campoEmpleado.style.display = 'block';
                     } else if (cat === 'MATERIAL_CHAPA') {
                         campoOrden.style.display = 'block';
-                        textoAyudaOrden.style.display = 'block'; // Mostramos el texto aclaratorio
+                        textoAyudaOrden.style.display = 'block'; 
                     } else if (cat === 'Pago de Deuda') {
                         campoDeuda.style.display = 'block';
                         campoOrden.style.display = 'block'; 
@@ -236,20 +424,15 @@
                 }
             }
 
-            // --- Lógica Específica para Deudas de Banco ---
             function comprobarSiEsBanco() {
                 if (selectCat.value !== 'Pago de Deuda') return;
-                
                 const opcionElegida = selectDeuda.options[selectDeuda.selectedIndex];
                 if (!opcionElegida || !opcionElegida.value) {
                     campoBancoInteligente.style.display = 'none';
                     inputSaldoBanco.required = false;
                     return;
                 }
-
-                // Leer el atributo de la base de datos
                 const esBanco = opcionElegida.getAttribute('data-es-banco') === 'true';
-                
                 if (esBanco) {
                     campoBancoInteligente.style.display = 'block';
                     inputSaldoBanco.required = true;
@@ -263,7 +446,7 @@
             selectCat.addEventListener('change', actualizarCampos);
             selectDeuda.addEventListener('change', comprobarSiEsBanco);
             
-            actualizarCampos(); // Ejecutar al cargar la página
+            actualizarCampos(); // Init
         });
     </script> 
     {% include 'taller/widget_ia.html' %}
