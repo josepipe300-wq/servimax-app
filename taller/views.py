@@ -39,7 +39,7 @@ from .models import (
     Presupuesto, LineaPresupuesto, UsoConsumible, AjusteStockConsumible,
     CierreTarjeta, NotaTablon, NotaInternaOrden, DeudaTaller, AmpliacionDeuda, 
     HistorialEstadoOrden, Cita, HistorialIA, ReporteEscaner,
-    Asistencia, AdelantoSueldo, FacturaProveedor
+    Asistencia, AdelantoSueldo, FacturaProveedor, HistorialSueldo
 )
 
 def obtener_dias_laborables_mes(fecha):
@@ -3255,15 +3255,9 @@ def panel_nominas(request):
 
         dias_trabajados_totales = asistencias_pendientes.values('fecha').distinct().count()
         
-        if empleado.es_chapista:
-            dias_taller = asistencias_pendientes.filter(tipo_jornada='Taller').values('fecha').distinct().count()
-            sueldo_bruto = Decimal(dias_taller) * empleado.valor_jornada_taller
-        elif empleado.es_sueldo_fijo:
-            dias_mes = obtener_dias_laborables_mes(fecha_cierre)
-            valor_dia = (empleado.sueldo_fijo_mensual / dias_mes) if dias_mes else Decimal('0.00')
-            sueldo_bruto = Decimal(dias_trabajados_totales) * valor_dia
-        else:
-            sueldo_bruto = Decimal(dias_trabajados_totales) * empleado.sueldo_por_dia
+        # 🟢 NUEVO CÁLCULO INTELIGENTE (POST)
+        # Sumamos directamente el valor congelado de cada día. Si no hay, es 0.00.
+        sueldo_bruto = asistencias_pendientes.aggregate(total=Sum('sueldo_ganado'))['total'] or Decimal('0.00')
         
         total_adelantos = sum(a.importe for a in adelantos_pendientes)
         total_neto = sueldo_bruto - total_adelantos
@@ -3325,25 +3319,31 @@ def panel_nominas(request):
     
     for emp in empleados:
         asistencias_pendientes = Asistencia.objects.filter(empleado=emp, pagado=False, hora_salida__isnull=False)
+        
+        # 🟢 MODO SEGURO: Solo calcula si está a 0.00. Una vez calculado, se congela para siempre.
+        for asistencia in asistencias_pendientes:
+            if asistencia.sueldo_ganado == Decimal('0.00') and asistencia.tipo_jornada != 'Chapa':
+                asistencia.sueldo_ganado = asistencia.calcular_sueldo_del_dia()
+                asistencia.save(update_fields=['sueldo_ganado'])
+
         dias_pendientes_totales = asistencias_pendientes.values('fecha').distinct().count()
         
         fechas_exactas = asistencias_pendientes.values_list('fecha', flat=True).distinct()
         fechas_str = ", ".join([f.strftime('%d/%m') for f in fechas_exactas])
         
+        # 🟢 SUMA EXACTA DE LOS DÍAS CONGELADOS
+        sueldo_bruto = asistencias_pendientes.aggregate(total=Sum('sueldo_ganado'))['total'] or Decimal('0.00')
+        
+        # Datos informativos para la UI
         dias_mes = 0
         valor_dia = Decimal('0.00')
-        
         if emp.es_chapista:
-            dias_taller = asistencias_pendientes.filter(tipo_jornada='Taller').values('fecha').distinct().count()
-            sueldo_bruto = Decimal(dias_taller) * emp.valor_jornada_taller
             valor_dia = emp.valor_jornada_taller
         elif emp.es_sueldo_fijo:
             dias_mes = obtener_dias_laborables_mes(hoy)
             valor_dia = (emp.sueldo_fijo_mensual / dias_mes) if dias_mes else Decimal('0.00')
-            sueldo_bruto = Decimal(dias_pendientes_totales) * valor_dia
         else:
             valor_dia = emp.sueldo_por_dia
-            sueldo_bruto = Decimal(dias_pendientes_totales) * valor_dia
             
         adelantos_pendientes = AdelantoSueldo.objects.filter(empleado=emp, liquidado=False)
         total_adelantos = sum(a.importe for a in adelantos_pendientes)
@@ -4088,3 +4088,45 @@ def ver_stock_chapa(request):
         'meses_del_ano': range(1, 13)
     }
     return render(request, 'taller/stock_chapa.html', context)    
+
+
+def actualizar_sueldo_historial(request, empleado_id):
+    empleado = get_object_or_404(Empleado, id=empleado_id)
+    
+    if request.method == 'POST':
+        fecha_inicio = request.POST.get('fecha_inicio')
+        
+        sueldo_por_dia = request.POST.get('sueldo_por_dia') or empleado.sueldo_por_dia
+        sueldo_fijo_mensual = request.POST.get('sueldo_fijo_mensual') or empleado.sueldo_fijo_mensual
+        valor_jornada_taller = request.POST.get('valor_jornada_taller') or empleado.valor_jornada_taller
+        porcentaje_comision = request.POST.get('porcentaje_comision') or empleado.porcentaje_comision
+
+        # 1. Guardamos la nueva regla en su línea de tiempo
+        HistorialSueldo.objects.create(
+            empleado=empleado,
+            fecha_inicio=fecha_inicio,
+            sueldo_por_dia=sueldo_por_dia,
+            sueldo_fijo_mensual=sueldo_fijo_mensual,
+            valor_jornada_taller=valor_jornada_taller,
+            porcentaje_comision=porcentaje_comision
+        )
+        
+        # 2. Actualizamos la portada de su ficha
+        empleado.sueldo_por_dia = sueldo_por_dia
+        empleado.sueldo_fijo_mensual = sueldo_fijo_mensual
+        empleado.valor_jornada_taller = valor_jornada_taller
+        empleado.porcentaje_comision = porcentaje_comision
+        empleado.save()
+
+        # 3. 🟢 EL RECÁLCULO INTELIGENTE (Solo para este empleado y solo lo no pagado)
+        asistencias_pendientes = Asistencia.objects.filter(empleado=empleado, pagado=False)
+        for asis in asistencias_pendientes:
+            # Revisa la fecha de cada día sin pagar.
+            # Si el día es del mes pasado, le dejará el sueldo de 40€. 
+            # Si el día es del 1 de este mes en adelante, le pondrá los 50€.
+            asis.sueldo_ganado = asis.calcular_sueldo_del_dia()
+            asis.save(update_fields=['sueldo_ganado'])
+
+        messages.success(request, f"💰 Sueldo actualizado desde el {fecha_inicio}. Las nóminas pendientes de este mes se han ajustado solas.")
+        
+    return redirect(request.META.get('HTTP_REFERER', '/'))

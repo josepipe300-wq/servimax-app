@@ -55,6 +55,13 @@
         .emp-name { font-weight: 800; font-size: 1.15em; color: #0f172a; text-decoration: none; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px;}
         .emp-name:hover { color: #3b82f6; }
         .emp-badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 0.75em; font-weight: 700; border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; }
+        
+        .btn-cambiar-sueldo {
+            background: transparent; color: #64748b; border: 1px solid #cbd5e1;
+            padding: 4px 10px; border-radius: 6px; font-size: 0.75em; font-weight: 600;
+            cursor: pointer; transition: 0.2s; margin-top: 4px;
+        }
+        .btn-cambiar-sueldo:hover { background: #f1f5f9; color: #0f172a; border-color: #94a3b8; }
 
         /* COLUMNA 2: DÍAS (Inamovible) */
         .emp-days { text-align: center; border-right: 1px solid #f1f5f9; border-left: 1px solid #f1f5f9; width: 100%;}
@@ -150,6 +157,10 @@
                         {% else %}
                             <span class="emp-badge">A Destajo ({{ dato.empleado.sueldo_por_dia }}€/día)</span>
                         {% endif %}
+                        
+                        <button type="button" class="btn-cambiar-sueldo" onclick="toggleDrawer('drawer-sueldo-{{ dato.empleado.id }}', null)">
+                            ⚙️ Cambiar Sueldo
+                        </button>
                     </div>
 
                     <div class="emp-days">
@@ -267,6 +278,45 @@
                     </form>
                 </div>
 
+                <div class="drawer" id="drawer-sueldo-{{ dato.empleado.id }}">
+                    <div class="drawer-title">
+                        <span>⚙️ Actualizar Sueldo - {{ dato.empleado.nombre }}</span>
+                        <button type="button" class="btn-close-drawer" onclick="toggleDrawer('drawer-sueldo-{{ dato.empleado.id }}', null)">×</button>
+                    </div>
+                    
+                    <form action="{% url 'actualizar_sueldo_historial' dato.empleado.id %}" method="POST" style="margin: 0;">
+                        {% csrf_token %}
+                        <p class="text-muted small" style="font-size: 0.85em; color: #64748b; margin-bottom: 15px;">Los cambios aplicarán solo a las nóminas a partir de la fecha seleccionada. El historial pasado quedará intacto.</p>
+                        
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Entra en vigor el día:</label>
+                                <input type="date" name="fecha_inicio" class="modern-input" required value="{% now 'Y-m-d' %}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Sueldo Diario (€)</label>
+                                <input type="number" step="0.01" name="sueldo_por_dia" class="modern-input" value="{{ dato.empleado.sueldo_por_dia|stringformat:'s' }}">
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Fijo Mensual (€)</label>
+                                <input type="number" step="0.01" name="sueldo_fijo_mensual" class="modern-input" value="{{ dato.empleado.sueldo_fijo_mensual|stringformat:'s' }}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Día Taller (Chapistas) (€)</label>
+                                <input type="number" step="0.01" name="valor_jornada_taller" class="modern-input" value="{{ dato.empleado.valor_jornada_taller|stringformat:'s' }}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Comisión (%)</label>
+                                <input type="number" step="0.01" name="porcentaje_comision" class="modern-input" value="{{ dato.empleado.porcentaje_comision|stringformat:'s' }}">
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn-submit" style="background: #0f172a; margin-top: 10px;">Guardar Nuevo Sueldo</button>
+                    </form>
+                </div>
+
             </div>
             {% empty %}
             <div style="text-align: center; background: #ffffff; padding: 60px 20px; border-radius: 16px; border: 2px dashed #cbd5e1;">
@@ -283,16 +333,23 @@
         function toggleDrawer(idToShow, idToHide) {
             const drawerToShow = document.getElementById(idToShow);
             
+            // Si el que intento abrir ya está abierto, lo cierro
             if (drawerToShow.style.display === 'block') {
                 drawerToShow.style.display = 'none';
                 return;
             }
             
+            // Cierro el otro que le paso por parámetro (si lo hay)
             if (idToHide) {
                 const drawerToHide = document.getElementById(idToHide);
                 if (drawerToHide) drawerToHide.style.display = 'none';
             }
             
+            // También me aseguro de ocultar cualquier otro cajón abierto en esa tarjeta para que no se apilen
+            const allDrawers = drawerToShow.parentElement.querySelectorAll('.drawer');
+            allDrawers.forEach(d => d.style.display = 'none');
+            
+            // Abro el que toca
             drawerToShow.style.display = 'block';
         }
     </script>

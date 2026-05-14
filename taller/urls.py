@@ -77,6 +77,8 @@ urlpatterns = [
     path('nominas/', views.panel_nominas, name='panel_nominas'),
     path('nominas/detalle/<int:empleado_id>/', views.detalle_nomina, name='detalle_nomina'),
     path('nominas/adelanto/', views.dar_adelanto, name='dar_adelanto'),
+    # Añade esto junto a tus otras rutas de empleados/nóminas
+    path('empleado/<int:empleado_id>/actualizar_sueldo/', views.actualizar_sueldo_historial, name='actualizar_sueldo_historial'),
     
     # --- GESTORÍA Y PROVEEDORES ---
     path('facturas-legales/', views.lista_facturas_legales, name='lista_facturas_legales'),

@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 import math
+import calendar  # 🟢 NUEVO: Necesario para calcular días laborables
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
@@ -205,6 +206,26 @@ class Empleado(models.Model):
         self.nombre = self.nombre.upper()
         super(Empleado, self).save(*args, **kwargs)
 
+# 🟢 NUEVO MODELO: HISTORIAL DE SUELDOS
+class HistorialSueldo(models.Model):
+    empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='historial_sueldos')
+    fecha_inicio = models.DateField(default=timezone.now, help_text="Fecha a partir de la cual entra en vigor este sueldo")
+    
+    # Copia de los valores para esta etapa del tiempo
+    sueldo_por_dia = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
+    sueldo_fijo_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=1000.00)
+    valor_jornada_taller = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
+    porcentaje_comision = models.DecimalField(max_digits=5, decimal_places=2, default=60.00)
+
+    class Meta:
+        ordering = ['-fecha_inicio']
+        verbose_name = "Historial de Sueldo"
+        verbose_name_plural = "Historiales de Sueldos"
+
+    def __str__(self):
+        return f"{self.empleado.nombre} - Desde {self.fecha_inicio.strftime('%d/%m/%Y')}"
+
+
 class Asistencia(models.Model):
     TIPO_JORNADA_CHOICES = [
         ('Taller', 'Taller / Estructuras (Cobra el día)'),
@@ -218,6 +239,46 @@ class Asistencia(models.Model):
     pagado = models.BooleanField(default=False)
     
     tipo_jornada = models.CharField(max_length=20, choices=TIPO_JORNADA_CHOICES, default='Taller')
+
+    # 🟢 NUEVO: CONGELA EL SUELDO EXACTO DEL DÍA
+    sueldo_ganado = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Sueldo del día")
+    
+    def calcular_sueldo_del_dia(self):
+        """Calcula cuánto vale este día según el historial o el perfil actual."""
+        # 1. Buscamos el registro de historial más cercano (pero anterior o igual) a la fecha de asistencia
+        historial = HistorialSueldo.objects.filter(
+            empleado=self.empleado, 
+            fecha_inicio__lte=self.fecha
+        ).order_by('-fecha_inicio').first()
+
+        # 2. Si hay historial usamos esos datos; si no, usamos los del modelo Empleado como respaldo
+        if historial:
+            s_por_dia = historial.sueldo_por_dia
+            s_fijo_mensual = historial.sueldo_fijo_mensual
+            v_jornada_taller = historial.valor_jornada_taller
+        else:
+            s_por_dia = self.empleado.sueldo_por_dia
+            s_fijo_mensual = self.empleado.sueldo_fijo_mensual
+            v_jornada_taller = self.empleado.valor_jornada_taller
+
+        if self.empleado.es_chapista and self.tipo_jornada == 'Taller':
+            return v_jornada_taller
+        elif self.empleado.es_chapista and self.tipo_jornada == 'Chapa':
+            return Decimal('0.00')
+        elif self.empleado.es_sueldo_fijo:
+            dias_en_mes = calendar.monthrange(self.fecha.year, self.fecha.month)[1]
+            dias_laborables = sum(1 for dia in range(1, dias_en_mes + 1) if calendar.weekday(self.fecha.year, self.fecha.month, dia) < 5)
+            if dias_laborables > 0:
+                return (s_fijo_mensual / Decimal(str(dias_laborables))).quantize(Decimal('0.01'))
+            return Decimal('0.00')
+        else:
+            return s_por_dia
+
+    def save(self, *args, **kwargs):
+        # Solo calculamos si el sueldo está a 0 (cuando se crea el fichaje)
+        if self.sueldo_ganado == Decimal('0.00'):
+            self.sueldo_ganado = self.calcular_sueldo_del_dia()
+        super(Asistencia, self).save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.empleado.nombre} - {self.fecha} ({self.tipo_jornada})"
@@ -713,4 +774,4 @@ class UsoMaterialChapa(models.Model):
         
     def save(self, *args, **kwargs):
         if self.notas: self.notas = self.notas.upper()
-        super(UsoMaterialChapa, self).save(*args, **kwargs)    
+        super(UsoMaterialChapa, self).save(*args, **kwargs)
