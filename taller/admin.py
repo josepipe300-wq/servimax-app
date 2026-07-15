@@ -23,6 +23,22 @@ from django.db.models import Sum
 from decimal import Decimal
 from .models import Empleado, Asistencia, AdelantoSueldo
 
+# --- NUEVO: Panel interactivo para Facturas CORREGIDO ---
+@admin.register(Factura)
+class FacturaAdmin(admin.ModelAdmin):
+    # 'id' será el enlace para entrar, lo que nos permite editar los demás campos
+    list_display = ('id', 'numero_factura', 'fecha_emision', 'obtener_cliente', 'total_final', 'es_factura')
+    list_editable = ('numero_factura', 'fecha_emision', 'es_factura')
+    list_filter = ('fecha_emision', 'es_factura')
+    search_fields = ('numero_factura', 'orden__cliente__nombre')
+    date_hierarchy = 'fecha_emision'
+
+    # Función para poder ver el nombre del cliente en la lista
+    def obtener_cliente(self, obj):
+        return obj.orden.cliente.nombre
+    obtener_cliente.short_description = 'Cliente'
+
+
 # Personalización para OrdenDeReparacion
 class OrdenDeReparacionAdmin(admin.ModelAdmin):
     list_display = ('id', 'vehiculo', 'cliente', 'estado', 'fecha_entrada')
@@ -59,22 +75,6 @@ class TipoConsumibleStockAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-# Registramos todos los modelos
-admin.site.register(Cliente)
-admin.site.register(Vehiculo)
-admin.site.register(Gasto)
-admin.site.register(Empleado)
-admin.site.register(Ingreso)
-admin.site.register(Factura)
-admin.site.register(LineaFactura)
-admin.site.register(TipoConsumible, TipoConsumibleAdmin)
-admin.site.register(CompraConsumible, CompraConsumibleAdmin)
-admin.site.register(UsoConsumible)
-admin.site.register(OrdenDeReparacion, OrdenDeReparacionAdmin)
-admin.site.register(Presupuesto)
-admin.site.register(LineaPresupuesto)
-admin.site.register(FotoVehiculo)
-
 # --- NUEVO: Panel de control para las Citas ---
 @admin.register(Cita)
 class CitaAdmin(admin.ModelAdmin):
@@ -82,7 +82,6 @@ class CitaAdmin(admin.ModelAdmin):
     list_filter = ('estado', 'fecha_hora')
     search_fields = ('nombre_cliente', 'vehiculo_info', 'motivo')
     date_hierarchy = 'fecha_hora'
-
 
 @admin.register(Asistencia)
 class AsistenciaAdmin(admin.ModelAdmin):
@@ -94,3 +93,18 @@ class AsistenciaAdmin(admin.ModelAdmin):
 class AdelantoSueldoAdmin(admin.ModelAdmin):
     list_display = ('empleado', 'fecha', 'importe', 'motivo', 'liquidado')
     list_filter = ('liquidado', 'empleado', 'fecha')
+
+# Registramos todos los modelos restantes
+admin.site.register(Cliente)
+admin.site.register(Vehiculo)
+admin.site.register(Gasto)
+admin.site.register(Empleado)
+admin.site.register(Ingreso)
+admin.site.register(LineaFactura)
+admin.site.register(TipoConsumible, TipoConsumibleAdmin)
+admin.site.register(CompraConsumible, CompraConsumibleAdmin)
+admin.site.register(UsoConsumible)
+admin.site.register(OrdenDeReparacion, OrdenDeReparacionAdmin)
+admin.site.register(Presupuesto)
+admin.site.register(LineaPresupuesto)
+admin.site.register(FotoVehiculo)

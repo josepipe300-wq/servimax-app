@@ -8,6 +8,7 @@ from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 import math
 import calendar  # 🟢 NUEVO: Necesario para calcular días laborables
+import datetime
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
@@ -414,9 +415,15 @@ class Ingreso(models.Model):
 
 class Factura(models.Model):
     orden = models.OneToOneField(OrdenDeReparacion, on_delete=models.CASCADE)
-    fecha_emision = models.DateField(auto_now_add=True)
+    
+    # Hemos cambiado auto_now_add=True por default=datetime.date.today para que sea editable
+    fecha_emision = models.DateField(default=datetime.date.today)
+    
     es_factura = models.BooleanField(default=True)
-    numero_factura = models.IntegerField(null=True, blank=True, unique=True, editable=False)
+    
+    # Hemos eliminado editable=False para que puedas modificar el número desde el panel admin
+    numero_factura = models.IntegerField(null=True, blank=True, unique=True)
+    
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     iva = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_final = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
